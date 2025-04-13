@@ -1,16 +1,12 @@
-import { Footer, Navbar } from '../components';
-import { About, Menu, Hero } from '../sections';
+import { Hero } from '../sections';
+// Don't import these until you're using them:
+// import { Footer, Navbar } from '../components';
+// import { About, Menu } from '../sections';
 
 const Home = () => (
   <div className="bg-primary-black overflow-hidden">
-    <Navbar />
     <Hero />
-    <div className="relative">
-      <About />
-      <Menu />
-    </div>
     <div className="relative" />
-    <Footer />
   </div>
 );
 

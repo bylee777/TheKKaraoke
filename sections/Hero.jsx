@@ -1,49 +1,70 @@
 'use client';
 
 import { motion } from 'framer-motion';
-
 import styles from '../styles';
-import { slideIn, staggerContainer, textVariant } from '../utils/motion';
+import { slideIn, staggerContainer } from '../utils/motion';
 
 const Hero = () => (
-  <section className={`${styles.yPaddings} sm:pl-16 pl-5`}>
+  <section className="w-full h-screen flex relative">
+    {/* Top Center Logo */}
+    <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20">
+      <img
+        src="/k-karaoke-logo.png" // Make sure this path matches your /public folder
+        alt="K Karaoke Logo"
+        className="w-40 h-auto object-contain"
+      />
+    </div>
+
     <motion.div
       variants={staggerContainer}
       initial="hidden"
       whileInView="show"
       viewport={{ once: false, amount: 0.25 }}
-      className={`${styles.innerWidth} mx-auto flex flex-col`}
+      className="flex w-full h-full"
     >
-      <div className="flex justify-center items-center flex-col relative z-10">
-        {/* <motion.h1 variants={textVariant(1.1)} className={styles.heroHeading}>
-Welcome        </motion.h1> */}
-  
-      </div>
+      {/* Left side image */}
+      <motion.div
+        variants={slideIn('left', 'tween', 0.2, 1)}
+        className="w-1/2 h-full relative"
+      >
+        <img
+          src="/TheKkaraoke_cover.png"
+          alt="hero_left"
+          className="w-full h-full object-cover object-top"
+        />
+        <a
+          href="#QueenWest"
+          className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-black text-white py-3 px-6 rounded-full text-lg hover:opacity-80 transition"
+        >
+          ← Christie/Korean Town
+        </a>
+      </motion.div>
 
+      {/* Right side image */}
       <motion.div
         variants={slideIn('right', 'tween', 0.2, 1)}
-        className="relative w-full md:-mt-[20px] -mt-[12px]"
+        className="w-1/2 h-full relative"
       >
-        {/* <div className="absolute w-full h-[300px] hero-gradient rounded-tl-[140px] z-[0] -top-[30px]" /> */}
-
         <img
-          src="/cover.png"
-          alt="hero_cover"
-          className="w-full sm:h-full h-full object-cover rounded-tl-[120px] z-10 relative"
+          src="/barjunkocover.png"
+          alt="hero_right"
+          className="w-full h-full object-cover object-center"
         />
-
-        <a href="#Menu">
-          <div className="w-full flex justify-end sm:-mt-[70px] -mt-[50px] pr-[40px] relative z-10">
-            <img
-              src="/stamp.png"
-              alt="stamp"
-              className="sm:w-[155px] w-[100px] sm:h-[155px] h-[100px] object-contain"
-            />
-          </div>
+        <a
+          href="#BloorWest"
+          className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-green-500 text-white py-3 px-6 rounded-full text-lg hover:opacity-80 transition"
+        >
+          Bloor and Yonge →
         </a>
       </motion.div>
     </motion.div>
+
+    {/* Bottom footer text */}
+    <div className="absolute bottom-4 w-full text-center text-white text-sm tracking-wide">
+      © 2025 The K Karaoke
+    </div>
   </section>
 );
 
 export default Hero;
+
