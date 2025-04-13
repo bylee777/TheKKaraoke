@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.4",
-    "framer-motion": "^7.6.7",
+    "framer-motion": "^7.10.3",
     "lucide-react": "^0.487.0",
     "next": "13.0.3",
     "react": "18.2.0",

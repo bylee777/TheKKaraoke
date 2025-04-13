@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import styles from '../styles';
 import { slideIn, staggerContainer } from '../utils/motion';
 
@@ -32,12 +33,12 @@ const Hero = () => (
           alt="hero_left"
           className="w-full h-full object-cover object-top"
         />
-        <a
-          href="#QueenWest"
+        <Link
+          href="/christie"
           className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-black text-white py-3 px-6 rounded-full text-lg hover:opacity-80 transition"
         >
           ← Christie/Korean Town
-        </a>
+        </Link>
       </motion.div>
 
       {/* Right side image */}
@@ -67,4 +68,3 @@ const Hero = () => (
 );
 
 export default Hero;
-
