@@ -2,13 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import Image from 'next/image';
-import styles from '../styles';
 
 const MenuCard = ({
   id,
   imgUrl,
-  title,
-  text,
   active,
   handleClick,
   scrollContainerRef,
@@ -18,17 +15,18 @@ const MenuCard = ({
 
   useEffect(() => {
     if (
-      isActive
-      && cardRef.current
-      && scrollContainerRef?.current
-      && window.innerWidth < 640
+      isActive &&
+      cardRef.current &&
+      scrollContainerRef?.current &&
+      window.innerWidth < 640
     ) {
       const card = cardRef.current;
       const container = scrollContainerRef.current;
-
       const cardRect = card.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
-      const scrollLeft = card.offsetLeft - (containerRect.width / 2 - cardRect.width / 2);
+      const scrollLeft =
+        card.offsetLeft -
+        (containerRect.width / 2 - cardRect.width / 2);
 
       container.scrollTo({
         left: scrollLeft,
@@ -43,46 +41,26 @@ const MenuCard = ({
       role="button"
       tabIndex={0}
       onClick={() => handleClick(id)}
-      className={`relative ${
-        isActive ? 'w-[75vw] lg:w-[600px]' : 'w-[200px]'
-      } h-[600px] transition-all duration-500 ease-out cursor-pointer snap-center flex-shrink-0 flex items-center justify-center`}
+      className={`
+        relative
+        flex-shrink-0
+        snap-center
+        cursor-pointer
+        transition-all duration-500 ease-out
+        h-[400px]
+        rounded-[36px]
+        overflow-hidden
+        ${isActive ? 'basis-[75vw] sm:basis-[500px]' : 'basis-[200px]'}
+      `}
     >
       <Image
         src={imgUrl}
-        alt={title}
+        alt=""
         fill
-        className="object-cover rounded-[24px]"
-        sizes="(max-width: 768px) 75vw, 600px"
+        className="object-cover rounded-[36px]"
+        sizes="(max-width: 768px) 75vw, 500px"
         priority
       />
-
-      {!isActive && (
-        <h3 className="font-semibold sm:text-[22px] text-[16px] text-white absolute z-0 lg:bottom-20 lg:rotate-[-90deg] lg:origin-[0,0] whitespace-normal break-words text-center w-[160px]">
-          {title}
-        </h3>
-      )}
-
-      {isActive && (
-        <div className="absolute bottom-0 p-8 flex justify-start w-full flex-col bg-[rgba(0,0,0,0.5)] rounded-b-[24px]">
-          <div
-            className={`${styles.flexCenter} w-[40px] h-[40px] rounded-[28px] glassmorphism mb-[5px]`}
-          >
-            <Image
-              src="/pig.png"
-              alt="pig icon"
-              width={20}
-              height={20}
-              className="object-contain"
-            />
-          </div>
-          <h2 className="mt-[24px] font-semibold sm:text-[32px] text-[24px] text-white leading-tight break-words">
-            {title}
-          </h2>
-          <p className="font-normal text-[16px] leading-[20.16px] text-white">
-            {text}
-          </p>
-        </div>
-      )}
     </div>
   );
 };
