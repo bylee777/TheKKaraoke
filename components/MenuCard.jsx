@@ -15,10 +15,10 @@ const MenuCard = ({
 
   useEffect(() => {
     if (
-      isActive &&
-      cardRef.current &&
-      scrollContainerRef?.current &&
-      window.innerWidth < 640
+      isActive 
+      && cardRef.current 
+      && scrollContainerRef?.current 
+      && window.innerWidth < 640
     ) {
       const card = cardRef.current;
       const container = scrollContainerRef.current;
