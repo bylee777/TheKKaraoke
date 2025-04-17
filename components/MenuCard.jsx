@@ -22,8 +22,10 @@ const MenuCard = ({
     ) {
       const card = cardRef.current;
       const container = scrollContainerRef.current;
+
       const cardRect = card.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
+
       const scrollLeft =
         card.offsetLeft -
         (containerRect.width / 2 - cardRect.width / 2);
@@ -41,17 +43,9 @@ const MenuCard = ({
       role="button"
       tabIndex={0}
       onClick={() => handleClick(id)}
-      className={`
-        relative
-        flex-shrink-0
-        snap-center
-        cursor-pointer
-        transition-all duration-500 ease-out
-        h-[400px]
-        rounded-[36px]
-        overflow-hidden
-        ${isActive ? 'basis-[75vw] sm:basis-[500px]' : 'basis-[200px]'}
-      `}
+      className={`relative flex-shrink-0 snap-center cursor-pointer transition-all duration-500 ease-out h-[400px] rounded-[36px] overflow-hidden ${
+        isActive ? 'basis-[75vw] sm:basis-[500px]' : 'basis-[200px]'
+      }`}
     >
       <Image
         src={imgUrl}
