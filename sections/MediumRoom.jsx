@@ -2,11 +2,11 @@
 
 import { useRef, useState, useEffect } from 'react';
 import styles from '../styles';
-import { smallList } from '../constants';
+import { medList } from '../constants';
 import { MenuCard, TypingText } from '../components';
 
-const Menu = () => {
-  const [active, setActive] = useState(smallList[1]?.id || null); // Set second image active by default
+const MediumRoom = () => {
+  const [active, setActive] = useState(medList[1]?.id || null); // Set second image active by default
   const scrollContainerRef = useRef(null);
   const cardRefs = useRef({});
 
@@ -34,7 +34,7 @@ const Menu = () => {
 
   // Scroll to the second image on initial load (mobile only)
   useEffect(() => {
-    const initialId = smallList[1]?.id;
+    const initialId = medList[1]?.id;
     const cardElement = cardRefs.current[initialId];
     const container = scrollContainerRef.current;
 
@@ -57,7 +57,7 @@ const Menu = () => {
   return (
     <section className={`${styles.paddings}`} id="menu">
       <TypingText
-        title="| Small Room"
+        title="| Medium Room"
         textStyles="text-center text-[20px] sm:text-[28px] font-semibold mb-10"
       />
 
@@ -66,7 +66,7 @@ const Menu = () => {
   ref={scrollContainerRef}
   className="flex gap-2 overflow-x-auto snap-x snap-mandatory scroll-smooth scrollbar-hide px-4"
 >
-  {smallList.map((item) => (
+  {medList.map((item) => (
     <MenuCard
       key={item.id}
       id={item.id}
@@ -83,4 +83,4 @@ const Menu = () => {
   );
 };
 
-export default Menu;
+export default MediumRoom;
