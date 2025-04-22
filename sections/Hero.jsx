@@ -52,7 +52,7 @@ const Hero = () => (
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
         <a
-          href="#BloorWest"
+          href="/barjunko"
           className="absolute bottom-6 sm:bottom-12 left-1/2 -translate-x-1/2 bg-green-500 text-white py-2 px-5 sm:py-3 sm:px-6 rounded-full text-sm sm:text-lg hover:opacity-80 transition z-10"
         >
           675 Yonge St →
