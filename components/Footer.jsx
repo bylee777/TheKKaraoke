@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { motion } from "framer-motion";
-import styles from "../styles";
-import { footerVariants } from "../utils/motion";
+import { motion } from 'framer-motion';
+import styles from '../styles';
+import { footerVariants } from '../utils/motion';
 
 const Footer = () => (
   <motion.footer
@@ -45,7 +45,6 @@ const Footer = () => (
         <div className="mb-[50px] h-[2px] bg-white opacity-10" />
 
         <div className="flex items-center justify-between flex-wrap gap-4">
-          {/* Logo image */}
           <img
             src="/logo1.png"
             alt="The K Karaoke"
@@ -56,7 +55,6 @@ const Footer = () => (
             Copyright © 2025 The K Karaoke. All rights reserved.
           </p>
 
-          {/* Keep only Instagram and Facebook */}
           <div className="flex gap-4">
             <img
               src="/instagram.svg"
