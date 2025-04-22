@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   trailingSlash: true,
   experimental: {
-    appDir: true,
+    appDir: false,
   },
   images: {
     unoptimized: true, // for static export compatibility
