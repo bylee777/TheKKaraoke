@@ -1,7 +1,7 @@
 'use client';
 
 import Menu from '../sections/Menu';
-import MediumRoom from '../sections/mediumRoom';
+import MediumRoom from '../sections/MediumRoom';
 import LargeRoom from '../sections/LargeRoom';
 import BarNav from '../components/BarNav';
 import BarJunkoMainPhoto from '../sections/BarJunkoMainPhoto';
