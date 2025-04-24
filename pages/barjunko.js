@@ -1,11 +1,12 @@
 'use client';
 
-import Menu from '../sections/Menu';
-import MediumRoom from '../sections/MediumRoom';
-import LargeRoom from '../sections/LargeRoom';
 import BarNav from '../components/BarNav';
 import BarJunkoMainPhoto from '../sections/BarJunkoMainPhoto';
 import AboutJunko from '../sections/AboutJunko';
+import BarSmallRoom from '../sections/BarSmallRoom';
+import MediumBarRoom from '../sections/MediumBarRoom';
+import LargeBarRoom from '../sections/LargeBarRoom';
+import BarFooter from '../components/BarFooter';
 
 const Barjunko = () => (
   <div className="bg-primary-black overflow-hidden">
@@ -13,12 +14,12 @@ const Barjunko = () => (
     <BarJunkoMainPhoto />
     <div className="relative">
       <AboutJunko />
-      <Menu />
-      <MediumRoom />
-      <LargeRoom />
+      <BarSmallRoom />
+      <MediumBarRoom />
+      <LargeBarRoom />
     </div>
     <div className="relative" />
-    {/* <Footer /> */}
+    <BarFooter />
   </div>
 );
 

@@ -17,6 +17,25 @@ export const smallList = [
   },
 ];
 
+export const smallBarList = [
+  {
+    id: 'small1',
+    imgUrl: '/smallBar1.jpeg',
+  },
+  {
+    id: 'small2',
+    imgUrl: '/smallBar2.jpeg',
+  },
+  {
+    id: 'small3',
+    imgUrl: '/smallBar3.jpeg',
+  },
+  {
+    id: 'small4',
+    imgUrl: '/smallBar4.jpeg',
+  },
+];
+
 export const medList = [
   {
     id: 'med1',
@@ -36,6 +55,21 @@ export const medList = [
   },
 ];
 
+export const medBarList = [
+  {
+    id: 'med1',
+    imgUrl: '/medBar1.jpeg',
+  },
+  {
+    id: 'med2',
+    imgUrl: '/medBar2.jpeg',
+  },
+  {
+    id: 'med3',
+    imgUrl: '/medBar3.jpeg',
+  },
+];
+
 export const largeList = [
   {
     id: 'Large1',
@@ -52,6 +86,21 @@ export const largeList = [
   {
     id: 'Large4',
     imgUrl: '/Large4.jpeg',
+  },
+];
+
+export const largeBarList = [
+  {
+    id: 'Large1',
+    imgUrl: '/largeBar1.jpeg',
+  },
+  {
+    id: 'Large2',
+    imgUrl: '/largeBar2.jpeg',
+  },
+  {
+    id: 'Large3',
+    imgUrl: '/largeBar3.jpeg',
   },
 ];
 
