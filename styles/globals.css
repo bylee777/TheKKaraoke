@@ -6,10 +6,24 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: "Eudoxus Sans", sans-serif;
+  font-family: 'Eudoxus Sans', sans-serif;
   scroll-behavior: smooth;
 }
 
+html,
+body {
+  background: linear-gradient(
+    180deg,
+    #3b2d2a 0%,       /* warm brownish tone like the walls/bar */
+    #2c2c3b 35%,       /* blend into muted blue */
+    #12131a 100%       /* finish with deep blue/black at bottom */
+  );
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+/* Gradient Utilities */
 .gradient-01 {
   background-image: linear-gradient(
     270deg,
@@ -39,7 +53,6 @@
   height: 438px;
   top: 0px;
   right: 0px;
-
   background: #7aebfb;
   filter: blur(190px);
 }
@@ -58,7 +71,6 @@
   height: 800px;
   left: 20%;
   top: 5%;
-
   background: rgba(149, 66, 232, 0.35);
   filter: blur(175px);
   transform: rotate(-114.2deg);
@@ -70,7 +82,6 @@
   height: 100vh;
   left: 30%;
   top: 10%;
-
   background: rgba(45, 72, 152, 0.75);
   filter: blur(200px);
   transform: rotate(-53.13deg);
@@ -90,7 +101,6 @@
   height: 316px;
   left: 0px;
   top: 0px;
-
   background: #8d39a3;
   filter: blur(175px);
 }
@@ -101,11 +111,11 @@
   height: 100px;
   left: 37%;
   bottom: 0;
-
   background: #65c4fa;
   filter: blur(150px);
 }
 
+/* Scrollbar */
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
