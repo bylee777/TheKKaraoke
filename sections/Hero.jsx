@@ -31,7 +31,7 @@ const Hero = () => (
         <img
           src="/TheKkaraoke_cover.png"
           alt="hero_left"
-          className="absolute inset-0 w-full h-full object-cover object-[8%_center] object-top"
+          className="absolute inset-0 w-full h-full object-cover object-[8%_center]"
         />
         <Link
           href="/christie"
