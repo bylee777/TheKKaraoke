@@ -28,11 +28,11 @@ Welcome        </motion.h1> */}
         <img
           src="/barjunkoOpenCover.png"
           alt="hero_cover"
-          className="w-full sm:h-full h-4/10 object-cover rounded-tl-[120px] z-10 relative"
+          className="w-full sm:h-full h-2/10 object-cover rounded-tl-[120px] z-10 relative"
         />
 
 <a
-  href="https://wearethekkaraoke.as.me/schedule/6914a657"
+  href=""
   className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-[#f5d07e] hover:bg-[#e5be67] text-black font-bold py-3 px-8 rounded-full shadow-md transition duration-300 z-20"
 >
   Reserve A Room

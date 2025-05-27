@@ -56,10 +56,20 @@ const Menu = () => {
 
   return (
     <section className={`${styles.paddings}`} id="menu">
-      <TypingText
-        title="| Small Room"
-        textStyles="text-center text-[20px] sm:text-[28px] font-semibold mb-10"
-      />
+    <div className="flex justify-center items-center gap-4 px-4 mb-6">
+  <TypingText
+    title="| Small Room"
+    textStyles="text-[20px] sm:text-[28px] font-semibold"
+  />
+  <button
+    className="bg-white/10 text-white text-sm sm:text-base px-4 py-2 rounded-lg hover:bg-white/20 transition"
+    onClick={() => console.log("Reserve Small Room")}
+  >
+    Reserve
+  </button>
+</div>
+
+
 
       <div className={`${styles.innerWidth} mx-auto flex flex-col`}>
       <div
