@@ -69,8 +69,6 @@ const Menu = () => {
   </button>
 </div>
 
-
-
       <div className={`${styles.innerWidth} mx-auto flex flex-col`}>
       <div
   ref={scrollContainerRef}

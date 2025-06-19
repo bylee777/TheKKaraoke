@@ -2,43 +2,47 @@
 
 import { motion } from 'framer-motion';
 import styles from '../styles';
-import { slideIn, staggerContainer, textVariant } from '../utils/motion';
+import { slideIn, staggerContainer } from '../utils/motion';
+import Image from 'next/image';
+import barjunkoOpenCover from '../public/barjunkoOpenCover.png';
 
 const BarJunkoMainPhoto = () => (
-  <section className={`${styles.yPaddings} sm:pl-16 pl-5`}>
+  <section className={`${styles.yPaddings} sm:px-16 px-5`}>
     <motion.div
       variants={staggerContainer}
       initial="hidden"
       whileInView="show"
       viewport={{ once: false, amount: 0.25 }}
-      className={`${styles.innerWidth} mx-auto flex flex-col`}
+      className="max-w-6xl mx-auto flex flex-col items-center"
     >
-      <div className="flex justify-center items-center flex-col relative z-10">
-        {/* <motion.h1 variants={textVariant(1.1)} className={styles.heroHeading}>
-Welcome        </motion.h1> */}
-  
-      </div>
+      {/* Top Space */}
+      <div className="h-8 sm:h-12" />
 
       <motion.div
         variants={slideIn('left', 'tween', 0.2, 1)}
-        className="relative w-full md:-mt-[20px] -mt-[12px]"
+        className="relative w-full"
       >
-        {/* <div className="absolute w-full h-[300px] hero-gradient rounded-tl-[140px] z-[0] -top-[30px]" /> */}
+        <div className="relative w-[90%] max-w-[900px] mx-auto">
+          <Image
+            src={barjunkoOpenCover}
+            alt="hero_cover"
+            className="object-cover rounded-tl-[100px] z-10"
+            placeholder="blur"
+            sizes="(max-width: 768px) 90vw, 900px"
+            style={{ width: '100%', height: 'auto' }}
+          />
 
-        <img
-          src="/barjunkoOpenCover.png"
-          alt="hero_cover"
-          className="w-full sm:h-full h-2/10 object-cover rounded-tl-[120px] z-10 relative"
-        />
-
-<a
-  href=""
-  className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-[#f5d07e] hover:bg-[#e5be67] text-black font-bold py-3 px-8 rounded-full shadow-md transition duration-300 z-20"
->
-  Reserve A Room
-</a>
-
+          <a
+            href="https://wearethekkaraoke.as.me/schedule/6914a657"
+            className="absolute bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 bg-[#f5d07e] hover:bg-[#e5be67] text-black font-bold py-3 px-8 rounded-full shadow-md transition duration-300 z-20"
+          >
+            Reserve A Room
+          </a>
+        </div>
       </motion.div>
+
+      {/* Bottom Space */}
+      <div className="h-12 sm:h-16" />
     </motion.div>
   </section>
 );

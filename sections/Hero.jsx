@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import styles from '../styles';
 import { slideIn, staggerContainer } from '../utils/motion';
 
@@ -28,16 +29,19 @@ const Hero = () => (
         variants={slideIn('left', 'tween', 0.2, 1)}
         className="relative w-1/2 h-full min-w-[50%]"
       >
-        <img
+        <Image
           src="/TheKkaraoke_cover.png"
           alt="hero_left"
-          className="absolute inset-0 w-full h-full object-cover object-[8%_center] md:object-top"
+          fill
+          priority
+          sizes="50vw"
+          className="object-cover object-[8%_center] md:object-top"
         />
         <Link
           href="/christie"
-          className="absolute bottom-28 sm:bottom-12 left-1/2 -translate-x-1/2 bg-black text-white py-2 px-5 sm:py-3 sm:px-6 rounded-full text-sm sm:text-lg hover:opacity-80 transition z-10"
+          className="absolute top-[78%] sm:top-[72%] left-1/2 -translate-x-1/2 bg-blue-800 text-white py-3 px-7 sm:py-4 sm:px-8 rounded-full text-base sm:text-xl hover:opacity-80 transition z-10"
         >
-          ← 699 Bloor St. West
+          ← Christie: 699 Bloor St. West
         </Link>
       </motion.div>
 
@@ -46,16 +50,19 @@ const Hero = () => (
         variants={slideIn('right', 'tween', 0.2, 1)}
         className="relative w-1/2 h-full min-w-[50%]"
       >
-        <img
+        <Image
           src="/barjunkocover.png"
           alt="hero_right"
-          className="absolute inset-0 w-full h-full object-cover object-[65%_center] sm:object-center"
+          fill
+          priority
+          sizes="50vw"
+          className="object-cover object-[65%_center] sm:object-center"
         />
         <a
           href="/barjunko"
-          className="absolute bottom-28 sm:bottom-12 left-1/2 -translate-x-1/2 bg-green-500 text-white py-2 px-5 sm:py-3 sm:px-6 rounded-full text-sm sm:text-lg hover:opacity-80 transition z-10"
+          className="absolute top-[78%] sm:top-[72%] left-1/2 -translate-x-1/2 bg-green-500 text-white py-3 px-7 sm:py-4 sm:px-8 rounded-full text-base sm:text-xl hover:opacity-80 transition z-10"
         >
-          675 Yonge St →
+          Bloor/Yonge: 675 Yonge St →
         </a>
       </motion.div>
     </motion.div>
