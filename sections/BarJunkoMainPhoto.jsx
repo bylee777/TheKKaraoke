@@ -33,10 +33,10 @@ const BarJunkoMainPhoto = () => (
           />
 
           <a
-            href="https://wearethekkaraoke.as.me/schedule/6914a657"
+            href=""
             className="absolute bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 bg-[#f5d07e] hover:bg-[#e5be67] text-black font-bold py-3 px-8 rounded-full shadow-md transition duration-300 z-20"
           >
-            Reserve A Room
+           To Reserve Please Call at 416-968-0909
           </a>
         </div>
       </motion.div>
