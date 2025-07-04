@@ -33,10 +33,10 @@ const BarJunkoMainPhoto = () => (
           />
 
           <a
-            href=""
-            className="absolute bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 bg-[#f5d07e] hover:bg-[#e5be67] text-black font-bold py-3 px-8 rounded-full shadow-md transition duration-300 z-20"
+            href="tel:416-968-0909"
+            className="absolute bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 bg-yellow-300 hover:bg-yellow-400 text-black font-semibold sm:font-bold text-sm sm:text-lg leading-snug py-4 px-6 sm:py-5 sm:px-10 rounded-full shadow-lg transition duration-300 z-20 text-center w-[90%] max-w-xs sm:max-w-md"
           >
-           To Reserve Please Call at 416-968-0909
+            To Reserve Please<br />Call at 416-968-0909
           </a>
         </div>
       </motion.div>
