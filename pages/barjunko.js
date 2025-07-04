@@ -9,7 +9,7 @@ import LargeBarRoom from '../sections/LargeBarRoom';
 import BarFooter from '../components/BarFooter';
 
 const Barjunko = () => (
-  <div className="bg-primary-black overflow-hidden">
+  <div className="bg-primary-black w-full h-full overflow-hidden">
     <BarNav />
     <BarJunkoMainPhoto />
     <div className="relative">

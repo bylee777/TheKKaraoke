@@ -4,7 +4,7 @@ import { Hero } from '../sections';
 // import { About, Menu } from '../sections';
 
 const Home = () => (
-  <div className="bg-primary-black overflow-hidden">
+  <div className="bg-primary-black w-full h-full overflow-hidden">
     <Hero />
     <div className="relative" />
   </div>
