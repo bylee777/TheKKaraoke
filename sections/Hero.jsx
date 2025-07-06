@@ -6,13 +6,13 @@ import Image from 'next/image';
 import { slideIn, staggerContainer } from '../utils/motion';
 
 const Hero = () => (
-  <section className="w-full h-screen overflow-hidden relative bg-neutral-900">
+  <section className="w-full h-screen overflow-hidden relative bg-neutral-900 flex flex-col justify-between">
     {/* Top Center Logo */}
-    <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-30">
+    <div className="pt-4 sm:pt-6 text-center">
       <img
         src="/k-karaoke-logo.png"
         alt="K Karaoke Logo"
-        className="w-28 sm:w-40 h-auto object-contain"
+        className="w-24 sm:w-32 mx-auto"
       />
     </div>
 
@@ -21,47 +21,47 @@ const Hero = () => (
       initial="hidden"
       whileInView="show"
       viewport={{ once: false, amount: 0.25 }}
-      className="flex flex-col sm:flex-row items-center justify-center w-full h-full gap-10 sm:gap-20 px-4"
+      className="flex flex-col sm:flex-row items-center justify-evenly flex-grow w-full px-4"
     >
-      {/* Left Circle Image + Button */}
+      {/* Left Circle + Button */}
       <motion.div
         variants={slideIn('left', 'tween', 0.2, 1)}
-        className="flex flex-col items-center justify-center w-full sm:w-1/2"
+        className="flex flex-col items-center"
       >
-        <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-full overflow-hidden shadow-xl bg-[#2e1e12] flex items-center justify-center">
+        <div className="relative w-56 h-56 sm:w-72 sm:h-72 rounded-full overflow-hidden bg-[#2e1e12] shadow-lg">
           <Image
             src="/TheKkaraoke_cover.png"
             alt="The K Karaoke"
             fill
-            priority
             className="object-cover"
+            priority
           />
         </div>
         <Link
           href="/christie"
-          className="mt-5 sm:mt-8 bg-blue-800 text-white py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg hover:opacity-80 transition text-center"
+          className="mt-3 sm:mt-5 bg-blue-800 text-white py-2 px-4 sm:py-3 sm:px-6 rounded-full text-xs sm:text-sm hover:opacity-80 transition"
         >
           ← Christie: 699 Bloor St. West
         </Link>
       </motion.div>
 
-      {/* Right Circle Image + Button */}
+      {/* Right Circle + Button */}
       <motion.div
         variants={slideIn('right', 'tween', 0.2, 1)}
-        className="flex flex-col items-center justify-center w-full sm:w-1/2"
+        className="flex flex-col items-center"
       >
-        <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-full overflow-hidden shadow-xl bg-[#0f2233] flex items-center justify-center">
+        <div className="relative w-56 h-56 sm:w-72 sm:h-72 rounded-full overflow-hidden bg-[#0f2233] shadow-lg">
           <Image
             src="/barjunkocover.png"
             alt="Bar Junko"
             fill
-            priority
             className="object-cover"
+            priority
           />
         </div>
         <a
           href="/barjunko"
-          className="mt-5 sm:mt-8 bg-green-500 text-white py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg hover:opacity-80 transition text-center"
+          className="mt-3 sm:mt-5 bg-green-500 text-white py-2 px-4 sm:py-3 sm:px-6 rounded-full text-xs sm:text-sm hover:opacity-80 transition"
         >
           Bloor/Yonge: 675 Yonge St →
         </a>
@@ -69,7 +69,7 @@ const Hero = () => (
     </motion.div>
 
     {/* Footer */}
-    <div className="absolute bottom-2 sm:bottom-4 w-full text-center text-white text-[10px] sm:text-xs tracking-wide z-10">
+    <div className="pb-2 sm:pb-4 text-center text-white text-[10px] sm:text-xs tracking-wide">
       © 2025 The K Karaoke
     </div>
   </section>
