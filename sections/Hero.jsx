@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { slideIn, staggerContainer } from '../utils/motion';
 
 const Hero = () => (
-  <section className="w-full h-screen overflow-hidden relative bg-black">
+  <section className="w-full h-screen overflow-hidden relative bg-neutral-900">
     {/* Top Center Logo */}
     <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-30">
       <img
@@ -21,45 +21,47 @@ const Hero = () => (
       initial="hidden"
       whileInView="show"
       viewport={{ once: false, amount: 0.25 }}
-      className="flex flex-col sm:flex-row w-full h-full"
+      className="flex flex-col sm:flex-row items-center justify-center w-full h-full gap-10 sm:gap-20 px-4"
     >
-      {/* Left Image + Centered Button */}
+      {/* Left Circle Image + Button */}
       <motion.div
         variants={slideIn('left', 'tween', 0.2, 1)}
-        className="relative w-full sm:w-1/2 h-full flex items-center justify-center"
+        className="flex flex-col items-center justify-center w-full sm:w-1/2"
       >
-        <Image
-          src="/TheKkaraoke_cover.png"
-          alt="hero_left"
-          fill
-          priority
-          sizes="100vw sm:50vw"
-          className="object-cover object-[8%_center] md:object-top"
-        />
+        <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-full overflow-hidden shadow-xl bg-[#2e1e12] flex items-center justify-center">
+          <Image
+            src="/TheKkaraoke_cover.png"
+            alt="The K Karaoke"
+            fill
+            priority
+            className="object-cover"
+          />
+        </div>
         <Link
           href="/christie"
-          className="absolute bg-blue-800 text-white py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg hover:opacity-80 transition text-center z-20"
+          className="mt-5 sm:mt-8 bg-blue-800 text-white py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg hover:opacity-80 transition text-center"
         >
           ← Christie: 699 Bloor St. West
         </Link>
       </motion.div>
 
-      {/* Right Image + Centered Button */}
+      {/* Right Circle Image + Button */}
       <motion.div
         variants={slideIn('right', 'tween', 0.2, 1)}
-        className="relative w-full sm:w-1/2 h-full flex items-center justify-center"
+        className="flex flex-col items-center justify-center w-full sm:w-1/2"
       >
-        <Image
-          src="/barjunkocover.png"
-          alt="hero_right"
-          fill
-          priority
-          sizes="100vw sm:50vw"
-          className="object-cover object-[65%_center] sm:object-center"
-        />
+        <div className="relative w-72 h-72 sm:w-96 sm:h-96 rounded-full overflow-hidden shadow-xl bg-[#0f2233] flex items-center justify-center">
+          <Image
+            src="/barjunkocover.png"
+            alt="Bar Junko"
+            fill
+            priority
+            className="object-cover"
+          />
+        </div>
         <a
           href="/barjunko"
-          className="absolute bg-green-500 text-white py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg hover:opacity-80 transition text-center z-20"
+          className="mt-5 sm:mt-8 bg-green-500 text-white py-3 px-6 sm:py-4 sm:px-8 rounded-full text-sm sm:text-lg hover:opacity-80 transition text-center"
         >
           Bloor/Yonge: 675 Yonge St →
         </a>
