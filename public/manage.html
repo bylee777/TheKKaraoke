@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Your Booking | BarZunko</title>
+    <meta name="description" content="Look up, modify, or cancel your karaoke reservation at BarZunko.">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-microphone brand-icon"></i>
+                <span class="brand-text">BarZunko</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="booking.html">Book Now</a></li>
+                <li><a href="manage.html">Manage Booking</a></li>
+                <li><a href="admin.html">Admin</a></li>
+                <li class="nav-cta"><a href="booking.html" class="btn btn--primary">Book Now</a></li>
+            </ul>
+            <div class="hamburger">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </div>
+        </div>
+        <div class="mobile-menu">
+            <ul class="mobile-nav-list">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="booking.html">Book Now</a></li>
+                <li><a href="manage.html">Manage Booking</a></li>
+                <li><a href="admin.html">Admin</a></li>
+            </ul>
+            <div class="mobile-cta">
+                <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
+            </div>
+        </div>
+    </nav>
+
+    <main id="app">
+        <!-- Manage Booking Page -->
+        <div id="manage-page" class="page active">
+            <div class="container">
+                <div class="manage-header">
+                    <h1 class="page-title">Manage Your <span class="neon-text">Booking</span></h1>
+                    <p>Look up, modify, or cancel your karaoke reservation</p>
+                </div>
+                <div class="lookup-form">
+                    <h2>Find Your Booking</h2>
+                    <form id="booking-lookup-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Booking Reference or Email</label>
+                                <input type="text" id="booking-search" class="form-control" placeholder="BJ001 or email@example.com" required>
+                            </div>
+                            <button type="submit" class="btn btn--primary">
+                                <i class="fas fa-search"></i>
+                                Find Booking
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="booking-details hidden" id="booking-details">
+                    <!-- Booking details will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-microphone"></i>
+            <div class="loading-text">Processing...</div>
+        </div>
+    </div>
+    <!-- Notification Toast -->
+    <div class="notification-toast hidden" id="notification-toast">
+        <div class="toast-content">
+            <i class="toast-icon"></i>
+            <span class="toast-message"></span>
+        </div>
+        <button class="toast-close">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <!-- Error Modal -->
+    <div class="modal hidden" id="error-modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Oops! Something went wrong</h3>
+                <button class="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="error-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <p id="error-message">An unexpected error occurred. Please try again.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn--primary modal-close">Try Again</button>
+                <button class="btn btn--outline" onclick="window.location.href='tel:+14169680909'">
+                    <i class="fas fa-phone"></i>
+                    Call Us
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // const app = new BarZunkoApp();
+        app.currentPage = 'manage';
+        app.init();
+    </script>
+</body>
+</html>

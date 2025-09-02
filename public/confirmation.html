@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Confirmation | BarZunko</title>
+    <meta name="description" content="Your karaoke booking is confirmed! View the details of your reservation and get ready to sing the night away.">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-microphone brand-icon"></i>
+                <span class="brand-text">BarZunko</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="booking.html">Book Now</a></li>
+                <li><a href="manage.html">Manage Booking</a></li>
+                <li><a href="admin.html">Admin</a></li>
+                <li class="nav-cta"><a href="booking.html" class="btn btn--primary">Book Now</a></li>
+            </ul>
+            <div class="hamburger">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </div>
+        </div>
+        <div class="mobile-menu">
+            <ul class="mobile-nav-list">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="booking.html">Book Now</a></li>
+                <li><a href="manage.html">Manage Booking</a></li>
+                <li><a href="admin.html">Admin</a></li>
+            </ul>
+            <div class="mobile-cta">
+                <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
+            </div>
+        </div>
+    </nav>
+
+    <main id="app">
+        <!-- Confirmation Page -->
+        <div id="confirmation-page" class="page active">
+            <div class="container">
+                <div class="confirmation-content">
+                    <div class="success-animation">
+                        <div class="success-icon">
+                            <i class="fas fa-check"></i>
+                        </div>
+                        <div class="confetti"></div>
+                    </div>
+                    <h1 class="confirmation-title">
+                        <span class="neon-text">Booking</span> Confirmed!
+                    </h1>
+                    <p class="confirmation-subtitle">Get ready for an amazing karaoke experience!</p>
+                    <div class="confirmation-details" id="confirmation-details">
+                        <!-- Confirmation details will be populated by JavaScript -->
+                    </div>
+                    <div class="confirmation-actions">
+                        <a class="btn btn--primary" href="index.html">
+                            <i class="fas fa-home"></i>
+                            Back to Home
+                        </a>
+                        <a class="btn btn--outline" href="manage.html">
+                            <i class="fas fa-cog"></i>
+                            Manage Booking
+                        </a>
+                    </div>
+                    <div class="social-share">
+                        <h3>Share Your Experience</h3>
+                        <div class="share-buttons">
+                            <button class="share-btn facebook">
+                                <i class="fab fa-facebook-f"></i>
+                            </button>
+                            <button class="share-btn twitter">
+                                <i class="fab fa-twitter"></i>
+                            </button>
+                            <button class="share-btn instagram">
+                                <i class="fab fa-instagram"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-microphone"></i>
+            <div class="loading-text">Processing...</div>
+        </div>
+    </div>
+    <!-- Notification Toast -->
+    <div class="notification-toast hidden" id="notification-toast">
+        <div class="toast-content">
+            <i class="toast-icon"></i>
+            <span class="toast-message"></span>
+        </div>
+        <button class="toast-close">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <!-- Error Modal -->
+    <div class="modal hidden" id="error-modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Oops! Something went wrong</h3>
+                <button class="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="error-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <p id="error-message">An unexpected error occurred. Please try again.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn--primary modal-close">Try Again</button>
+                <button class="btn btn--outline" onclick="window.location.href='tel:+14169680909'">
+                    <i class="fas fa-phone"></i>
+                    Call Us
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialise the app to gain access to helper methods (e.g. formatTime)
+            const app = new BarZunkoApp();
+            app.setupEventListeners();
+            // Retrieve booking data from localStorage
+            let bookingData = null;
+            try {
+                bookingData = JSON.parse(localStorage.getItem('barzunkoBooking') || '{}');
+            } catch (err) {
+                bookingData = null;
+            }
+            const detailsEl = document.getElementById('confirmation-details');
+            if (bookingData && bookingData.customer && detailsEl) {
+                const room = bookingData.room || {};
+                const business = app.businessData;
+                detailsEl.innerHTML = `
+                    <div class="summary-row">
+                        <span class="summary-label">Booking ID:</span>
+                        <span class="summary-value">${bookingData.id || ''}</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Customer:</span>
+                        <span class="summary-value">${bookingData.customer.firstName} ${bookingData.customer.lastName}</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Email:</span>
+                        <span class="summary-value">${bookingData.customer.email}</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Date &amp; Time:</span>
+                        <span class="summary-value">${new Date(bookingData.date).toLocaleDateString()} at ${app.formatTime(bookingData.startTime)}</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Room:</span>
+                        <span class="summary-value">${room.name || ''} (${bookingData.partySize || ''} people)</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Duration:</span>
+                        <span class="summary-value">${bookingData.duration} hours</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Deposit Paid:</span>
+                        <span class="summary-value summary-total">$${bookingData.depositAmount}</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Remaining Balance:</span>
+                        <span class="summary-value">$${bookingData.remainingBalance} (due on arrival)</span>
+                    </div>
+                    <div style="margin-top: var(--space-20); padding: var(--space-16); background: rgba(139, 92, 246, 0.1); border-radius: var(--radius-base); border: 1px solid rgba(139, 92, 246, 0.2);">
+                        <h4 style="margin: 0 0 var(--space-8) 0; color: var(--neon-purple);">Important Notes:</h4>
+                        <ul style="margin: 0; padding-left: var(--space-16); color: var(--color-text-secondary);">
+                            <li>Please arrive 15 minutes early for check-in</li>
+                            <li>Cancellations allowed up to 24 hours before your booking</li>
+                            <li>Confirmation email sent to ${bookingData.customer.email}</li>
+                            <li>Questions? Call us at ${business.phone}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+            // Attach social share events
+            app.setupSocialShare();
+        });
+    </script>
+</body>
+</html>

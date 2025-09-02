@@ -1,0 +1,24 @@
+{
+  "name": "barzunko-firebase",
+  "version": "1.0.0",
+  "description": "BarZunko karaoke booking site with Firebase Hosting and Cloud Functions",
+  "private": true,
+  "scripts": {
+    "lint": "eslint . --ext .js --fix",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "firebase-admin": "^11.10.1",
+    "firebase-functions": "^4.4.1",
+    "stripe": "^12.5.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.51.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "prettier": "^3.0.0"
+  },
+  "engines": {
+    "node": "18"
+  }
+}
