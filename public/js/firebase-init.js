@@ -27,7 +27,8 @@
   // If unsure, leave null and the default will be used.
   const FUNCTIONS_REGION = null; // e.g., "northamerica-northeast1" (Toronto) or "us-central1"
 
-  const STRIPE_PUBLISHABLE_KEY = 'pk_test_XXXXXXXXXXXXXXXXXXXXXXXX';
+  const STRIPE_PUBLISHABLE_KEY =
+    'pk_test_51SDwNGEfHVYhqhpiH9NrMHiIUJ1gjHjoBvfqNAbs2iTL1WdHHS0X2IJJ6KRKfPOqxVQqEUoQkoejPNhx1lkkiwzU00y7vdw67w';
 
   // ===== 3) Sanity checks for SDKs loaded via HTML <script> tags =====
   if (typeof firebase === 'undefined') {
