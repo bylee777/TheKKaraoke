@@ -92,15 +92,12 @@ async function createBookingInternal(params) {
   let paymentIntent;
   try {
     paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(depositAmount * 100),
-      currency: 'usd',
-      metadata: {
-        roomId,
-        date,
-        startTime,
-        duration,
-      },
-    });
+  amount: Math.round(depositAmount * 100),
+  currency: 'cad', // <- change if you really want USD
+  automatic_payment_methods: { enabled: true }, // <- add this
+  metadata: { roomId, date, startTime, duration },
+});
+
   } catch (err) {
     console.error('Stripe PaymentIntent creation failed', err);
     throw new functions.https.HttpsError('internal', 'Unable to create payment');
@@ -199,10 +196,11 @@ exports.createBooking = functions.https.onCall(async (data, context) => {
     customerInfo,
   });
   return {
-    bookingId: result.id,
-    paymentIntentClientSecret: result.paymentIntent.client_secret,
-    message: 'Booking created',
-  };
+  bookingId: result.id,
+  clientSecret: result.paymentIntent.client_secret,            // NEW alias
+  paymentIntentClientSecret: result.paymentIntent.client_secret,
+  message: 'Booking created',
+};
 });
 
 /**
@@ -265,4 +263,33 @@ exports.rebookBooking = functions.https.onCall(async (data, context) => {
     message: 'Booking rebooked',
     newBookingId: result.id,
   };
+});
+
+exports.confirmBooking = functions.https.onCall(async (data, context) => {
+  const { bookingId, paymentIntentId } = data || {};
+  if (!bookingId || !paymentIntentId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing bookingId or paymentIntentId');
+  }
+
+  const ref = db.collection('bookings').doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Booking not found');
+  }
+
+  // Verify the PaymentIntent is actually paid (or capturable/processing)
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const okStatuses = ['succeeded', 'requires_capture', 'processing'];
+  if (!okStatuses.includes(intent.status)) {
+    throw new functions.https.HttpsError('failed-precondition', `Payment not completed. Status: ${intent.status}`);
+  }
+
+  await ref.update({
+    status: 'confirmed',
+    paymentStatus: intent.status,
+    paymentIntentId: intent.id,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true };
 });

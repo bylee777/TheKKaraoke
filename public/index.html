@@ -1,261 +1,270 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BarZunko - Premium Karaoke Experience | Toronto</title>
-    <meta name="description" content="Book premium karaoke rooms at BarZunko Toronto. State-of-the-art sound systems, neon lighting, and unforgettable nights await!">
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
+    <meta
+      name="description"
+      content="Book premium karaoke rooms at BarZunko Toronto. State-of-the-art sound systems, neon lighting, and unforgettable nights await!"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
     <!-- Navigation -->
     <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-brand">
-                <i class="fas fa-microphone brand-icon"></i>
-                <span class="brand-text">BarZunko</span>
-            </div>
-            <ul class="nav-menu">
-                <li><a href="index.html">Home</a></li>
-                <li><a href="booking.html">Book Now</a></li>
-                <li><a href="manage.html">Manage Booking</a></li>
-                <li><a href="admin.html">Admin</a></li>
-                <li class="nav-cta"><a href="booking.html" class="btn btn--primary">Book Now</a></li>
-            </ul>
-            <div class="hamburger">
-                <span class="hamburger-line"></span>
-                <span class="hamburger-line"></span>
-                <span class="hamburger-line"></span>
-            </div>
+      <div class="nav-container">
+        <div class="nav-brand">
+          <i class="fas fa-microphone brand-icon"></i>
+          <span class="brand-text">BarZunko</span>
         </div>
-        <div class="mobile-menu">
-            <ul class="mobile-nav-list">
-                <li><a href="index.html">Home</a></li>
-                <li><a href="booking.html">Book Now</a></li>
-                <li><a href="manage.html">Manage Booking</a></li>
-                <li><a href="admin.html">Admin</a></li>
-            </ul>
-            <div class="mobile-cta">
-                <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
-            </div>
+        <ul class="nav-menu">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="booking.html">Book Now</a></li>
+          <li><a href="manage.html">Manage Booking</a></li>
+          <li><a href="admin.html">Admin</a></li>
+          <li class="nav-cta"><a href="booking.html" class="btn btn--primary">Book Now</a></li>
+        </ul>
+        <div class="hamburger">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
         </div>
+      </div>
+      <div class="mobile-menu">
+        <ul class="mobile-nav-list">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="booking.html">Book Now</a></li>
+          <li><a href="manage.html">Manage Booking</a></li>
+          <li><a href="admin.html">Admin</a></li>
+        </ul>
+        <div class="mobile-cta">
+          <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
+        </div>
+      </div>
     </nav>
 
     <main id="app">
-        <!-- Hero Section -->
-        <section class="hero">
-            <div class="hero-background">
-                <div class="sound-waves"></div>
-                <div class="neon-glow-bg"></div>
+      <!-- Hero Section -->
+      <section class="hero">
+        <div class="hero-background">
+          <div class="sound-waves"></div>
+          <div class="neon-glow-bg"></div>
+        </div>
+        <div class="container">
+          <div class="hero-content">
+            <h1 class="hero-title">
+              <span class="neon-text">Experience</span>
+              <span class="gradient-text">Premium Karaoke</span>
+              <span class="subtitle">in the heart of Toronto</span>
+            </h1>
+            <p class="hero-description">
+              State-of-the-art sound systems, stunning neon lighting, and 50,000+ songs. Book your
+              perfect karaoke night at Toronto's most electrifying venue.
+            </p>
+            <div class="hero-buttons">
+              <a href="booking.html" class="btn btn--primary btn--lg glow-btn">
+                <i class="fas fa-microphone"></i>
+                Book Now
+              </a>
+              <button class="btn btn--outline btn--lg" id="view-rooms-btn">
+                <i class="fas fa-eye"></i>
+                View Rooms
+              </button>
             </div>
-            <div class="container">
-                <div class="hero-content">
-                    <h1 class="hero-title">
-                        <span class="neon-text">Experience</span>
-                        <span class="gradient-text">Premium Karaoke</span>
-                        <span class="subtitle">in the heart of Toronto</span>
-                    </h1>
-                    <p class="hero-description">
-                        State-of-the-art sound systems, stunning neon lighting, and 50,000+ songs. 
-                        Book your perfect karaoke night at Toronto's most electrifying venue.
-                    </p>
-                    <div class="hero-buttons">
-                        <a href="booking.html" class="btn btn--primary btn--lg glow-btn">
-                            <i class="fas fa-microphone"></i>
-                            Book Now
-                        </a>
-                        <button class="btn btn--outline btn--lg" id="view-rooms-btn">
-                            <i class="fas fa-eye"></i>
-                            View Rooms
-                        </button>
-                    </div>
-                    <div class="hero-stats">
-                        <div class="stat">
-                            <div class="stat-number neon-text">4</div>
-                            <div class="stat-label">Premium Rooms</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-number neon-text">50k+</div>
-                            <div class="stat-label">Songs</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-number neon-text">7</div>
-                            <div class="stat-label">Hours Daily</div>
-                        </div>
-                    </div>
-                </div>
+            <div class="hero-stats">
+              <div class="stat">
+                <div class="stat-number neon-text">4</div>
+                <div class="stat-label">Premium Rooms</div>
+              </div>
+              <div class="stat">
+                <div class="stat-number neon-text">50k+</div>
+                <div class="stat-label">Songs</div>
+              </div>
+              <div class="stat">
+                <div class="stat-number neon-text">7</div>
+                <div class="stat-label">Hours Daily</div>
+              </div>
             </div>
-            <div class="floating-icons">
-                <i class="fas fa-music floating-icon"></i>
-                <i class="fas fa-microphone-alt floating-icon"></i>
-                <i class="fas fa-headphones floating-icon"></i>
-                <i class="fas fa-guitar floating-icon"></i>
-            </div>
-        </section>
+          </div>
+        </div>
+        <div class="floating-icons">
+          <i class="fas fa-music floating-icon"></i>
+          <i class="fas fa-microphone-alt floating-icon"></i>
+          <i class="fas fa-headphones floating-icon"></i>
+          <i class="fas fa-guitar floating-icon"></i>
+        </div>
+      </section>
 
-        <!-- Room Showcase -->
-        <section class="rooms-showcase" id="rooms-section">
-            <div class="container">
-                <h2 class="section-title">
-                    <span class="neon-text">Our</span> Premium Rooms
-                </h2>
-                <div class="rooms-grid" id="rooms-grid">
-                    <!-- Rooms will be populated by JavaScript -->
-                </div>
-            </div>
-        </section>
+      <!-- Room Showcase -->
+      <section class="rooms-showcase" id="rooms-section">
+        <div class="container">
+          <h2 class="section-title"><span class="neon-text">Our</span> Premium Rooms</h2>
+          <div class="rooms-grid" id="rooms-grid">
+            <!-- Rooms will be populated by JavaScript -->
+          </div>
+        </div>
+      </section>
 
-        <!-- Features Section -->
-        <section class="features">
-            <div class="container">
-                <h2 class="section-title">
-                    Why Choose <span class="neon-text">BarZunko</span>
-                </h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <i class="fas fa-volume-up"></i>
-                        </div>
-                        <h3>Premium Sound</h3>
-                        <p>Professional-grade audio systems with crystal-clear acoustics</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <i class="fas fa-lightbulb"></i>
-                        </div>
-                        <h3>Neon Ambiance</h3>
-                        <p>Dynamic LED lighting that pulses with your music</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <i class="fas fa-clock"></i>
-                        </div>
-                        <h3>Easy Booking</h3>
-                        <p>Book online 24/7 with instant confirmation</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <i class="fas fa-cocktail"></i>
-                        </div>
-                        <h3>Full Service</h3>
-                        <p>Complete bar service and party packages available</p>
-                    </div>
-                </div>
+      <!-- Features Section -->
+      <section class="features">
+        <div class="container">
+          <h2 class="section-title">Why Choose <span class="neon-text">BarZunko</span></h2>
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-volume-up"></i>
+              </div>
+              <h3>Premium Sound</h3>
+              <p>Professional-grade audio systems with crystal-clear acoustics</p>
             </div>
-        </section>
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-lightbulb"></i>
+              </div>
+              <h3>Neon Ambiance</h3>
+              <p>Dynamic LED lighting that pulses with your music</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-clock"></i>
+              </div>
+              <h3>Easy Booking</h3>
+              <p>Book online 24/7 with instant confirmation</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-cocktail"></i>
+              </div>
+              <h3>Full Service</h3>
+              <p>Complete bar service and party packages available</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <!-- Testimonials -->
-        <section class="testimonials">
-            <div class="container">
-                <h2 class="section-title">
-                    What Our <span class="neon-text">Customers</span> Say
-                </h2>
-                <div class="testimonials-carousel" id="testimonials-carousel">
-                    <!-- Testimonials will be populated by JavaScript -->
-                </div>
-            </div>
-        </section>
+      <!-- Testimonials -->
+      <section class="testimonials">
+        <div class="container">
+          <h2 class="section-title">What Our <span class="neon-text">Customers</span> Say</h2>
+          <div class="testimonials-carousel" id="testimonials-carousel">
+            <!-- Testimonials will be populated by JavaScript -->
+          </div>
+        </div>
+      </section>
 
-        <!-- Contact Section -->
-        <section class="contact">
-            <div class="container">
-                <div class="contact-content">
-                    <div class="contact-info">
-                        <h2 class="section-title">Visit <span class="neon-text">BarZunko</span></h2>
-                        <div class="contact-details">
-                            <div class="contact-item">
-                                <i class="fas fa-map-marker-alt"></i>
-                                <div>
-                                    <strong>675 Yonge St Basement</strong>
-                                    <span>Toronto, ON M4Y 2B2</span>
-                                </div>
-                            </div>
-                            <div class="contact-item">
-                                <i class="fas fa-phone"></i>
-                                <div>
-                                    <strong>+1-416-968-0909</strong>
-                                    <span>Call for inquiries</span>
-                                </div>
-                            </div>
-                            <div class="contact-item">
-                                <i class="fas fa-clock"></i>
-                                <div>
-                                    <strong>6:00 PM - 1:00 AM</strong>
-                                    <span>Daily</span>
-                                </div>
-                            </div>
-                            <div class="contact-item">
-                                <i class="fas fa-envelope"></i>
-                                <div>
-                                    <strong>info@BarZunko.com</strong>
-                                    <span>Email us anytime</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="contact-map">
-                        <div class="map-placeholder">
-                            <i class="fas fa-map"></i>
-                            <span>Interactive Map</span>
-                        </div>
-                    </div>
+      <!-- Contact Section -->
+      <section class="contact">
+        <div class="container">
+          <div class="contact-content">
+            <div class="contact-info">
+              <h2 class="section-title">Visit <span class="neon-text">BarZunko</span></h2>
+              <div class="contact-details">
+                <div class="contact-item">
+                  <i class="fas fa-map-marker-alt"></i>
+                  <div>
+                    <strong>675 Yonge St Basement</strong>
+                    <span>Toronto, ON M4Y 2B2</span>
+                  </div>
                 </div>
+                <div class="contact-item">
+                  <i class="fas fa-phone"></i>
+                  <div>
+                    <strong>+1-416-968-0909</strong>
+                    <span>Call for inquiries</span>
+                  </div>
+                </div>
+                <div class="contact-item">
+                  <i class="fas fa-clock"></i>
+                  <div>
+                    <strong>6:00 PM - 1:00 AM</strong>
+                    <span>Daily</span>
+                  </div>
+                </div>
+                <div class="contact-item">
+                  <i class="fas fa-envelope"></i>
+                  <div>
+                    <strong>info@BarZunko.com</strong>
+                    <span>Email us anytime</span>
+                  </div>
+                </div>
+              </div>
             </div>
-        </section>
+            <div class="contact-map">
+              <div class="map-placeholder">
+                <i class="fas fa-map"></i>
+                <span>Interactive Map</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- Loading Overlay -->
     <div class="loading-overlay hidden" id="loading-overlay">
-        <div class="loading-spinner">
-            <i class="fas fa-microphone"></i>
-            <div class="loading-text">Processing...</div>
-        </div>
+      <div class="loading-spinner">
+        <i class="fas fa-microphone"></i>
+        <div class="loading-text">Processing...</div>
+      </div>
     </div>
 
     <!-- Notification Toast -->
     <div class="notification-toast hidden" id="notification-toast">
-        <div class="toast-content">
-            <i class="toast-icon"></i>
-            <span class="toast-message"></span>
-        </div>
-        <button class="toast-close">
-            <i class="fas fa-times"></i>
-        </button>
+      <div class="toast-content">
+        <i class="toast-icon"></i>
+        <span class="toast-message"></span>
+      </div>
+      <button class="toast-close">
+        <i class="fas fa-times"></i>
+      </button>
     </div>
 
     <!-- Error Modal -->
     <div class="modal hidden" id="error-modal">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Oops! Something went wrong</h3>
-                <button class="modal-close">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="error-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <p id="error-message">An unexpected error occurred. Please try again.</p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn--primary modal-close">Try Again</button>
-                <button class="btn btn--outline" onclick="window.location.href='tel:+14169680909'">
-                    <i class="fas fa-phone"></i>
-                    Call Us
-                </button>
-            </div>
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Oops! Something went wrong</h3>
+          <button class="modal-close">
+            <i class="fas fa-times"></i>
+          </button>
         </div>
+        <div class="modal-body">
+          <div class="error-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+          <p id="error-message">An unexpected error occurred. Please try again.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--primary modal-close">Try Again</button>
+          <button class="btn btn--outline" onclick="window.location.href='tel:+14169680909'">
+            <i class="fas fa-phone"></i>
+            Call Us
+          </button>
+        </div>
+      </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    <script src="https://js.stripe.com/v3/"></script>
+
+    <script src="js/firebase-init.js"></script>
     <script src="js/app.js"></script>
     <script>
-        const app = new BarZunkoApp();
-        app.currentPage = 'landing';
-        app.init();
+      app.currentPage = 'manage';
+      app.init();
     </script>
-</body>
+  </body>
 </html>
