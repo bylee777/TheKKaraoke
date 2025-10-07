@@ -13,14 +13,15 @@
 
 (function () {
   // ===== 1) REQUIRED: Paste your Firebase config here =====
-  // Get it from Firebase Console → Project settings → General → Your apps
+  // Get it from Firebase Console -> Project settings -> General -> Your apps
   const firebaseConfig = {
-    apiKey: 'YOUR_API_KEY',
-    authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-    appId: 'YOUR_APP_ID',
-    // messagingSenderId: "optional"
+    apiKey: 'AIzaSyBAlQmkR9MMjfKXofeuBBodzmZ5Gq20NO4',
+    authDomain: 'thek-karaoke.firebaseapp.com',
+    projectId: 'thek-karaoke',
+    storageBucket: 'thek-karaoke.firebasestorage.app',
+    messagingSenderId: '508456771115',
+    appId: '1:508456771115:web:6e792cd798414ca8ac146e',
+    measurementId: 'G-6S02LBR6NQ',
   };
 
   // (Optional) If you deployed Functions to a specific region, put it here.
@@ -28,7 +29,7 @@
   const FUNCTIONS_REGION = null; // e.g., "northamerica-northeast1" (Toronto) or "us-central1"
 
   const STRIPE_PUBLISHABLE_KEY =
-    'pk_test_51SDwNGEfHVYhqhpiH9NrMHiIUJ1gjHjoBvfqNAbs2iTL1WdHHS0X2IJJ6KRKfPOqxVQqEUoQkoejPNhx1lkkiwzU00y7vdw67w';
+    'pk_test_51SE19lPArasY2JyAyD1AgMkGL0UKMXELw463gjg90UG0uaTZQ6ohnhDCzbFd8wkCfm1D6sQazczdibV0GtwrpVJj00BRm07Pvb';
 
   // ===== 3) Sanity checks for SDKs loaded via HTML <script> tags =====
   if (typeof firebase === 'undefined') {
@@ -103,6 +104,9 @@
   window.firestore = db;
   window.storage = storage;
   window.stripe = stripe;
+
+  // Optional: shared secret for admin-only callables (configure in Functions too)
+  window.ADMIN_API_SECRET = window.ADMIN_API_SECRET || 'asefewrq1234';
 
   console.info('[firebase-init] Firebase & Stripe initialized', {
     projectId: firebaseConfig.projectId,

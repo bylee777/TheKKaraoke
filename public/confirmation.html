@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Booking Confirmation | BarZunko</title>
+    <title>Booking Confirmation | Barjunko</title>
     <meta
       name="description"
       content="Your karaoke booking is confirmed! View the details of your reservation and get ready to sing the night away."
@@ -24,7 +24,7 @@
       <div class="nav-container">
         <div class="nav-brand">
           <i class="fas fa-microphone brand-icon"></i>
-          <span class="brand-text">BarZunko</span>
+          <span class="brand-text">Barjunko</span>
         </div>
         <ul class="nav-menu">
           <li><a href="index.html">Home</a></li>
@@ -150,66 +150,35 @@
     <script src="js/app.js"></script>
     <script>
       document.addEventListener('DOMContentLoaded', () => {
-        // Initialise the app to gain access to helper methods (e.g. formatTime)
-        const app = new BarZunkoApp();
-        app.setupEventListeners();
-        // Retrieve booking data from localStorage
+        const appInstance = window.app;
+        if (!appInstance) {
+          return;
+        }
+
+        appInstance.currentPage = 'confirmation';
+        appInstance.init();
+
         let bookingData = null;
         try {
-          bookingData = JSON.parse(localStorage.getItem('barzunkoBooking') || '{}');
+          bookingData = JSON.parse(localStorage.getItem('barjunkoBooking') || 'null');
         } catch (err) {
           bookingData = null;
         }
-        const detailsEl = document.getElementById('confirmation-details');
-        if (bookingData && bookingData.customer && detailsEl) {
-          const room = bookingData.room || {};
-          const business = app.businessData;
-          detailsEl.innerHTML = `
-                    <div class="summary-row">
-                        <span class="summary-label">Booking ID:</span>
-                        <span class="summary-value">${bookingData.id || ''}</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Customer:</span>
-                        <span class="summary-value">${bookingData.customer.firstName} ${bookingData.customer.lastName}</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Email:</span>
-                        <span class="summary-value">${bookingData.customer.email}</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Date &amp; Time:</span>
-                        <span class="summary-value">${new Date(bookingData.date).toLocaleDateString()} at ${app.formatTime(bookingData.startTime)}</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Room:</span>
-                        <span class="summary-value">${room.name || ''} (${bookingData.partySize || ''} people)</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Duration:</span>
-                        <span class="summary-value">${bookingData.duration} hours</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Deposit Paid:</span>
-                        <span class="summary-value summary-total">$${bookingData.depositAmount}</span>
-                    </div>
-                    <div class="summary-row">
-                        <span class="summary-label">Remaining Balance:</span>
-                        <span class="summary-value">$${bookingData.remainingBalance} (due on arrival)</span>
-                    </div>
-                    <div style="margin-top: var(--space-20); padding: var(--space-16); background: rgba(139, 92, 246, 0.1); border-radius: var(--radius-base); border: 1px solid rgba(139, 92, 246, 0.2);">
-                        <h4 style="margin: 0 0 var(--space-8) 0; color: var(--neon-purple);">Important Notes:</h4>
-                        <ul style="margin: 0; padding-left: var(--space-16); color: var(--color-text-secondary);">
-                            <li>Please arrive 15 minutes early for check-in</li>
-                            <li>Cancellations allowed up to 24 hours before your booking</li>
-                            <li>Confirmation email sent to ${bookingData.customer.email}</li>
-                            <li>Questions? Call us at ${business.phone}</li>
-                        </ul>
-                    </div>
-                `;
+
+        if (bookingData && bookingData.customer && bookingData.room) {
+          appInstance.bookingData = bookingData;
+          appInstance.showConfirmationPage();
+          return;
         }
-        // Attach social share events
-        app.setupSocialShare();
+
+        const detailsEl = document.getElementById('confirmation-details');
+        if (detailsEl) {
+          detailsEl.innerHTML = `
+                <p class="summary-text">We could not find recent booking details. Please return to the booking page to start a new reservation.</p>
+            `;
+        }
+
+        appInstance.setupSocialShare();
       });
     </script>
   </body>

@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Book Your Karaoke Experience | BarZunko</title>
+    <title>Book Your Karaoke Experience | Barjunko</title>
     <meta
       name="description"
-      content="Choose a date, select a room and party details, and pay your deposit to reserve your karaoke night at BarZunko."
+      content="Choose a date, select a room and party details, and pay your deposit to reserve your karaoke night at Barjunko."
     />
     <link rel="stylesheet" href="style.css" />
     <link
@@ -24,7 +24,7 @@
       <div class="nav-container">
         <div class="nav-brand">
           <i class="fas fa-microphone brand-icon"></i>
-          <span class="brand-text">BarZunko</span>
+          <span class="brand-text">Barjunko</span>
         </div>
         <ul class="nav-menu">
           <li><a href="index.html">Home</a></li>
@@ -146,13 +146,19 @@
                       </button>
                     </div>
                     <div class="party-validation" id="party-validation"></div>
+                    <div class="extra-guest-ack hidden" id="extra-guest-ack-container">
+                      <label class="extra-guest-ack__checkbox">
+                        <input type="checkbox" id="extra-guest-ack" />
+                        <span>I understand each additional guest beyond the recommended size costs $5 per person per hour.</span>
+                      </label>
+                    </div>
                   </div>
                   <div class="form-group">
                     <label class="form-label">Duration (hours)</label>
                     <select id="duration" class="form-control">
-                      <option value="1">1 hour</option>
+                      <option value="1" selected>1 hour</option>
                       <option value="2">2 hours</option>
-                      <option value="3" selected>3 hours</option>
+                      <option value="3">3 hours</option>
                       <option value="4">4 hours</option>
                       <option value="5">5 hours</option>
                     </select>
@@ -193,7 +199,27 @@
                       placeholder="Birthday party, corporate event, etc."
                     ></textarea>
                   </div>
-                </form>
+                                                        <div class="terms-card">
+                      <h3 class="terms-title">Terms &amp; Conditions</h3>
+                      <ol class="terms-list">
+                        <li>Customers must be 19+ years old on Fridays, Saturdays, and holiday weekends.</li>
+                        <li>The space is calculated based on how many people can comfortably fit in the room. If capacity exceeds the stated maximum, there is a $5.00 per person/per hour surcharge and you must confirm your final guest count.</li>
+                        <li>No outside food or drinks are allowed.</li>
+                        <li>Cancel at least 48 hours before your reservation to receive a deposit refund.</li>
+                        <li>Same-day reservation deposits are non-refundable.</li>
+                        <li>Arriving more than 10 minutes late may forfeit your reservation. Late arrivals are still billed for the full reserved time.</li>
+                        <li>Fridays, Saturdays, and holiday weekends require a minimum 2-hour booking.</li>
+                        <li>We are not responsible for loss or damage to customers' property.</li>
+                        <li>All guests must comply with the Controlled Drugs and Substances Act while on the premises.</li>
+                        <li>On weekends (Fridays, Saturdays, and holiday weekends) from 9 PM to 3 AM, each guest must spend at least $20 on food or beverages in addition to the room charge; one consolidated bill per group.</li>
+                        <li>For everyone's safety, the entire karaoke area is monitored by video recording.</li>
+                      </ol>
+                      <label class="terms-consent">
+                        <input type="checkbox" id="terms-checkbox" />
+                        <span>I have read and agree to the terms above<span class="required-indicator">*</span></span>
+                      </label>
+                    </div>
+                  </form>
                 <div class="booking-summary">
                   <h3>Booking Summary</h3>
                   <div id="booking-summary-content">
@@ -314,8 +340,12 @@
     <script src="js/firebase-init.js"></script>
     <script src="js/app.js"></script>
     <script>
-      app.currentPage = 'booking';
-      app.init();
+      window.app.currentPage = 'booking';
+      window.app.init();
     </script>
   </body>
 </html>
+
+
+
+

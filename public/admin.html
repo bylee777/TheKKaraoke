@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Dashboard | BarZunko</title>
-    <meta name="description" content="Secure login and booking management for BarZunko staff." />
+    <title>Admin Dashboard | Barjunko</title>
+    <meta name="description" content="Secure login and booking management for Barjunko staff." />
     <link rel="stylesheet" href="style.css" />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
@@ -21,7 +21,7 @@
       <div class="nav-container">
         <div class="nav-brand">
           <i class="fas fa-microphone brand-icon"></i>
-          <span class="brand-text">BarZunko</span>
+          <span class="brand-text">Barjunko</span>
         </div>
         <ul class="nav-menu">
           <li><a href="index.html">Home</a></li>
@@ -56,7 +56,7 @@
           <div class="admin-login" id="admin-login">
             <div class="login-form">
               <h2>Admin Access</h2>
-              <p>Secure login for BarZunko staff</p>
+              <p>Secure login for Barjunko staff</p>
               <form id="admin-login-form">
                 <div class="form-group">
                   <label class="form-label">Username</label>
@@ -72,7 +72,7 @@
                 </button>
               </form>
               <div class="login-hint">
-                <small>Demo: admin / BarZunko123</small>
+                <small>Demo: admin / Barjunko123</small>
               </div>
             </div>
           </div>
@@ -90,7 +90,7 @@
                   <i class="fas fa-calendar-check"></i>
                 </div>
                 <div class="stat-content">
-                  <div class="stat-number">12</div>
+                  <div class="stat-number" id="admin-stat-bookings">0</div>
                   <div class="stat-label">Today's Bookings</div>
                 </div>
               </div>
@@ -99,7 +99,7 @@
                   <i class="fas fa-dollar-sign"></i>
                 </div>
                 <div class="stat-content">
-                  <div class="stat-number">$2,340</div>
+                  <div class="stat-number" id="admin-stat-revenue">$0.00</div>
                   <div class="stat-label">Today's Revenue</div>
                 </div>
               </div>
@@ -108,7 +108,7 @@
                   <i class="fas fa-users"></i>
                 </div>
                 <div class="stat-content">
-                  <div class="stat-number">156</div>
+                  <div class="stat-number" id="admin-stat-guests">0</div>
                   <div class="stat-label">Total Guests</div>
                 </div>
               </div>
@@ -117,15 +117,25 @@
                   <i class="fas fa-percentage"></i>
                 </div>
                 <div class="stat-content">
-                  <div class="stat-number">87%</div>
+                  <div class="stat-number" id="admin-stat-occupancy">0%</div>
                   <div class="stat-label">Occupancy Rate</div>
                 </div>
               </div>
             </div>
             <div class="dashboard-content">
+              <div class="availability-table">
+                <h2>Room Availability</h2>
+                <div id="admin-availability-grid"></div>
+              </div>
               <div class="bookings-table">
                 <h2>Recent Bookings</h2>
-                <div class="table-container">
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+  <button class="btn btn--outline" id="admin-prev-day" title="Previous day"><i class="fas fa-chevron-left"></i></button>
+  <input type="date" id="admin-date" class="form-control" style="width:150px" />
+  <button class="btn btn--outline" id="admin-next-day" title="Next day"><i class="fas fa-chevron-right"></i></button>
+  <button class="btn btn--secondary" id="admin-today">Today</button>
+</div>
+<div class="table-container">
                   <table id="bookings-table">
                     <thead>
                       <tr>
@@ -204,8 +214,8 @@
     <!-- Your app code (must come AFTER the SDKs + initializer) -->
     <script src="js/app.js"></script>
     <script>
-      app.currentPage = 'booking';
-      app.init();
+      window.app.currentPage = 'admin';
+      window.app.init();
     </script>
   </body>
 </html>

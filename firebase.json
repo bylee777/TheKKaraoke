@@ -20,6 +20,10 @@
         "function": "rebookBooking"
       },
       {
+        "source": "/getGoogleReviews",
+        "function": "getGoogleReviews"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

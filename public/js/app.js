@@ -1,33 +1,55 @@
-// BarZunko Karaoke Booking Application
-class BarZunkoApp {
+// Barjunko Karaoke Booking Application
+class BarjunkoApp {
   constructor() {
     this.currentPage = 'landing';
     this.currentStep = 1;
     this.maxStep = 5;
     this.bookingData = {};
+    this.extraGuestAcknowledged = false;
+    this.roomAvailability = null;
+    this.roomAvailabilityLoading = false;
+    this.roomAvailabilityError = false;
+    this.roomAvailabilityRequestId = 0;
+    this.manageLookupResults = [];
+    this.activeManagedBooking = null;
+    this.currentManagedEmail = '';
+
+    this.isRebookingFlow = false;
+    this.rebookContext = null;
+    this.rebookingStorageKey = 'barjunkoRebookContext';
+
     this.currentDate = new Date();
+    this.adminSelectedDate = null;
     this.selectedDate = null;
     this.selectedTime = null;
     this.selectedRoom = null;
     this.cardElement = null; // for Stripe Elements
 
+    this.listenersBound = false;
+    this.applicationInitialized = false;
+    this.domReadyHandlerAttached = false;
+
     // Business data
     this.businessData = {
-      name: 'BarZunko',
+      name: 'Barjunko',
       address: '675 Yonge St Basement, Toronto, ON M4Y 2B2',
       phone: '+1-416-968-0909',
       hours: '6:00 PM - 1:00 AM Daily',
-      email: 'info@BarZunko.com',
+      email: 'info@Barjunko.com',
     };
 
-    this.rooms = [
+        this.rooms = [
       {
         id: 'small',
         name: 'Small Room',
-        capacity: '1-6 people',
+        capacity: '1-4 people (max 5)',
         minCapacity: 1,
-        maxCapacity: 6,
+        maxCapacity: 5,
+        includedGuests: 4,
         hourlyRate: 30,
+        bookingFee: 0,
+        extraGuestRate: 5,
+        inventory: 4,
         features: [
           'Premium sound system',
           'LED lighting',
@@ -38,10 +60,14 @@ class BarZunkoApp {
       {
         id: 'medium',
         name: 'Medium Room',
-        capacity: '7-12 people',
-        minCapacity: 7,
+        capacity: '1-8 people (max 12)',
+        minCapacity: 1,
         maxCapacity: 12,
+        includedGuests: 8,
         hourlyRate: 60,
+        bookingFee: 0,
+        extraGuestRate: 5,
+        inventory: 4,
         features: [
           'Enhanced sound system',
           'Dynamic lighting',
@@ -53,10 +79,14 @@ class BarZunkoApp {
       {
         id: 'large',
         name: 'Large Room',
-        capacity: '13-20 people',
-        minCapacity: 13,
-        maxCapacity: 20,
+        capacity: '1-15 people (max 17)',
+        minCapacity: 1,
+        maxCapacity: 17,
+        includedGuests: 15,
         hourlyRate: 90,
+        bookingFee: 0,
+        extraGuestRate: 5,
+        inventory: 1,
         features: [
           'Professional sound system',
           'Stage lighting',
@@ -68,10 +98,18 @@ class BarZunkoApp {
       {
         id: 'extra-large',
         name: 'Extra Large Room',
-        capacity: '21+ people',
-        minCapacity: 21,
+        capacity: '1-25 people (max 30)',
+        minCapacity: 1,
         maxCapacity: 30,
-        hourlyRate: 90,
+        includedGuests: 25,
+        hourlyRate: 150,
+        bookingFee: 0,
+        extraGuestRate: 5,
+        requiredPurchase: {
+          description: 'Required house vodka or tequila purchase',
+          amount: 100,
+        },
+        inventory: 1,
         features: [
           'Concert-grade sound',
           'Stage with spotlights',
@@ -79,6 +117,7 @@ class BarZunkoApp {
           'Premium lounge',
           'Full bar service',
           'Dance floor',
+          'Includes required $100 house vodka or tequila purchase',
         ],
       },
     ];
@@ -158,20 +197,24 @@ class BarZunkoApp {
   init() {
     this.setupEventListeners();
 
-    if (this.currentPage === 'booking' || document.getElementById('booking-page')) {
-      this.goToStep(1); // <--- call it here
+    if (this.applicationInitialized) {
+      this.showPage(this.currentPage);
+      return;
     }
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        this.setupApplication();
-      });
+      if (!this.domReadyHandlerAttached) {
+        document.addEventListener('DOMContentLoaded', () => {
+          this.setupApplication();
+        });
+        this.domReadyHandlerAttached = true;
+      }
     } else {
       this.setupApplication();
     }
   }
 
   setupApplication() {
-    this.setupEventListeners();
     // Render initial landing content so shared components like room cards and testimonials are available when needed
     this.renderLandingPage();
     // Always update the calendar so booking pages have the latest date/time slots
@@ -180,9 +223,16 @@ class BarZunkoApp {
     // This allows us to bootstrap individual HTML pages (landing, booking, manage, admin, confirmation)
     // by setting app.currentPage before calling init().
     this.showPage(this.currentPage);
+    this.applicationInitialized = true;
+    this.domReadyHandlerAttached = false;
   }
 
   setupEventListeners() {
+    if (this.listenersBound) {
+      return;
+    }
+    this.listenersBound = true;
+
     // Navigation - Use event delegation
     document.addEventListener('click', (e) => {
       const pageLink = e.target.closest('[data-page]');
@@ -262,8 +312,13 @@ class BarZunkoApp {
         this.validatePartySize();
       }
 
+      if (e.target.id === 'extra-guest-ack') {
+        this.extraGuestAcknowledged = e.target.checked;
+      }
+
       if (e.target.id === 'duration') {
         this.updateBookingSummary();
+        this.updateRoomAvailability();
       }
     });
 
@@ -302,6 +357,8 @@ class BarZunkoApp {
       // Page-specific initialization
       if (page === 'booking') {
         this.initBookingFlow();
+      } else if (page === 'manage') {
+        this.initManagePage();
       } else if (page === 'admin') {
         this.initAdminPage();
       }
@@ -325,61 +382,6 @@ class BarZunkoApp {
         link.classList.add('active');
       }
     });
-  }
-
-  // --- Navigation helpers (ADD THESE) ---
-  goToStep(step) {
-    // Clamp between 1..5
-    this.currentStep = Math.max(1, Math.min(5, step));
-
-    // Toggle step panels
-    const steps = document.querySelectorAll('.booking-step');
-    steps.forEach((el, idx) => {
-      const isActive = idx === this.currentStep - 1;
-      el.classList.toggle('active', isActive);
-    });
-
-    // Toggle progress bar
-    const progressSteps = document.querySelectorAll('.progress-step');
-    progressSteps.forEach((el, idx) => {
-      el.classList.toggle('active', idx <= this.currentStep - 1);
-    });
-
-    // If weâ€™ve arrived at Step 5, make sure Stripe Element is mounted
-    if (this.currentStep === 5 && !this.cardElement) {
-      this.setupPaymentFormFormatting();
-    }
-
-    // Toggle buttons
-    this.updateNavigationButtons();
-
-    // Optional: refresh the summary UI each time
-    if (typeof this.updateSummary === 'function') {
-      this.updateSummary();
-    }
-  }
-
-  updateNavigationButtons() {
-    const nextBtn = document.getElementById('next-btn');
-    const backBtn = document.getElementById('back-btn');
-    const completeBtn = document.getElementById('complete-booking-btn');
-
-    if (backBtn) backBtn.classList.toggle('hidden', this.currentStep === 1);
-    if (nextBtn) nextBtn.classList.toggle('hidden', this.currentStep >= 5);
-    if (completeBtn) completeBtn.classList.toggle('hidden', this.currentStep !== 5);
-  }
-
-  nextStep() {
-    // If you have per-step validation, call it here:
-    if (typeof this.validateCurrentStep === 'function') {
-      const ok = this.validateCurrentStep();
-      if (!ok) return;
-    }
-    if (this.currentStep < 5) this.goToStep(this.currentStep + 1);
-  }
-
-  prevStep() {
-    if (this.currentStep > 1) this.goToStep(this.currentStep - 1);
   }
 
   toggleMobileMenu() {
@@ -492,6 +494,7 @@ class BarZunkoApp {
     this.updateProgressBar();
     this.showBookingStep(1);
     this.updateCalendar();
+    this.tryInitializeRebookingFlow();
   }
 
   showBookingStep(step) {
@@ -621,10 +624,17 @@ class BarZunkoApp {
             );
             return false;
           }
+
+          const includedGuests = room.includedGuests ?? room.maxCapacity;
+          if (partySize > includedGuests && !this.extraGuestAcknowledged) {
+            this.showNotification('Please acknowledge the extra guest surcharge before continuing.', 'warning');
+            return false;
+          }
         }
 
         this.bookingData.partySize = partySize;
         this.bookingData.duration = duration;
+        this.bookingData.extraGuestAcknowledged = this.extraGuestAcknowledged;
         return true;
 
       case 4:
@@ -650,13 +660,21 @@ class BarZunkoApp {
           }
 
           // Store customer info
+          const termsCheckbox = document.getElementById('terms-checkbox');
+          if (!termsCheckbox || !termsCheckbox.checked) {
+            this.showNotification('Please review and accept the terms & conditions to continue', 'error');
+            return false;
+          }
+
           this.bookingData.customer = {
             firstName: document.getElementById('first-name').value.trim(),
             lastName: document.getElementById('last-name').value.trim(),
             email: email,
             phone: document.getElementById('phone').value.trim(),
             specialRequests: document.getElementById('special-requests')?.value.trim() || '',
+            termsAccepted: true,
           };
+          this.bookingData.termsAccepted = true;
         }
         return true;
 
@@ -760,8 +778,13 @@ class BarZunkoApp {
   selectDate(dateString) {
     this.selectedDate = dateString;
     this.selectedTime = null;
+    this.roomAvailability = null;
+    this.roomAvailabilityLoading = false;
+    this.roomAvailabilityError = false;
+    this.roomAvailabilityRequestId += 1;
     this.updateCalendar();
     this.updateTimeSlots();
+    this.renderRoomSelection();
   }
 
   updateTimeSlots() {
@@ -811,6 +834,7 @@ class BarZunkoApp {
   selectTime(time) {
     this.selectedTime = time;
     this.updateTimeSlots();
+    this.updateRoomAvailability();
   }
 
   formatTime(time24) {
@@ -831,6 +855,387 @@ class BarZunkoApp {
   }
 
   // Room Selection Methods
+  async updateRoomAvailability() {
+    if (!this.selectedDate || !this.selectedTime) {
+      this.roomAvailabilityRequestId += 1;
+      this.roomAvailability = null;
+      this.roomAvailabilityLoading = false;
+      this.roomAvailabilityError = false;
+      this.renderRoomSelection();
+      return;
+    }
+
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      this.roomAvailabilityRequestId += 1;
+      this.roomAvailability = null;
+      this.roomAvailabilityError = true;
+      this.roomAvailabilityLoading = false;
+      this.renderRoomSelection();
+      return;
+    }
+
+    const requestId = ++this.roomAvailabilityRequestId;
+    this.roomAvailabilityLoading = true;
+    this.roomAvailabilityError = false;
+    this.renderRoomSelection();
+
+    const durationEl = document.getElementById('duration');
+    const duration = durationEl ? parseInt(durationEl.value, 10) || 1 : Number(this.bookingData.duration) || 1;
+
+    try {
+      const getAvailability = window.firebaseFunctions.httpsCallable('getRoomAvailability');
+      const response = await getAvailability({
+        date: this.selectedDate,
+        startTime: this.selectedTime,
+        duration,
+        roomIds: this.rooms.map((room) => room.id),
+        excludeBookingId: this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
+      });
+
+      if (requestId !== this.roomAvailabilityRequestId) {
+        return;
+      }
+
+      this.roomAvailabilityLoading = false;
+      this.roomAvailabilityError = false;
+      this.roomAvailability = response.data?.availability || {};
+
+      const selectedUnavailable = this.selectedRoom && Number(this.roomAvailability?.[this.selectedRoom.id] || 0) <= 0;
+      let shouldClearSelectedRoom = selectedUnavailable;
+      if (selectedUnavailable && this.isRebookingFlow && this.rebookContext) {
+        const orig = this.rebookContext.booking || {};
+        if (this.selectedRoom.id === orig.roomId && this.selectedDate === orig.date && this.selectedTime === orig.startTime) {
+          shouldClearSelectedRoom = false;
+        }
+      }
+      if (shouldClearSelectedRoom) {
+        const roomName = this.selectedRoom ? this.selectedRoom.name : 'Selected room';
+        this.showNotification(`${roomName} is no longer available at that time. Please choose another room.`, 'warning');
+        this.selectedRoom = null;
+        this.bookingData.room = null;
+        this.validatePartySize();
+      }
+    } catch (error) {
+      console.error('Failed to load room availability', error);
+      if (requestId !== this.roomAvailabilityRequestId) {
+        return;
+      }
+      this.roomAvailabilityLoading = false;
+      this.roomAvailabilityError = true;
+      this.roomAvailability = null;
+    }
+
+    this.renderRoomSelection();
+  }
+
+  getRoomAvailabilityStatus(roomId) {
+    if (!this.selectedDate || !this.selectedTime) {
+      return {
+        message: 'Select a date & time to check availability',
+        className: 'info',
+        selectable: false,
+        notifyMessage: 'Select a date and time first to see availability.',
+        notifyType: 'info',
+      };
+    }
+
+    if (this.roomAvailabilityLoading) {
+      return {
+        message: 'Checking availability...',
+        className: 'info',
+        selectable: false,
+        notifyMessage: 'Checking availability. Please wait.',
+        notifyType: 'info',
+      };
+    }
+
+    if (this.roomAvailabilityError) {
+      return {
+        message: 'Availability unavailable. You can try again or continue.',
+        className: 'warning',
+        selectable: true,
+      };
+    }
+
+    if (!this.roomAvailability || typeof this.roomAvailability[roomId] === 'undefined') {
+      return {
+        message: 'Availability pending',
+        className: 'info',
+        selectable: true,
+      };
+    }
+
+    const available = Number(this.roomAvailability[roomId]) || 0;
+    if (available > 0) {
+      const label = available === 1 ? 'room' : 'rooms';
+      return {
+        message: `${available} ${label} available`,
+        className: 'success',
+        selectable: true,
+      };
+    }
+
+    const room = this.rooms.find((r) => r.id === roomId);
+    const roomName = room ? room.name : 'This room';
+    return {
+      message: 'Unavailable at selected time',
+      className: 'error',
+      selectable: false,
+      notifyMessage: `${roomName} is fully booked for the selected time.`,
+      notifyType: 'warning',
+    };
+  }
+
+  getStoredRebookingContext() {
+
+    try {
+
+      const raw = localStorage.getItem(this.rebookingStorageKey);
+
+      if (!raw) return null;
+
+      return JSON.parse(raw);
+
+    } catch (error) {
+
+      console.warn('Failed to parse rebooking context', error);
+
+      try {
+
+        localStorage.removeItem(this.rebookingStorageKey);
+
+      } catch (removeError) {
+
+        console.warn('Failed to clear rebooking context', removeError);
+
+      }
+
+      return null;
+
+    }
+
+  }
+
+
+
+  clearRebookingContext({ removeQueryParam = false } = {}) {
+
+    try {
+
+      localStorage.removeItem(this.rebookingStorageKey);
+
+    } catch (error) {
+
+      console.warn('Unable to clear rebooking context from storage', error);
+
+    }
+
+
+
+    this.rebookContext = null;
+
+    this.isRebookingFlow = false;
+
+
+
+    if (removeQueryParam && typeof window !== 'undefined') {
+
+      const url = new URL(window.location.href);
+
+      if (url.searchParams.has('rebook')) {
+
+        url.searchParams.delete('rebook');
+
+        window.history.replaceState({}, document.title, url.toString());
+
+      }
+
+    }
+
+  }
+
+
+
+  tryInitializeRebookingFlow() {
+
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+
+    if (!params.has('rebook')) {
+
+      return;
+
+    }
+
+
+
+    const context = this.getStoredRebookingContext();
+
+    if (!context || !context.booking) {
+
+      this.showNotification('Your rebooking session expired. Please start again from Manage Booking.', 'warning');
+
+      this.clearRebookingContext({ removeQueryParam: true });
+
+      return;
+
+    }
+
+
+
+    this.enterRebookingMode(context);
+
+  }
+
+
+
+  enterRebookingMode(context) {
+
+    this.isRebookingFlow = true;
+
+    this.rebookContext = context;
+
+
+
+    const booking = context.booking;
+
+    const room = this.rooms.find((r) => r.id === booking.roomId) || null;
+
+    this.selectedRoom = room || null;
+
+    if (room) {
+
+      this.bookingData.room = room;
+
+    }
+
+
+
+    this.selectedDate = booking.date;
+    this.selectedTime = booking.startTime;
+    this.bookingData.date = booking.date;
+    this.bookingData.startTime = booking.startTime;
+    this.bookingData.duration = booking.duration;
+
+    this.bookingData.partySize = booking.partySize || (room?.minCapacity ?? 1);
+
+    this.bookingData.totalCost = booking.totalCost ?? null;
+    this.bookingData.depositAmount = booking.depositAmount ?? null;
+    this.bookingData.remainingBalance = booking.remainingBalance ?? (booking.totalCost != null && booking.depositAmount != null
+      ? booking.totalCost - booking.depositAmount
+      : null);
+
+
+
+    this.bookingData.customer = {
+
+      firstName: booking.customer?.firstName || '',
+
+      lastName: booking.customer?.lastName || '',
+
+      email: booking.customer?.email || context.email || '',
+
+      phone: booking.customer?.phone || '',
+
+      specialRequests: '',
+
+      termsAccepted: true,
+
+    };
+
+    this.bookingData.termsAccepted = true;
+
+
+
+    const includedGuests = room?.includedGuests ?? room?.maxCapacity ?? this.bookingData.partySize;
+
+    this.extraGuestAcknowledged = this.bookingData.partySize <= includedGuests;
+
+
+
+    this.updateCalendar();
+
+    this.updateTimeSlots();
+
+    this.renderRoomSelection();
+
+    this.updateRoomAvailability();
+
+
+
+    const durationEl = document.getElementById('duration');
+
+    if (durationEl) {
+
+      durationEl.value = String(this.bookingData.duration);
+
+    }
+
+
+
+    const partyInput = document.getElementById('party-size');
+
+    if (partyInput) {
+
+      partyInput.value = this.bookingData.partySize;
+
+    }
+
+
+
+    this.applyRebookingCustomerPrefill(this.bookingData.customer);
+
+
+
+    this.validatePartySize();
+
+    this.updateBookingSummary();
+
+    this.updatePaymentSummary();
+
+
+
+    this.showNotification(`Rescheduling booking ${booking.id}. Update your details and confirm.`, 'info');
+
+  }
+
+
+
+  applyRebookingCustomerPrefill(customer) {
+
+    const firstNameEl = document.getElementById('first-name');
+
+    if (firstNameEl) firstNameEl.value = customer.firstName || '';
+
+
+
+    const lastNameEl = document.getElementById('last-name');
+
+    if (lastNameEl) lastNameEl.value = customer.lastName || '';
+
+
+
+    const emailEl = document.getElementById('email');
+
+    if (emailEl) emailEl.value = customer.email || '';
+
+
+
+    const phoneEl = document.getElementById('phone');
+
+    if (phoneEl) phoneEl.value = customer.phone || '';
+
+
+
+    const termsCheckbox = document.getElementById('terms-checkbox');
+
+    if (termsCheckbox) termsCheckbox.checked = true;
+
+  }
+
+
+
   renderRoomSelection() {
     const roomGrid = document.getElementById('room-selection-grid');
     if (!roomGrid) return;
@@ -838,8 +1243,15 @@ class BarZunkoApp {
     roomGrid.innerHTML = '';
 
     this.rooms.forEach((room) => {
+      const status = this.getRoomAvailabilityStatus(room.id);
       const roomOption = document.createElement('div');
       roomOption.className = 'room-option';
+
+      if (!status.selectable) {
+        roomOption.classList.add('room-option--unavailable');
+        roomOption.setAttribute('aria-disabled', 'true');
+      }
+
       roomOption.innerHTML = `
                 <div class="room-option-header">
                     <h3 class="room-option-title">${room.name}</h3>
@@ -855,13 +1267,24 @@ class BarZunkoApp {
                       .map((feature) => `<li>${feature}</li>`)
                       .join('')}
                 </ul>
+                <div class="room-availability room-availability--${status.className || 'info'}">
+                    ${status.message}
+                </div>
             `;
 
       roomOption.addEventListener('click', () => {
+        const currentStatus = this.getRoomAvailabilityStatus(room.id);
+        if (!currentStatus.selectable) {
+          if (currentStatus.notifyMessage) {
+            this.showNotification(currentStatus.notifyMessage, currentStatus.notifyType || 'info');
+          }
+          return;
+        }
+
         this.selectRoom(room);
       });
 
-      if (this.selectedRoom && this.selectedRoom.id === room.id) {
+      if (status.selectable && this.selectedRoom && this.selectedRoom.id === room.id) {
         roomOption.classList.add('selected');
       }
 
@@ -896,117 +1319,499 @@ class BarZunkoApp {
     }
   }
 
+  toggleExtraGuestAcknowledgement(show) {
+    const container = document.getElementById('extra-guest-ack-container');
+    const checkbox = document.getElementById('extra-guest-ack');
+
+    if (!container || !checkbox) {
+      return;
+    }
+
+    if (show) {
+      container.classList.remove('hidden');
+    } else {
+      container.classList.add('hidden');
+      checkbox.checked = false;
+      this.extraGuestAcknowledged = false;
+    }
+  }
+
   validatePartySize() {
     const partySizeEl = document.getElementById('party-size');
     const validation = document.getElementById('party-validation');
 
     if (!partySizeEl || !validation) return;
 
-    const partySize = parseInt(partySizeEl.value);
+    const partySize = parseInt(partySizeEl.value, 10);
 
     if (!this.selectedRoom) {
       validation.innerHTML = '<i class="fas fa-info-circle"></i> Select a room first';
       validation.className = 'party-validation';
+      this.toggleExtraGuestAcknowledgement(false);
       return;
     }
 
     const room = this.selectedRoom;
+    const includedGuests = room.includedGuests ?? room.maxCapacity;
+    const extraGuestRate = room.extraGuestRate || 0;
+    const minCapacity = room.minCapacity ?? 1;
+    const maxCapacity = room.maxCapacity ?? includedGuests;
 
-    if (partySize >= room.minCapacity && partySize <= room.maxCapacity) {
-      validation.innerHTML = '<i class="fas fa-check-circle"></i> Perfect fit for ' + room.name;
-      validation.className = 'party-validation success';
-    } else {
-      validation.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${room.name} is for ${room.capacity}`;
+    if (!Number.isFinite(partySize) || partySize < minCapacity) {
+      const minLabel = `${minCapacity} guest${minCapacity === 1 ? '' : 's'}`;
+      validation.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${room.name} requires at least ${minLabel}.`;
       validation.className = 'party-validation error';
+      this.toggleExtraGuestAcknowledgement(false);
+      return;
     }
+
+    if (partySize > maxCapacity) {
+      validation.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${room.name} fits up to ${maxCapacity} guests. Extra guests are $${extraGuestRate} per person per hour and may require a larger room.`;
+      validation.className = 'party-validation error';
+      this.toggleExtraGuestAcknowledgement(false);
+      return;
+    }
+
+    if (partySize > includedGuests) {
+      const extraGuests = partySize - includedGuests;
+      const guestLabel = extraGuests === 1 ? 'guest' : 'guests';
+      let surchargeText = 'Additional guests may require approval.';
+
+      if (extraGuestRate > 0) {
+        const totalExtraPerHour = extraGuestRate * extraGuests;
+        const totalBreakdown = extraGuests > 0 ? ` (currently +$${totalExtraPerHour}/hr for ${extraGuests} ${guestLabel})` : '';
+        surchargeText = `Each additional guest costs $${extraGuestRate} per person per hour${totalBreakdown}.`;
+      }
+
+      validation.innerHTML = `<i class="fas fa-exclamation-circle"></i> Party size exceeds the recommended ${includedGuests} guests for ${room.name}. ${surchargeText} Please acknowledge below.`;
+      validation.className = 'party-validation warning';
+      this.toggleExtraGuestAcknowledgement(true);
+      const checkbox = document.getElementById('extra-guest-ack');
+      if (checkbox) {
+        this.extraGuestAcknowledged = checkbox.checked;
+      }
+      return;
+    }
+
+    validation.innerHTML = '<i class="fas fa-check-circle"></i> Perfect fit for ' + room.name;
+    validation.className = 'party-validation success';
+    this.toggleExtraGuestAcknowledgement(false);
   }
 
   // Summary Methods
   updateBookingSummary() {
+
     const summaryContent = document.getElementById('booking-summary-content');
+
     if (!summaryContent) return;
 
-    if (!this.selectedDate || !this.selectedTime || !this.selectedRoom) {
+
+
+    // Helper for currency display
+
+    const formatCurrency = (value) => (typeof value === "number" && isFinite(value) ? `$${value.toFixed(2)}` : "—");
+
+
+
+    // Use live selections with fallbacks from bookingData (for rebooking)
+
+    const date = this.selectedDate || this.bookingData.date || null;
+
+    const time = this.selectedTime || this.bookingData.startTime || null;
+
+    const room = this.selectedRoom || this.bookingData.room || null;
+
+
+
+    if (!date || !time || !room) {
+
       summaryContent.innerHTML = '<p>Complete the previous steps to see your booking summary.</p>';
+
       return;
+
     }
 
-    const room = this.selectedRoom;
+
+
     const partySizeEl = document.getElementById('party-size');
+
     const durationEl = document.getElementById('duration');
 
-    const partySize = partySizeEl ? parseInt(partySizeEl.value) || 1 : 1;
-    const duration = durationEl ? parseInt(durationEl.value) || 3 : 3;
-    const totalCost = room.hourlyRate * duration;
+    const partySize = partySizeEl ? (parseInt(partySizeEl.value, 10) || 1) : (this.bookingData.partySize || 1);
 
-    // Calculate end time
-    const [startHours, startMinutes] = this.selectedTime.split(':').map(Number);
+    const duration = durationEl ? (parseInt(durationEl.value, 10) || (this.bookingData.duration || 1)) : (this.bookingData.duration || 1);
+
+
+
+    const baseCost = room.hourlyRate * duration;
+
+    const bookingFee = room.bookingFee || 0;
+
+    const includedGuests = room.includedGuests ?? room.maxCapacity;
+
+    const extraGuestRate = room.extraGuestRate || 0;
+
+    const extraGuests = Math.max(0, partySize - includedGuests);
+
+    const extraGuestFee = extraGuestRate * extraGuests * duration;
+
+    const requiredPurchaseAmount = room.requiredPurchase ? room.requiredPurchase.amount : 0;
+
+    const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
+
+
+
+    const [startHours, startMinutes] = time.split(':').map(Number);
+
     const endTime = new Date();
+
     endTime.setHours(startHours + duration, startMinutes, 0, 0);
+
     const endTimeString = endTime.toTimeString().slice(0, 5);
 
+
+
+    const extraRows = [];
+
+    if (bookingFee) {
+
+      extraRows.push(`
+
+            <div class="summary-row">
+
+                <span class="summary-label">Booking Fee:</span>
+
+                <span class="summary-value">${formatCurrency(bookingFee)}</span>
+
+            </div>`);
+
+    }
+
+    if (extraGuestFee) {
+
+      extraRows.push(`
+
+            <div class="summary-row">
+
+                <span class="summary-label">Extra Guests (${extraGuests} &times; $${extraGuestRate}/hr &times; ${duration}h):</span>
+
+                <span class="summary-value">${formatCurrency(extraGuestFee)}</span>
+
+            </div>`);
+
+    }
+
+    if (requiredPurchaseAmount) {
+
+      const description = room.requiredPurchase?.description || "Required purchase";
+
+      extraRows.push(`
+
+            <div class="summary-row">
+
+                <span class="summary-label">${description}:</span>
+
+                <span class="summary-value">${formatCurrency(requiredPurchaseAmount)}</span>
+
+            </div>`);
+
+    }
+
+
+
     summaryContent.innerHTML = `
+
             <div class="summary-row">
+
                 <span class="summary-label">Date:</span>
-                <span class="summary-value">${new Date(this.selectedDate).toLocaleDateString()}</span>
+
+                <span class="summary-value">${new Date(date).toLocaleDateString()}</span>
+
             </div>
+
             <div class="summary-row">
+
                 <span class="summary-label">Time:</span>
-                <span class="summary-value">${this.formatTime(this.selectedTime)} - ${this.formatTime(endTimeString)}</span>
+
+                <span class="summary-value">${this.formatTime(time)} - ${this.formatTime(endTimeString)}</span>
+
             </div>
+
             <div class="summary-row">
+
                 <span class="summary-label">Room:</span>
+
                 <span class="summary-value">${room.name}</span>
+
             </div>
+
             <div class="summary-row">
+
                 <span class="summary-label">Party Size:</span>
+
                 <span class="summary-value">${partySize} people</span>
+
             </div>
+
             <div class="summary-row">
+
                 <span class="summary-label">Duration:</span>
-                <span class="summary-value">${duration} hours</span>
+
+                <span class="summary-value">${duration} hour${duration > 1 ? "s" : ""}</span>
+
             </div>
+
             <div class="summary-row">
-                <span class="summary-label">Rate:</span>
+
+                <span class="summary-label">Room Rate:</span>
+
                 <span class="summary-value">$${room.hourlyRate}/hour</span>
+
             </div>
+
             <div class="summary-row">
-                <span class="summary-label">Total Cost:</span>
-                <span class="summary-value summary-total">$${totalCost}</span>
+
+                <span class="summary-label">Room Subtotal:</span>
+
+                <span class="summary-value">${formatCurrency(baseCost)}</span>
+
             </div>
+
+            ${extraRows.join('')}
+
+            <div class="summary-row">
+
+                <span class="summary-label">Total Cost:</span>
+
+                <span class="summary-value summary-total">${formatCurrency(totalCost)}</span>
+
+            </div>
+
         `;
+
+
+
+    this.bookingData.roomSubtotal = baseCost;
+
+    this.bookingData.extraGuestFee = extraGuestFee;
+
+    this.bookingData.requiredPurchaseAmount = requiredPurchaseAmount;
+
+    this.bookingData.bookingFee = bookingFee;
+
   }
+
+
 
   updatePaymentSummary() {
+
     const summaryContent = document.getElementById('payment-summary-content');
+
     if (!summaryContent || !this.selectedRoom) return;
 
+
+
+    const isRebooking = this.isRebookingFlow && !!this.rebookContext;
+
+    const formatCurrency = (value) => (Number.isFinite(value) ? `$${value.toFixed(2)}` : 'N/A');
+
     const room = this.selectedRoom;
+
     const durationEl = document.getElementById('duration');
-    const duration = durationEl ? parseInt(durationEl.value) : 3;
-    const totalCost = room.hourlyRate * duration;
-    const depositAmount = Math.round(totalCost * 0.5);
-    const remainingBalance = totalCost - depositAmount;
+
+    const duration = durationEl ? parseInt(durationEl.value, 10) || 1 : 1;
+
+    const baseCost = room.hourlyRate * duration;
+
+    const bookingFee = room.bookingFee || 0;
+
+    const includedGuests = room.includedGuests ?? room.maxCapacity;
+
+    const extraGuestRate = room.extraGuestRate || 0;
+
+    const partySizeEl = document.getElementById('party-size');
+
+    const partySize = partySizeEl ? parseInt(partySizeEl.value, 10) || 1 : 1;
+
+    const extraGuests = Math.max(0, partySize - includedGuests);
+
+    const extraGuestFee = extraGuestRate * extraGuests * duration;
+
+    const requiredPurchaseAmount = room.requiredPurchase ? room.requiredPurchase.amount : 0;
+
+    const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
+
+    const originalDeposit = this.rebookContext?.booking?.depositAmount;
+
+    let depositAmount = Math.round(totalCost * 0.5);
+
+    if (isRebooking && Number.isFinite(originalDeposit)) {
+
+      depositAmount = originalDeposit;
+
+    }
+
+    const safeDepositAmount = Number.isFinite(depositAmount) ? depositAmount : 0;
+
+    const remainingBalance = Math.max(totalCost - safeDepositAmount, 0);
+
+
+
+    const extraRows = [];
+
+    if (bookingFee) {
+
+      extraRows.push(`
+
+            <div class="summary-row">
+
+                <span class="summary-label">Booking Fee:</span>
+
+                <span class="summary-value">${formatCurrency(bookingFee)}</span>
+
+            </div>`);
+
+    }
+
+    if (extraGuestFee) {
+
+      extraRows.push(`
+
+            <div class="summary-row">
+
+                <span class="summary-label">Extra Guests (${extraGuests} &times; $${extraGuestRate}/hr &times; ${duration}h):</span>
+
+                <span class="summary-value">${formatCurrency(extraGuestFee)}</span>
+
+            </div>`);
+
+    }
+
+    if (requiredPurchaseAmount) {
+
+      const description = room.requiredPurchase?.description || 'Required purchase';
+
+      extraRows.push(`
+
+            <div class="summary-row">
+
+                <span class="summary-label">${description}:</span>
+
+                <span class="summary-value">${formatCurrency(requiredPurchaseAmount)}</span>
+
+            </div>`);
+
+    }
+
+
+
+    const noteRows = [];
+    if (isRebooking) {
+      const depositText = Number.isFinite(depositAmount)
+        ? `Your original deposit of ${formatCurrency(depositAmount)} stays on file.`
+        : 'Your original deposit remains on file.';
+      noteRows.push(`<div class="summary-note">${depositText} No additional payment is required to reschedule.</div>`);
+    }
+
+
 
     summaryContent.innerHTML = `
+
             <div class="summary-row">
+
+                <span class="summary-label">Room Subtotal:</span>
+
+                <span class="summary-value">${formatCurrency(baseCost)}</span>
+
+            </div>
+
+            ${extraRows.join('')}
+
+            <div class="summary-row">
+
                 <span class="summary-label">Total Cost:</span>
-                <span class="summary-value">$${totalCost}</span>
+
+                <span class="summary-value">${formatCurrency(totalCost)}</span>
+
             </div>
+
             <div class="summary-row">
-                <span class="summary-label">Deposit (50%):</span>
-                <span class="summary-value summary-total">$${depositAmount}</span>
+
+                <span class="summary-label">${isRebooking ? 'Deposit on file' : 'Deposit (50%)'}:</span>
+
+                <span class="summary-value summary-total">${formatCurrency(depositAmount)}</span>
+
             </div>
+
             <div class="summary-row">
+
                 <span class="summary-label">Remaining Balance:</span>
-                <span class="summary-value">$${remainingBalance} (due on arrival)</span>
+
+                <span class="summary-value">${formatCurrency(remainingBalance)} (due on arrival)</span>
+
             </div>
+
+            ${noteRows.join('')}
+
         `;
 
+
+
     this.bookingData.totalCost = totalCost;
-    this.bookingData.depositAmount = depositAmount;
+
+    this.bookingData.depositAmount = Number.isFinite(depositAmount) ? depositAmount : null;
+
     this.bookingData.remainingBalance = remainingBalance;
+
+    this.bookingData.extraGuestFee = extraGuestFee;
+
+    this.bookingData.bookingFee = bookingFee;
+
+    this.bookingData.requiredPurchaseAmount = requiredPurchaseAmount;
+
+
+
+    const paymentForm = document.querySelector('.payment-form');
+
+    if (paymentForm) {
+
+      paymentForm.style.display = isRebooking ? 'none' : '';
+
+    }
+
+
+
+    const stepDescription = document.querySelector('#step-5 .step-description');
+
+    if (stepDescription) {
+
+      stepDescription.textContent = isRebooking
+
+        ? 'Confirm your updated reservation details'
+
+        : 'Secure your reservation with a 50% deposit';
+
+    }
+
+    const stepHeading = document.querySelector('#step-5 h2');
+
+    if (stepHeading) {
+
+      stepHeading.textContent = isRebooking ? 'Confirm Your Updated Booking' : 'Complete Your Booking';
+
+    }
+
+    const completeBtn = document.getElementById('complete-booking-btn');
+
+    if (completeBtn) {
+
+      completeBtn.textContent = isRebooking ? 'Confirm Changes' : 'Complete Booking';
+
+    }
+
   }
+
+
 
   // Payment Methods
   setupPaymentFormFormatting() {
@@ -1025,63 +1830,172 @@ class BarZunkoApp {
     }, 100);
   }
 
-  completeBooking() {
-    // Begin the booking process by showing a loading overlay
+  async completeBooking() {
+    // Validate the current step (ensures date/room/customer info are filled)
+    if (!this.validateCurrentStep()) return;
+
+    if (this.isRebookingFlow) {
+      this.showLoading('Updating your booking...');
+      await this.completeRebookingFlow();
+      return;
+    }
+
+    // Show a loading overlay
     this.showLoading('Processing your booking...');
 
-    // Simulate asynchronous processing. In the future this can be replaced by a call
-    // to a Firebase Cloud Function (createBooking) which performs doubleâ€‘booking
-    // validation, creates a Stripe PaymentIntent, writes to Firestore, and returns
-    // a confirmation. Once the booking is created successfully we persist the
-    // bookingData to localStorage and redirect the user to the dedicated
-    // confirmation page (confirmation.html).
-    setTimeout(() => {
-      this.hideLoading();
+    try {
+      // Build the payload for the Cloud Function
+      const payload = {
+        roomId: this.selectedRoom.id,
+        date: this.selectedDate,
+        startTime: this.selectedTime,
+        duration: this.bookingData.duration,
+        totalCost: this.bookingData.totalCost,
+        depositAmount: this.bookingData.depositAmount,
+        partySize: this.bookingData.partySize,
+        // Use "customerInfo" because the Cloud Function expects that field.
+        customerInfo: this.bookingData.customer,
+      };
 
-      // Generate a temporary booking ID using the current timestamp. In a real
-      // implementation this would come from Firestore.
-      const bookingId = 'BJ' + String(Date.now()).slice(-6);
+      // 1) Call your createBooking Cloud Function
+      const createBookingFn = window.firebaseFunctions.httpsCallable('createBooking');
+      const response = await createBookingFn(payload);
+      const { bookingId, clientSecret, paymentIntentClientSecret } = response.data;
+      // Use whichever key exists (clientSecret or paymentIntentClientSecret)
+      const clientSecretToUse = clientSecret || paymentIntentClientSecret;
 
+      // 2) Confirm the payment on the client using Stripe.js
+      const cardholderName =
+        document.getElementById('cardholder-name').value ||
+        `${this.bookingData.customer.firstName} ${this.bookingData.customer.lastName}`;
+
+      const { error, paymentIntent } = await window.stripe.confirmCardPayment(clientSecretToUse, {
+        payment_method: {
+          card: this.cardElement,
+          billing_details: {
+            name: cardholderName,
+            email: this.bookingData.customer.email,
+            phone: this.bookingData.customer.phone,
+          },
+        },
+      });
+
+      if (error) {
+        // Show an error and stop
+        this.hideLoading();
+        this.showError(error.message || 'Payment failed');
+        return;
+      }
+
+      // 3) (Optional but recommended) Tell the backend to mark the booking as confirmed
+      //    This calls the confirmBooking Cloud Function defined in functions/index.js.
+      try {
+        const confirmFn = window.firebaseFunctions.httpsCallable('confirmBooking');
+        await confirmFn({ bookingId, paymentIntentId: paymentIntent.id });
+      } catch (err) {
+        console.warn('confirmBooking failed or not deployed:', err);
+      }
+
+      // 4) Update local booking data and redirect to confirmation page
       this.bookingData.id = bookingId;
       this.bookingData.status = 'confirmed';
       this.bookingData.createdAt = new Date().toISOString();
+      this.bookingData.paymentIntentId = paymentIntent.id;
 
-      const [startHours, startMinutes] = this.bookingData.startTime.split(':').map(Number);
-      const endTime = new Date();
-      endTime.setHours(startHours + this.bookingData.duration, startMinutes, 0, 0);
-      this.bookingData.endTime = endTime.toTimeString().slice(0, 5);
-
-      // Push the booking into the mock bookings array for local lookups. This
-      // ensures that the manage booking page still works without a backend.
-      this.mockBookings.push({
-        id: bookingId,
-        customerName: `${this.bookingData.customer.firstName} ${this.bookingData.customer.lastName}`,
-        email: this.bookingData.customer.email,
-        phone: this.bookingData.customer.phone,
-        roomType: this.bookingData.room.id,
-        date: this.bookingData.date,
-        startTime: this.bookingData.startTime,
-        endTime: this.bookingData.endTime,
-        duration: this.bookingData.duration,
-        partySize: this.bookingData.partySize,
-        totalCost: this.bookingData.totalCost,
-        depositPaid: this.bookingData.depositAmount,
-        status: 'confirmed',
-      });
-
-      // Persist bookingData to localStorage so the confirmation page can
-      // reconstruct the summary. This avoids relying on hidden DOM pages.
-      try {
-        localStorage.setItem('barzunkoBooking', JSON.stringify(this.bookingData));
-      } catch (err) {
-        console.warn('Unable to save booking data to localStorage', err);
-      }
-
-      // Redirect the user to the standalone confirmation page. Using
-      // window.location ensures a full page reload into confirmation.html.
+      localStorage.setItem('barjunkoBooking', JSON.stringify(this.bookingData));
+      this.hideLoading();
       window.location.href = 'confirmation.html';
-    }, 3000);
+    } catch (err) {
+      this.hideLoading();
+      this.showError(err.message || 'Error completing booking');
+    }
   }
+
+  async completeRebookingFlow() {
+
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+
+      this.hideLoading();
+
+      this.showError('Booking management is unavailable right now. Please try again later.');
+
+      return;
+
+    }
+
+
+
+    if (!this.rebookContext || !this.rebookContext.booking) {
+
+      this.hideLoading();
+
+      this.showError('Rebooking session expired. Please start again from Manage Booking.');
+
+      return;
+
+    }
+
+
+
+    try {
+
+      const rebookFn = window.firebaseFunctions.httpsCallable('rebookBookingGuest');
+
+      const payload = {
+        bookingId: this.rebookContext.booking.id,
+        email: this.rebookContext.email || this.bookingData.customer?.email || '',
+        newDate: this.bookingData.date,
+        newStartTime: this.bookingData.startTime,
+        newDuration: this.bookingData.duration,
+        roomId: this.selectedRoom ? this.selectedRoom.id : this.rebookContext.booking.roomId,
+        partySize: this.bookingData.partySize,
+        customerInfo: this.bookingData.customer,
+        totalCost: this.bookingData.totalCost,
+        depositAmount: this.bookingData.depositAmount,
+        remainingBalance: this.bookingData.remainingBalance,
+        extraGuestFee: this.bookingData.extraGuestFee,
+        bookingFee: this.bookingData.bookingFee,
+        requiredPurchaseAmount: this.bookingData.requiredPurchaseAmount,
+      };
+
+      const response = await rebookFn(payload);
+
+      const updatedBooking = response.data?.booking;
+      const bookingIdForRedirect = updatedBooking?.id || payload.bookingId;
+
+      this.hideLoading();
+      this.clearRebookingContext({ removeQueryParam: true });
+      this.showNotification('Booking updated successfully! Redirecting you to manage bookings...', 'success');
+
+      setTimeout(() => {
+        const manageUrl = new URL('manage.html', window.location.href);
+        const email = payload.email || this.currentManagedEmail || '';
+
+        if (email) {
+          manageUrl.searchParams.set('email', email);
+        }
+
+        if (bookingIdForRedirect) {
+          manageUrl.searchParams.set('bookingId', bookingIdForRedirect);
+        }
+
+        manageUrl.searchParams.set('rebookSuccess', '1');
+        window.location.href = manageUrl.toString();
+      }, 1500);
+
+    } catch (error) {
+
+      console.error('completeRebookingFlow error', error);
+
+      this.hideLoading();
+
+      this.showError(error.message || 'Unable to update your booking right now.');
+
+    }
+
+  }
+
+
 
   showConfirmationPage() {
     this.showPage('confirmation');
@@ -1141,8 +2055,12 @@ class BarZunkoApp {
   setupSocialShare() {
     const shareButtons = document.querySelectorAll('.share-btn');
     shareButtons.forEach((btn) => {
+      if (btn.dataset.bound === 'true') {
+        return;
+      }
+      btn.dataset.bound = 'true';
       btn.addEventListener('click', () => {
-        const message = `Just booked an amazing karaoke experience at BarZunko! ðŸŽ¤âœ¨ #BarZunko #Karaoke #Toronto`;
+        const message = `Just booked an amazing karaoke experience at Barjunko! #Barjunko #Karaoke #Toronto`;
 
         if (btn.classList.contains('facebook')) {
           window.open(
@@ -1164,166 +2082,583 @@ class BarZunkoApp {
   }
 
   // Manage Booking Methods
-  lookupBooking(e) {
+  async lookupBooking(e) {
     e.preventDefault();
 
-    const searchInput = document.getElementById('booking-search');
-    if (!searchInput) return;
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      this.showError('Booking management is unavailable right now. Please try again later.');
+      return;
+    }
 
-    const searchTerm = searchInput.value.trim().toLowerCase();
-    if (!searchTerm) {
-      this.showNotification('Please enter a booking reference or email', 'error');
+    const referenceInput = document.getElementById('booking-reference');
+    const emailInput = document.getElementById('booking-email');
+
+    if (!emailInput) return;
+
+    const bookingRef = referenceInput ? referenceInput.value.trim() : '';
+    const email = emailInput.value.trim();
+
+    if (!email) {
+      this.showNotification('Please enter the email you used when booking.', 'error');
       return;
     }
 
     this.showLoading('Looking up your booking...');
 
-    setTimeout(() => {
-      this.hideLoading();
+    try {
+      const lookupFn = window.firebaseFunctions.httpsCallable('lookupBooking');
+      const response = await lookupFn({
+        bookingRef: bookingRef || null,
+        email,
+      });
 
-      const booking = this.mockBookings.find(
-        (b) => b.id.toLowerCase() === searchTerm || b.email.toLowerCase() === searchTerm,
-      );
+      const bookings = response.data?.bookings || [];
+      this.manageLookupResults = bookings;
+      this.currentManagedEmail = email;
 
-      if (booking) {
-        this.displayBookingDetails(booking);
-      } else {
-        this.showNotification(
-          'Booking not found. Please check your reference number or email.',
-          'error',
-        );
+      if (bookings.length === 0) {
+        this.activeManagedBooking = null;
+        this.renderBookingSearchResults([]);
+        this.showNotification('No bookings found for that email/reference.', 'warning');
+        return;
       }
-    }, 1500);
-  }
 
-  displayBookingDetails(booking) {
-    const bookingDetails = document.getElementById('booking-details');
-    if (!bookingDetails) return;
+      if (!bookingRef && bookings.length > 1) {
+        this.activeManagedBooking = null;
+        this.renderBookingSearchResults(bookings);
+        this.showNotification('We found multiple bookings. Select one below to manage it.', 'info');
+        return;
+      }
 
-    const room = this.rooms.find((r) => r.id === booking.roomType);
+      const matchedBooking =
+        bookingRef
+          ? bookings.find((b) => b.id.toLowerCase() === bookingRef.toLowerCase()) || bookings[0]
+          : bookings[0];
 
-    const bookingDateTime = new Date(`${booking.date}T${booking.startTime}`);
-    const now = new Date();
-    const hoursDifference = (bookingDateTime - now) / (1000 * 60 * 60);
-    const canCancel = hoursDifference > 24;
-
-    bookingDetails.innerHTML = `
-            <h2>Booking Details</h2>
-            <div class="booking-card">
-                <div class="summary-row">
-                    <span class="summary-label">Booking ID:</span>
-                    <span class="summary-value">${booking.id}</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Customer:</span>
-                    <span class="summary-value">${booking.customerName}</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Email:</span>
-                    <span class="summary-value">${booking.email}</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Phone:</span>
-                    <span class="summary-value">${booking.phone}</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Date & Time:</span>
-                    <span class="summary-value">${new Date(booking.date).toLocaleDateString()} at ${this.formatTime(booking.startTime)}</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Room:</span>
-                    <span class="summary-value">${room?.name || booking.roomType} (${booking.partySize} people)</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Duration:</span>
-                    <span class="summary-value">${booking.duration} hours</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Status:</span>
-                    <span class="summary-value">
-                        <span class="status-${booking.status}">${booking.status.toUpperCase()}</span>
-                    </span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Total Cost:</span>
-                    <span class="summary-value">$${booking.totalCost}</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Deposit Paid:</span>
-                    <span class="summary-value">$${booking.depositPaid}</span>
-                </div>
-                <div class="summary-row">
-                    <span class="summary-label">Remaining Balance:</span>
-                    <span class="summary-value">$${booking.totalCost - booking.depositPaid} (due on arrival)</span>
-                </div>
-            </div>
-            
-            <div class="booking-actions">
-                ${
-                  canCancel && booking.status === 'confirmed'
-                    ? `
-                    <button class="btn btn--outline" onclick="app.cancelBooking('${booking.id}')">
-                        <i class="fas fa-times-circle"></i>
-                        Cancel Booking
-                    </button>
-                    <button class="btn btn--secondary" onclick="app.rebookingFlow('${booking.id}')">
-                        <i class="fas fa-edit"></i>
-                        Modify Booking
-                    </button>
-                `
-                    : `
-                    <div style="padding: var(--space-16); background: rgba(255, 193, 7, 0.1); border-radius: var(--radius-base); border: 1px solid rgba(255, 193, 7, 0.2); text-align: center;">
-                        <i class="fas fa-info-circle" style="color: var(--golden-yellow); margin-right: var(--space-8);"></i>
-                        <span style="color: var(--golden-yellow);">
-                            ${booking.status === 'cancelled' ? 'Booking has been cancelled' : 'Cancellation not available (less than 24 hours before booking)'}
-                        </span>
-                    </div>
-                `
-                }
-                <button class="btn btn--primary" onclick="window.print()">
-                    <i class="fas fa-print"></i>
-                    Print Details
-                </button>
-                <button class="btn btn--outline" onclick="window.location.href='tel:${this.businessData.phone}'">
-                    <i class="fas fa-phone"></i>
-                    Call Us
-                </button>
-            </div>
-        `;
-
-    bookingDetails.classList.remove('hidden');
-  }
-
-  cancelBooking(bookingId) {
-    const booking = this.mockBookings.find((b) => b.id === bookingId);
-    if (!booking) return;
-
-    const confirmCancel = confirm(
-      `Are you sure you want to cancel booking ${bookingId}? Your deposit of $${booking.depositPaid} will be refunded within 3-5 business days.`,
-    );
-
-    if (confirmCancel) {
-      this.showLoading('Cancelling your booking...');
-
-      setTimeout(() => {
-        this.hideLoading();
-
-        booking.status = 'cancelled';
-        this.displayBookingDetails(booking);
-
-        this.showNotification(
-          'Booking cancelled successfully. Refund will be processed within 3-5 business days.',
-          'success',
-        );
-      }, 2000);
+      this.displayBookingDetails(matchedBooking);
+    } catch (error) {
+      console.error('lookupBooking error', error);
+      this.showError(error.message || 'Unable to find your booking. Please try again.');
+    } finally {
+      this.hideLoading();
     }
   }
 
-  rebookingFlow(bookingId) {
-    this.showNotification('Rebooking feature: Contact us at ' + this.businessData.phone, 'info');
+  initManagePage() {
+
+    if (typeof window === 'undefined') return;
+
+
+
+    const params = new URLSearchParams(window.location.search);
+
+    const email = params.get('email') || params.get('lookupEmail') || '';
+
+    const bookingId = params.get('bookingId') || params.get('reference') || '';
+
+    const rebookSuccess = params.get('rebookSuccess') === '1';
+
+
+
+    if (email) {
+
+      const emailInput = document.getElementById('booking-email');
+
+      if (emailInput) {
+
+        emailInput.value = email;
+
+      }
+
+      this.currentManagedEmail = email;
+
+    }
+
+
+
+    if (bookingId) {
+
+      const referenceInput = document.getElementById('booking-reference');
+
+      if (referenceInput) {
+
+        referenceInput.value = bookingId;
+
+      }
+
+    }
+
+
+
+    if (rebookSuccess) {
+
+      this.showNotification('Booking updated successfully!', 'success');
+
+    }
+
+
+
+    if (email && bookingId) {
+
+      const form = document.getElementById('booking-lookup-form');
+
+      if (form) {
+
+        setTimeout(() => {
+
+          if (typeof form.requestSubmit === 'function') {
+
+            form.requestSubmit();
+
+          } else {
+
+            form.dispatchEvent(new Event('submit', { cancelable: true }));
+
+          }
+
+        }, 300);
+
+      }
+
+    }
+
+
+
+    if (rebookSuccess) {
+
+      const url = new URL(window.location.href);
+
+      url.searchParams.delete('rebookSuccess');
+
+      window.history.replaceState({}, document.title, url.toString());
+
+    }
+
   }
 
-  // Admin Methods
+
+
+  renderBookingSearchResults(bookings) {
+
+    const bookingDetails = document.getElementById('booking-details');
+
+    if (!bookingDetails) return;
+
+
+
+    if (!bookings.length) {
+
+      bookingDetails.classList.add('hidden');
+
+      bookingDetails.innerHTML = '';
+
+      return;
+
+    }
+
+
+
+    bookingDetails.classList.remove('hidden');
+
+
+
+    const cardsHtml = bookings
+
+      .map((booking) => `
+
+            <div class="booking-card booking-card--selectable" data-booking-id="${booking.id}">
+
+                <div class="summary-row">
+
+                    <span class="summary-label">Booking ID:</span>
+
+                    <span class="summary-value">${booking.id}</span>
+
+                </div>
+
+                <div class="summary-row">
+
+                    <span class="summary-label">Date:</span>
+
+                    <span class="summary-value">${new Date(booking.date).toLocaleDateString()} at ${this.formatTime(booking.startTime)}</span>
+
+                </div>
+
+                <div class="summary-row">
+
+                    <span class="summary-label">Room:</span>
+
+                    <span class="summary-value">${booking.roomName}</span>
+
+                </div>
+
+                <div class="summary-row">
+
+                    <span class="summary-label">Status:</span>
+
+                    <span class="summary-value">${booking.status ? booking.status.charAt(0).toUpperCase() + booking.status.slice(1) : 'Unknown'}</span>
+
+                </div>
+
+            </div>
+
+        `)
+
+      .join('');
+
+
+
+    bookingDetails.innerHTML = `
+
+        <h2>Select a Booking</h2>
+
+        ${cardsHtml}
+
+      `;
+
+
+
+    bookingDetails.querySelectorAll('[data-booking-id]').forEach((card) => {
+
+      card.addEventListener('click', () => {
+
+        const bookingId = card.getAttribute('data-booking-id');
+
+        const selected = this.manageLookupResults.find((b) => b.id === bookingId);
+
+        if (selected) {
+
+          this.displayBookingDetails(selected);
+
+        }
+
+      });
+
+    });
+
+  }
+
+
+
+  updateManagedBookingInState(updatedBooking) {
+
+    this.manageLookupResults = this.manageLookupResults.map((booking) =>
+
+      booking.id === updatedBooking.id ? updatedBooking : booking,
+
+    );
+
+    this.activeManagedBooking = updatedBooking;
+
+  }
+
+
+
+  displayBookingDetails(booking) {
+
+    const bookingDetails = document.getElementById('booking-details');
+
+    if (!bookingDetails) return;
+
+    const formatCurrency = (value) => (typeof value === 'number' ? `$${value.toFixed(2)}` : '—');
+
+
+
+    const startDisplay = `${new Date(booking.date).toLocaleDateString()} at ${this.formatTime(booking.startTime)}`;
+
+    const canCancel = Boolean(booking.canCancel);
+
+    const canRebook = Boolean(booking.canRebook);
+
+    const statusSlug = (booking.status || 'unknown').toLowerCase();
+
+    const statusLabel = statusSlug.charAt(0).toUpperCase() + statusSlug.slice(1);
+
+
+
+    const cancelDeadlineDisplay = booking.cancelableUntil
+      ? new Date(booking.cancelableUntil).toLocaleString()
+      : 'the cancellation deadline has passed';
+    const cancelMessage = canCancel
+      ? `Free cancellation available until ${cancelDeadlineDisplay}.`
+      : 'Cancellations are no longer available online. Please contact the venue for assistance.';
+
+
+
+    bookingDetails.classList.remove('hidden');
+
+    bookingDetails.innerHTML = `
+
+        <h2>Booking Details</h2>
+
+        <div class="booking-card">
+
+            <div class="summary-row">
+
+                <span class="summary-label">Booking ID:</span>
+
+                <span class="summary-value">${booking.id}</span>
+
+            </div>
+
+            <div class="summary-row">
+
+                <span class="summary-label">Status:</span>
+
+                <span class="summary-value status-badge status-badge--${statusSlug}">${statusLabel}</span>
+
+            </div>
+
+            <div class="summary-row">
+
+                <span class="summary-label">Name:</span>
+
+                <span class="summary-value">${booking.customer.firstName} ${booking.customer.lastName}</span>
+
+            </div>
+
+            <div class="summary-row">
+
+                <span class="summary-label">Email:</span>
+
+                <span class="summary-value">${booking.customer.email}</span>
+
+            </div>
+
+            <div class="summary-row">
+
+                <span class="summary-label">Room:</span>
+
+                <span class="summary-value">${booking.roomName}</span>
+
+            </div>
+
+            <div class="summary-row">
+
+                <span class="summary-label">Date & Time:</span>
+
+                <span class="summary-value">${startDisplay}</span>
+
+            </div>
+
+            <div class="summary-row">
+
+                <span class="summary-label">Duration:</span>
+
+                <span class="summary-value">${booking.duration} hour${booking.duration > 1 ? 's' : ''}</span>
+
+            </div>
+
+            ${
+              booking.partySize
+                ? `<div class="summary-row">
+                      <span class="summary-label">Party Size:</span>
+                      <span class="summary-value">${booking.partySize} guests</span>
+                   </div>`
+                : ''
+            }
+            ${
+              booking.totalCost != null
+                ? `<div class="summary-row">
+                      <span class="summary-label">Total Cost:</span>
+                      <span class="summary-value">${formatCurrency(booking.totalCost)}</span>
+                   </div>`
+                : ''
+            }
+            ${
+              booking.depositAmount != null
+                ? `<div class="summary-row">
+                      <span class="summary-label">Deposit Paid:</span>
+                      <span class="summary-value">${formatCurrency(booking.depositAmount)}</span>
+                   </div>`
+                : ''
+            }
+            ${
+              booking.remainingBalance != null
+                ? `<div class="summary-row">
+                      <span class="summary-label">Remaining Balance:</span>
+                      <span class="summary-value">${formatCurrency(booking.remainingBalance)}</span>
+                   </div>`
+                : ''
+            }
+
+        </div>
+
+        <div class="booking-actions">
+
+            <button class="btn btn--danger" id="cancel-booking-btn" ${canCancel ? '' : 'disabled'}>
+
+                <i class="fas fa-times-circle"></i>
+
+                Cancel Booking
+
+            </button>
+
+            <button class="btn btn--secondary" id="start-rebook-btn" ${canRebook ? '' : 'disabled'}>
+
+                <i class="fas fa-calendar-alt"></i>
+
+                Reschedule
+
+            </button>
+
+            <button class="btn btn--outline" id="print-booking-btn">
+
+                <i class="fas fa-print"></i>
+
+                Print Summary
+
+            </button>
+
+        </div>
+
+        <div class="booking-guidelines">
+
+            <i class="fas fa-info-circle"></i>
+
+            <span>${cancelMessage}</span>
+
+        </div>
+
+      `;
+
+
+
+    this.activeManagedBooking = booking;
+
+
+
+    const cancelBtn = document.getElementById('cancel-booking-btn');
+
+    if (cancelBtn && canCancel) {
+
+      cancelBtn.addEventListener('click', () => this.handleBookingCancellation());
+
+    }
+
+
+
+    const rebookBtn = document.getElementById('start-rebook-btn');
+
+    if (rebookBtn && canRebook) {
+
+      rebookBtn.addEventListener('click', () => this.startRebookingFlow(booking));
+
+    }
+
+
+
+    const printBtn = document.getElementById('print-booking-btn');
+
+    if (printBtn) {
+
+      printBtn.addEventListener('click', () => window.print());
+
+    }
+
+  }
+
+
+
+  startRebookingFlow(booking) {
+    if (!booking) return;
+
+    const context = {
+      booking,
+      email: this.currentManagedEmail || booking.customer.email || '',
+    };
+
+    this.clearRebookingContext();
+
+    try {
+      localStorage.setItem(this.rebookingStorageKey, JSON.stringify(context));
+    } catch (error) {
+      console.warn('Unable to cache rebooking context', error);
+    }
+
+    const url = new URL('booking.html', window.location.href);
+    url.searchParams.set('rebook', '1');
+    window.location.href = url.toString();
+  }
+
+
+  async handleBookingCancellation() {
+
+    if (!this.activeManagedBooking) return;
+
+    const confirmation = confirm(
+
+      'Are you sure you want to cancel this booking? This action cannot be undone.',
+
+    );
+
+    if (!confirmation) {
+
+      return;
+
+    }
+
+
+
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+
+      this.showError('Booking management is unavailable right now. Please try again later.');
+
+      return;
+
+    }
+
+
+
+    this.showLoading('Cancelling your booking...');
+
+
+
+    try {
+
+      const cancelFn = window.firebaseFunctions.httpsCallable('cancelBookingGuest');
+
+      const response = await cancelFn({
+
+        bookingId: this.activeManagedBooking.id,
+
+        email: this.currentManagedEmail || this.activeManagedBooking.customer.email,
+
+      });
+
+
+
+      const updatedBooking = response.data?.booking;
+
+      if (updatedBooking) {
+
+        this.updateManagedBookingInState(updatedBooking);
+
+        this.displayBookingDetails(updatedBooking);
+
+      }
+
+
+
+      this.showNotification('Booking cancelled successfully.', 'success');
+
+    } catch (error) {
+
+      console.error('cancel booking error', error);
+
+      this.showError(error.message || 'Unable to cancel this booking right now.');
+
+    } finally {
+
+      this.hideLoading();
+
+    }
+
+  }
+
+
+
+// Admin Methods
   initAdminPage() {
     const loginForm = document.getElementById('admin-login');
     const dashboard = document.getElementById('admin-dashboard');
@@ -1348,7 +2683,7 @@ class BarZunkoApp {
     setTimeout(() => {
       this.hideLoading();
 
-      if (username === 'admin' && password === 'BarZunko123') {
+      if (username === 'admin' && (password === 'Barjunko123' || password === 'BarZunko123')) {
         const loginForm = document.getElementById('admin-login');
         const dashboard = document.getElementById('admin-dashboard');
 
@@ -1379,50 +2714,290 @@ class BarZunkoApp {
   }
 
   loadAdminDashboard() {
-    this.renderBookingsTable();
+    this.adminInitDashboard();
   }
 
-  renderBookingsTable() {
+  adminInitDashboard() {
+    const today = new Date();
+    this.adminSelectedDate = this.adminFormatYMD(today);
+    this.adminBindDateControls();
+    this.adminRenderDateLabel();
+    this.adminFetchForSelectedDate();
+  }
+
+  adminFormatYMD(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  adminBindDateControls() {
+    const prevBtn = document.getElementById('admin-prev-day');
+    const nextBtn = document.getElementById('admin-next-day');
+    const todayBtn = document.getElementById('admin-today');
+    const dateInput = document.getElementById('admin-date');
+
+    if (prevBtn) prevBtn.onclick = () => this.adminChangeSelectedDate(-1);
+    if (nextBtn) nextBtn.onclick = () => this.adminChangeSelectedDate(1);
+    if (todayBtn) todayBtn.onclick = () => { this.adminSelectedDate = this.adminFormatYMD(new Date()); this.adminOnDateChanged(); };
+    if (dateInput) {
+      dateInput.value = this.adminSelectedDate || this.adminFormatYMD(new Date());
+      dateInput.onchange = () => { this.adminSelectedDate = dateInput.value; this.adminOnDateChanged(); };
+    }
+  }
+
+  adminRenderDateLabel() {
+    const label = document.getElementById('admin-date-label');
+    const input = document.getElementById('admin-date');
+    if (label) label.textContent = this.adminSelectedDate || '';
+    if (input && this.adminSelectedDate) input.value = this.adminSelectedDate;
+  }
+
+  adminChangeSelectedDate(days) {
+    try {
+      const parts = (this.adminSelectedDate || this.adminFormatYMD(new Date())).split('-').map(Number);
+      const d = new Date(parts[0], parts[1]-1, parts[2]);
+      d.setDate(d.getDate() + days);
+      this.adminSelectedDate = this.adminFormatYMD(d);
+      this.adminOnDateChanged();
+    } catch (e) {
+      this.adminSelectedDate = this.adminFormatYMD(new Date());
+      this.adminOnDateChanged();
+    }
+  }
+
+  adminOnDateChanged() {
+    this.adminRenderDateLabel();
+    this.adminFetchForSelectedDate();
+  }
+
+  async adminFetchForSelectedDate() {
+    const tableBody = document.getElementById('bookings-table-body');
+    const dateStr = this.adminSelectedDate || this.adminFormatYMD(new Date());
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      if (tableBody) tableBody.innerHTML = '<tr><td colspan="6">Functions not available</td></tr>';
+      return;
+    }
+    try {
+      const fn = window.firebaseFunctions.httpsCallable('adminGetBookingsByDate');
+      const res = await fn({ date: dateStr, secret: window.ADMIN_API_SECRET });
+      const bookings = res.data?.bookings || [];
+      this.renderAdminBookingsTable(bookings);
+      this.adminFetchAvailability();
+    } catch (err) {
+      console.error('adminFetchForSelectedDate error', err);
+      this.showNotification("Unable to load bookings for selected day", 'error');
+    }
+  }
+  async adminFetchAvailability() {
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) return;
+    const dateStr = this.adminSelectedDate || this.adminFormatYMD(new Date());
+    const times = this.timeSlots || [];
+    try {
+      const fn = window.firebaseFunctions.httpsCallable('adminGetAvailabilityByDate');
+      const res = await fn({ secret: window.ADMIN_API_SECRET, date: dateStr, times, duration: 1 });
+      const grid = res.data || {};
+      this.adminRenderAvailabilityGrid(grid.times || times, grid.availability || {});
+    } catch (err) {
+      console.error('adminFetchAvailability error', err);
+      this.adminRenderAvailabilityGrid(times, {});
+    }
+  }
+
+  adminRenderAvailabilityGrid(times, availability) {
+    const container = document.getElementById('admin-availability-grid');
+    if (!container) return;
+    const rooms = this.rooms || [];
+    // Build header row
+    let html = '<table class="table"><thead><tr><th>Time</th>' +
+      rooms.map(r => `<th>${r.name} <small>(${r.inventory || 0})</small></th>`).join('') + '</tr></thead><tbody>';
+    times.forEach(t => {
+      html += `<tr><td>${this.formatTime(t)}</td>`;
+      rooms.forEach(r => {
+        const left = availability[t]?.[r.id];
+        const total = r.inventory || 0;
+        const val = typeof left === 'number' ? left : '-';
+        const cls = typeof left === 'number' ? (left > 0 ? 'status-badge status-badge--confirmed' : 'status-badge status-badge--cancelled') : '';
+        html += `<td><span class="${cls}">${val}/${total}</span></td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  }
+
+
+  async adminFetchTodayBookings() {
+    const tableBody = document.getElementById('bookings-table-body');
+    if (!tableBody || !window.firestore) return;
+
+    tableBody.innerHTML = '';
+
+    try {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+
+      const snapshot = await window.firestore
+        .collection('bookings')
+        .where('date', '==', todayStr)
+        .orderBy('startTime')
+        .get();
+
+      const bookings = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      this.renderAdminBookingsTable(bookings);
+      this.adminFetchAvailability();
+    } catch (err) {
+      console.error('adminFetchTodayBookings error', err);
+      this.showNotification("Unable to load today's bookings", 'error');
+    }
+  }
+
+  renderAdminBookingsTable(bookings) {
     const tableBody = document.getElementById('bookings-table-body');
     if (!tableBody) return;
 
     tableBody.innerHTML = '';
 
-    this.mockBookings.forEach((booking) => {
-      const room = this.rooms.find((r) => r.id === booking.roomType);
+    if (!Array.isArray(bookings) || bookings.length === 0) {
       const row = document.createElement('tr');
-      row.innerHTML = `
-                <td>${booking.id}</td>
-                <td>
-                    <div>${booking.customerName}</div>
-                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${booking.email}</div>
-                </td>
-                <td>${room?.name || booking.roomType}</td>
-                <td>
-                    <div>${new Date(booking.date).toLocaleDateString()}</div>
-                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${this.formatTime(booking.startTime)}</div>
-                </td>
-                <td><span class="status-${booking.status}">${booking.status.toUpperCase()}</span></td>
-                <td>
-                    <div class="table-actions">
-                        <button class="btn btn--table btn--outline" onclick="app.viewBooking('${booking.id}')">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="btn btn--table btn--secondary" onclick="app.editBooking('${booking.id}')">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    </div>
-                </td>
-            `;
+      row.innerHTML = `<td colspan="6" style="text-align:center;color:var(--color-text-secondary)">No bookings today</td>`;
       tableBody.appendChild(row);
+      return;
+    }
+
+    bookings.forEach((booking) => {
+      const room = this.rooms.find((r) => r.id === booking.roomId);
+      const row = document.createElement('tr');
+      const startDisplay = `${new Date(booking.date).toLocaleDateString()} ${this.formatTime(booking.startTime)}`;
+      const status = booking.status || 'pending';
+      const customerName = booking.customerInfo ? `${booking.customerInfo.firstName || ''} ${booking.customerInfo.lastName || ''}`.trim() : '';
+      const customerEmail = booking.customerInfo?.email || '';
+
+      row.innerHTML = `
+        <td>${booking.id}</td>
+        <td>
+          <div>${customerName || '—'}</div>
+          <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${customerEmail}</div>
+        </td>
+        <td>${room?.name || booking.roomId}</td>
+        <td>
+          <div>${startDisplay}</div>
+          <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${booking.duration || 1}h</div>
+        </td>
+        <td><span class="status-badge status-badge--${status}">${status}</span></td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn--table btn--secondary" data-action="admin-change" data-id="${booking.id}"><i class="fas fa-edit"></i></button>
+            <button class="btn btn--table btn--outline" data-action="admin-cancel" data-id="${booking.id}"><i class="fas fa-times"></i></button>
+          </div>
+        </td>
+      `;
+
+      tableBody.appendChild(row);
+    
+
+    // Update stats: bookings count, total guests, revenue, occupancy
+    try {
+      const bookingsCount = Array.isArray(bookings) ? bookings.length : 0;
+      const totalGuests = (Array.isArray(bookings) ? bookings : []).reduce((acc, b) => acc + (Number(b.partySize) || 0), 0);
+      const totalRevenue = (Array.isArray(bookings) ? bookings : []).reduce((acc, b) => acc + (Number(b.depositAmount) || 0), 0);
+
+      // Occupancy: booked room-hours / (total room-hours available)
+      const totalBookedHours = (Array.isArray(bookings) ? bookings : []).reduce((acc, b) => acc + (Number(b.duration) || 0), 0);
+      // Compute open hours from timeSlots (fallback to 8 if not computable)
+      let openHours = 8;
+      try {
+        const times = (this.timeSlots || []);
+        const tmin = times[0];
+        const tmax = times[times.length - 1];
+        const [sh, sm] = (tmin || '18:00').split(':').map(Number);
+        const [eh, em] = (tmax || '02:00').split(':').map(Number);
+        let startM = sh * 60 + sm;
+        let endM = eh * 60 + em;
+        if (endM <= startM) endM += 24 * 60; // wrap past midnight
+        openHours = Math.max(1, Math.round((endM - startM) / 60));
+      } catch (_) {}
+      const totalRooms = (this.rooms || []).reduce((acc, r) => acc + (Number(r.inventory) || 0), 0) || 1;
+      const totalCapacityHours = openHours * totalRooms;
+      const occupancyPct = Math.min(100, Math.round((totalBookedHours / totalCapacityHours) * 100));
+
+      const bookingsEl = document.getElementById('admin-stat-bookings');
+      const guestsEl = document.getElementById('admin-stat-guests');
+      const revenueEl = document.getElementById('admin-stat-revenue');
+      const occEl = document.getElementById('admin-stat-occupancy');
+      if (bookingsEl) bookingsEl.textContent = String(bookingsCount);
+      if (guestsEl) guestsEl.textContent = String(totalGuests);
+      if (revenueEl) revenueEl.textContent = `$${totalRevenue.toFixed(2)}`;
+      if (occEl) occEl.textContent = `${isFinite(occupancyPct) ? occupancyPct : 0}%`;
+        } catch (e) {
+      console.warn('Failed to update admin stats', e);
+    }
+});
+
+    tableBody.querySelectorAll('[data-action="admin-cancel"]').forEach((btn) => {
+      btn.addEventListener('click', () => this.adminCancelBooking(btn.getAttribute('data-id')));
     });
+
+    tableBody.querySelectorAll('[data-action="admin-change"]').forEach((btn) => {
+      btn.addEventListener('click', () => this.adminChangeBookingPrompt(btn.getAttribute('data-id')));
+    });
+  }
+
+  async adminCancelBooking(bookingId) {
+    if (!bookingId) return;
+    if (!window.firebaseFunctions) return this.showNotification('Functions not available', 'error');
+
+    const ok = confirm(`Cancel booking ${bookingId}? This cannot be undone.`);
+    if (!ok) return;
+
+    try {
+      this.showLoading('Cancelling booking...');
+      const fn = window.firebaseFunctions.httpsCallable('adminCancelBySecret');
+      const res = await fn({ bookingId, secret: window.ADMIN_API_SECRET });
+      this.hideLoading();
+      this.showNotification('Booking cancelled', 'success');
+      this.adminFetchForSelectedDate();
+    } catch (err) {
+      this.hideLoading();
+      console.error('adminCancelBooking', err);
+      this.showError(err.message || 'Unable to cancel booking');
+    }
+  }
+
+  async adminChangeBookingPrompt(bookingId) {
+    if (!bookingId) return;
+
+    const newDate = prompt('New date (YYYY-MM-DD):');
+    if (!newDate) return;
+    const newStartTime = prompt('New start time (HH:mm, 24h):');
+    if (!newStartTime) return;
+    const newDurationStr = prompt('New duration (hours):', '1');
+    const newDuration = Number(newDurationStr);
+    if (!Number.isFinite(newDuration) || newDuration <= 0) return alert('Invalid duration');
+
+    try {
+      this.showLoading('Updating booking...');
+      const fn = window.firebaseFunctions.httpsCallable('adminRebookBySecret');
+      await fn({ bookingId, secret: window.ADMIN_API_SECRET, newDate, newStartTime, newDuration });
+      this.hideLoading();
+      this.showNotification('Booking updated', 'success');
+      this.adminFetchForSelectedDate();
+    } catch (err) {
+      this.hideLoading();
+      console.error('adminChangeBookingPrompt', err);
+      this.showError(err.message || 'Unable to update booking');
+    }
   }
 
   viewBooking(bookingId) {
     const booking = this.mockBookings.find((b) => b.id === bookingId);
     if (booking) {
       alert(
-        `Booking Details:\n\nID: ${booking.id}\nCustomer: ${booking.customerName}\nEmail: ${booking.email}\nDate: ${booking.date}\nRoom: ${booking.roomType}\nStatus: ${booking.status}`,
+        `Booking Details:\r\n\r\nID: ${booking.id}\r\nCustomer: ${booking.customerName}\r\nEmail: ${booking.email}\r\nDate: ${booking.date}\r\nRoom: ${booking.roomType}\r\nStatus: ${booking.status}`,
       );
     }
   }
@@ -1511,8 +3086,11 @@ class BarZunkoApp {
 }
 
 // Initialize the application
-const app = new BarZunkoApp();
+const app = new BarjunkoApp();
 app.init();
+
+// Ensure app is globally accessible for onclick handlers
+window.app = app;
 
 // Global error handler
 window.addEventListener('error', (e) => {
@@ -1522,5 +3100,14 @@ window.addEventListener('error', (e) => {
   }
 });
 
-// Ensure app is globally accessible for onclick handlers
-window.app = app;
+
+
+
+
+
+
+
+
+
+
+
