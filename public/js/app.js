@@ -1,4 +1,4 @@
-// Barjunko Karaoke Booking Application
+ï»¿// Barjunko Karaoke Booking Application
 class BarjunkoApp {
   constructor() {
     this.currentPage = 'landing';
@@ -17,6 +17,34 @@ class BarjunkoApp {
     this.isRebookingFlow = false;
     this.rebookContext = null;
     this.rebookingStorageKey = 'barjunkoRebookContext';
+
+    this.adminBookingsById = {};
+    this.adminGridAssignments = {};
+    this.adminRescheduleState = null;
+    this.adminRescheduleRequestId = 0;
+    this.rescheduleFormBound = false;
+    this.businessTimeConfig = {
+      openMinutes: 18 * 60,
+      closeMinutes: (24 + 2) * 60,
+    };
+
+    this.adminRoomColumns = [
+      { id: 'R1', roomId: 'large', label: 'R1', name: 'Large Room' },
+      { id: 'R2', roomId: 'medium', label: 'R2', name: 'Medium Room' },
+      { id: 'R3', roomId: 'medium', label: 'R3', name: 'Medium Room' },
+      { id: 'R4', roomId: 'small', label: 'R4', name: 'Small Room' },
+      { id: 'R5', roomId: 'small', label: 'R5', name: 'Small Room' },
+      { id: 'R6', roomId: 'small', label: 'R6', name: 'Small Room' },
+      { id: 'R7', roomId: 'extra-large', label: 'R7', name: 'Extra Large Room' },
+      { id: 'R8', roomId: 'medium', label: 'R8', name: 'Medium Room' },
+      { id: 'R9', roomId: 'small', label: 'R9', name: 'Small Room' },
+      { id: 'R10', roomId: 'medium', label: 'R10', name: 'Medium Room' },
+    ];
+    this.adminRebuildRoomColumnIndex();
+
+    this.adminAuthUnsubscribe = null;
+    this.currentAdminUser = null;
+    this.adminDashboardInitialized = false;
 
     this.currentDate = new Date();
     this.adminSelectedDate = null;
@@ -38,7 +66,7 @@ class BarjunkoApp {
       email: 'info@Barjunko.com',
     };
 
-        this.rooms = [
+    this.rooms = [
       {
         id: 'small',
         name: 'Small Room',
@@ -1409,7 +1437,7 @@ class BarjunkoApp {
 
     // Helper for currency display
 
-    const formatCurrency = (value) => (typeof value === "number" && isFinite(value) ? `$${value.toFixed(2)}` : "—");
+    const formatCurrency = (value) => (typeof value === "number" && isFinite(value) ? `$${value.toFixed(2)}` : "â€”");
 
 
 
@@ -2360,7 +2388,7 @@ class BarjunkoApp {
 
     if (!bookingDetails) return;
 
-    const formatCurrency = (value) => (typeof value === 'number' ? `$${value.toFixed(2)}` : '—');
+    const formatCurrency = (value) => (typeof value === 'number' ? `$${value.toFixed(2)}` : 'â€”');
 
 
 
@@ -2660,57 +2688,133 @@ class BarjunkoApp {
 
 // Admin Methods
   initAdminPage() {
-    const loginForm = document.getElementById('admin-login');
-    const dashboard = document.getElementById('admin-dashboard');
-
-    if (loginForm) loginForm.classList.remove('hidden');
-    if (dashboard) dashboard.classList.add('hidden');
+    this.adminShowLoginForm();
+    this.adminEnsureAuthListener();
   }
 
-  adminLogin(e) {
-    e.preventDefault();
-
-    const usernameEl = document.getElementById('admin-username');
-    const passwordEl = document.getElementById('admin-password');
-
-    if (!usernameEl || !passwordEl) return;
-
-    const username = usernameEl.value.trim();
-    const password = passwordEl.value.trim();
-
-    this.showLoading('Authenticating...');
-
-    setTimeout(() => {
-      this.hideLoading();
-
-      if (username === 'admin' && (password === 'Barjunko123' || password === 'BarZunko123')) {
-        const loginForm = document.getElementById('admin-login');
-        const dashboard = document.getElementById('admin-dashboard');
-
-        if (loginForm) loginForm.classList.add('hidden');
-        if (dashboard) dashboard.classList.remove('hidden');
-
-        this.loadAdminDashboard();
-        this.showNotification('Welcome to the admin dashboard!', 'success');
-      } else {
-        this.showNotification('Invalid username or password', 'error');
+  adminEnsureAuthListener() {
+    if (this.adminAuthUnsubscribe || !window.firebaseAuth) {
+      if (!window.firebaseAuth) {
+        console.warn('[admin] Firebase Auth not available');
       }
-    }, 1500);
+      return;
+    }
+
+    this.adminAuthUnsubscribe = window.firebaseAuth.onAuthStateChanged(async (user) => {
+      const loginForm = document.getElementById('admin-login');
+      const dashboard = document.getElementById('admin-dashboard');
+      if (!loginForm || !dashboard) {
+        return;
+      }
+
+      if (!user) {
+        this.currentAdminUser = null;
+        this.adminShowLoginForm();
+        return;
+      }
+
+      try {
+        const tokenResult = await user.getIdTokenResult(true);
+        if (tokenResult.claims?.isAdmin) {
+          this.currentAdminUser = user;
+          this.adminShowDashboard();
+        } else {
+          await window.firebaseAuth.signOut();
+          this.showNotification('Account not authorized for admin access.', 'error');
+        }
+      } catch (err) {
+        console.error('admin auth listener', err);
+        this.showNotification('Unable to verify admin access. Please try again.', 'error');
+        await window.firebaseAuth.signOut().catch(() => {});
+      }
+    });
   }
 
-  adminLogout() {
+  adminShowLoginForm() {
     const loginForm = document.getElementById('admin-login');
     const dashboard = document.getElementById('admin-dashboard');
-    const usernameEl = document.getElementById('admin-username');
+    const emailEl = document.getElementById('admin-email') || document.getElementById('admin-username');
     const passwordEl = document.getElementById('admin-password');
 
     if (loginForm) loginForm.classList.remove('hidden');
     if (dashboard) dashboard.classList.add('hidden');
-
-    if (usernameEl) usernameEl.value = '';
+    if (emailEl) emailEl.value = '';
     if (passwordEl) passwordEl.value = '';
 
-    this.showNotification('Logged out successfully', 'success');
+    this.adminResetRescheduleState();
+    this.adminDashboardInitialized = false;
+  }
+
+  adminShowDashboard() {
+    const loginForm = document.getElementById('admin-login');
+    const dashboard = document.getElementById('admin-dashboard');
+
+    if (loginForm) loginForm.classList.add('hidden');
+    if (dashboard) dashboard.classList.remove('hidden');
+
+    this.loadAdminDashboard();
+    if (!this.adminDashboardInitialized) {
+      this.showNotification('Welcome to the admin dashboard!', 'success');
+      this.adminDashboardInitialized = true;
+    }
+  }
+
+  async adminLogin(e) {
+    e.preventDefault();
+
+    const emailEl = document.getElementById('admin-email') || document.getElementById('admin-username');
+    const passwordEl = document.getElementById('admin-password');
+
+    if (!emailEl || !passwordEl) return;
+
+    const email = emailEl.value.trim();
+    const password = passwordEl.value;
+
+    if (!email || !password) {
+      this.showNotification('Enter your email and password.', 'warning');
+      return;
+    }
+
+    if (!window.firebaseAuth) {
+      this.showNotification('Authentication unavailable. Please refresh the page.', 'error');
+      return;
+    }
+
+    this.showLoading('Signing in...');
+    try {
+      await window.firebaseAuth.signInWithEmailAndPassword(email, password);
+    } catch (err) {
+      console.error('adminLogin', err);
+      let message = 'Unable to sign in. Please check your credentials.';
+      const code = err?.code;
+      if (code === 'auth/invalid-email') {
+        message = 'Invalid email address.';
+      } else if (code === 'auth/user-disabled') {
+        message = 'This account has been disabled.';
+      } else if (code === 'auth/user-not-found') {
+        message = 'No admin account found for that email.';
+      } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        message = 'Incorrect email or password.';
+      }
+      this.showNotification(message, 'error');
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  async adminLogout() {
+    if (!window.firebaseAuth) {
+      this.adminShowLoginForm();
+      return;
+    }
+
+    try {
+      await window.firebaseAuth.signOut();
+      this.showNotification('Logged out successfully', 'success');
+    } catch (err) {
+      console.error('adminLogout', err);
+      this.showNotification('Unable to log out. Please try again.', 'error');
+    }
   }
 
   loadAdminDashboard() {
@@ -2718,6 +2822,7 @@ class BarjunkoApp {
   }
 
   adminInitDashboard() {
+    this.adminResetRescheduleState();
     const today = new Date();
     this.adminSelectedDate = this.adminFormatYMD(today);
     this.adminBindDateControls();
@@ -2773,6 +2878,7 @@ class BarjunkoApp {
   }
 
   async adminFetchForSelectedDate() {
+    this.adminResetRescheduleState();
     const tableBody = document.getElementById('bookings-table-body');
     const dateStr = this.adminSelectedDate || this.adminFormatYMD(new Date());
     if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
@@ -2781,7 +2887,7 @@ class BarjunkoApp {
     }
     try {
       const fn = window.firebaseFunctions.httpsCallable('adminGetBookingsByDate');
-      const res = await fn({ date: dateStr, secret: window.ADMIN_API_SECRET });
+      const res = await fn({ date: dateStr });
       const bookings = res.data?.bookings || [];
       this.renderAdminBookingsTable(bookings);
       this.adminFetchAvailability();
@@ -2796,7 +2902,7 @@ class BarjunkoApp {
     const times = this.timeSlots || [];
     try {
       const fn = window.firebaseFunctions.httpsCallable('adminGetAvailabilityByDate');
-      const res = await fn({ secret: window.ADMIN_API_SECRET, date: dateStr, times, duration: 1 });
+      const res = await fn({ date: dateStr, times, duration: 1 });
       const grid = res.data || {};
       this.adminRenderAvailabilityGrid(grid.times || times, grid.availability || {});
     } catch (err) {
@@ -2805,21 +2911,231 @@ class BarjunkoApp {
     }
   }
 
+  normalizeRoomId(roomId) {
+    const key = String(roomId || '').trim().toLowerCase();
+    if (!key) return '';
+    const map = {
+      small: 'small',
+      medium: 'medium',
+      large: 'large',
+      'extra-large': 'extra-large',
+      xlarge: 'extra-large',
+      'extra large': 'extra-large',
+      xl: 'extra-large',
+      'extra_large': 'extra-large',
+      'extra-large-room': 'extra-large',
+    };
+    if (map[key]) return map[key];
+    return key.replace(/\s+/g, '-');
+  }
+
+  adminRoomNameFromId(roomId) {
+    const map = {
+      small: 'Small Room',
+      medium: 'Medium Room',
+      large: 'Large Room',
+      'extra-large': 'Extra Large Room',
+    };
+    if (map[roomId]) return map[roomId];
+    if (!roomId) return 'Room';
+    return (
+      roomId
+        .replace(/-/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase()) + ' Room'
+    );
+  }
+
+  adminRebuildRoomColumnIndex() {
+    this.adminRoomColumnsByType = (this.adminRoomColumns || []).reduce((acc, col) => {
+      if (!acc[col.roomId]) acc[col.roomId] = [];
+      acc[col.roomId].push(col);
+      return acc;
+    }, {});
+  }
+
+  adminAddColumn(roomId) {
+    const normalized = this.normalizeRoomId(roomId);
+    if (!normalized) return null;
+    if (!Array.isArray(this.adminRoomColumns)) this.adminRoomColumns = [];
+    const label = `R${this.adminRoomColumns.length + 1}`;
+    const column = {
+      id: label,
+      roomId: normalized,
+      label,
+      name: this.adminRoomNameFromId(normalized),
+    };
+    this.adminRoomColumns = [...this.adminRoomColumns, column];
+    this.adminRebuildRoomColumnIndex();
+    return column;
+  }
+
+  adminEnsureColumnsFromBookings(bookings) {
+    if (!Array.isArray(bookings)) return;
+    bookings.forEach((booking) => {
+      const normalized = this.normalizeRoomId(booking.roomId);
+      if (!normalized) return;
+      if (!this.adminRoomColumnsByType || !this.adminRoomColumnsByType[normalized]) {
+        this.adminAddColumn(normalized);
+      }
+    });
+  }
+
+  adminAssignBookingsToColumns(bookings) {
+    const assignments = {};
+    if (!Array.isArray(bookings) || bookings.length === 0) {
+      this.adminEnsureColumnsFromBookings([]);
+      (this.adminRoomColumns || []).forEach((col) => {
+        assignments[col.id] = [];
+      });
+      return assignments;
+    }
+
+    const normalizedBookings = bookings.map((booking) => ({
+      ...booking,
+      roomId: this.normalizeRoomId(booking.roomId),
+    }));
+
+    const assignableBookings = normalizedBookings.filter(
+      (booking) => (booking.status || '').toLowerCase() !== 'cancelled',
+    );
+
+    this.adminEnsureColumnsFromBookings(assignableBookings);
+
+    (this.adminRoomColumns || []).forEach((col) => {
+      assignments[col.id] = [];
+    });
+
+    const sorted = [...assignableBookings].sort(
+      (a, b) =>
+        (this.toBusinessRelativeMinutes(a.startTime) || 0) -
+        (this.toBusinessRelativeMinutes(b.startTime) || 0),
+    );
+
+    sorted.forEach((booking) => {
+      const roomId = booking.roomId || this.normalizeRoomId(booking.roomId);
+      let cols =
+        (this.adminRoomColumnsByType && this.adminRoomColumnsByType[roomId]) || [];
+      if (!cols.length) {
+        const newCol = this.adminAddColumn(roomId);
+        if (newCol) {
+          assignments[newCol.id] = [];
+          cols = [newCol];
+        } else {
+          return;
+        }
+      }
+      const startMinutes = this.toBusinessRelativeMinutes(booking.startTime);
+      const rawEnd =
+        booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
+      const endMinutes = this.toBusinessRelativeMinutes(rawEnd);
+      if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) return;
+      for (const col of cols) {
+        if (!assignments[col.id]) assignments[col.id] = [];
+        const list = assignments[col.id];
+        const conflict = list.some(
+          (entry) => startMinutes < entry.endMinutes && endMinutes > entry.startMinutes,
+        );
+        if (!conflict) {
+          list.push({ booking, startMinutes, endMinutes });
+          break;
+        }
+      }
+    });
+
+    return assignments;
+  }
+
+  adminComputeEndTime(startTime, durationHours) {
+    const parts = String(startTime || '').split(':');
+    const h = Number(parts[0]);
+    const m = Number(parts[1]);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return startTime || '00:00';
+    let total = h * 60 + m + Number(durationHours || 1) * 60;
+    total = ((total % (24 * 60)) + (24 * 60)) % (24 * 60);
+    const hh = String(Math.floor(total / 60)).padStart(2, '0');
+    const mm = String(total % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  adminBuildGridTimes(times) {
+    const baseTimes = Array.isArray(times) && times.length ? times : ['18:00','19:00','20:00','21:00','22:00','23:00','00:00','01:00','02:00'];
+    const hourly = [];
+    baseTimes.forEach((time) => {
+      if (typeof time === 'string' && time.endsWith(':00') && !hourly.includes(time)) {
+        hourly.push(time);
+      }
+    });
+    if (!hourly.length) {
+      hourly.push('18:00','19:00','20:00','21:00','22:00','23:00','00:00','01:00','02:00');
+    }
+    return hourly.map((start) => {
+      const end = this.adminComputeEndTime(start, 1);
+      return {
+        start,
+        end,
+        startMinutes: this.toBusinessRelativeMinutes(start),
+        endMinutes: this.toBusinessRelativeMinutes(end),
+        label: this.adminFormatTimeRange(start, end),
+      };
+    });
+  }
+
+  adminFormatTimeRange(start, end) {
+    const formatPart = (time) => {
+      const [hh] = time.split(':').map(Number);
+      if (!Number.isFinite(hh)) return time;
+      let hour = hh % 12;
+      if (hour === 0) hour = 12;
+      return String(hour);
+    };
+    return `${formatPart(start)}-${formatPart(end)}`;
+  }
+
+  adminFindBookingForSlot(entries, startMinutes, endMinutes) {
+    if (!Array.isArray(entries)) return null;
+    return entries.find((entry) => startMinutes < entry.endMinutes && endMinutes > entry.startMinutes) || null;
+  }
+
   adminRenderAvailabilityGrid(times, availability) {
     const container = document.getElementById('admin-availability-grid');
     if (!container) return;
-    const rooms = this.rooms || [];
-    // Build header row
-    let html = '<table class="table"><thead><tr><th>Time</th>' +
-      rooms.map(r => `<th>${r.name} <small>(${r.inventory || 0})</small></th>`).join('') + '</tr></thead><tbody>';
-    times.forEach(t => {
-      html += `<tr><td>${this.formatTime(t)}</td>`;
-      rooms.forEach(r => {
-        const left = availability[t]?.[r.id];
-        const total = r.inventory || 0;
-        const val = typeof left === 'number' ? left : '-';
-        const cls = typeof left === 'number' ? (left > 0 ? 'status-badge status-badge--confirmed' : 'status-badge status-badge--cancelled') : '';
-        html += `<td><span class="${cls}">${val}/${total}</span></td>`;
+    const columns = this.adminRoomColumns || [];
+    if (!columns.length) {
+      container.innerHTML = '<p class="admin-grid-empty">No room layout configured.</p>';
+      return;
+    }
+
+    const rows = this.adminBuildGridTimes(times);
+    const assignments = this.adminGridAssignments || {};
+
+    let html = '<table class="admin-schedule-table"><thead><tr><th class="time-head">Time</th>';
+    columns.forEach((col) => {
+      html += `<th><div class="room-label">${col.label}</div><div class="room-sub">${col.name}</div></th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    rows.forEach((row) => {
+      html += `<tr><td class="time-cell">${row.label}</td>`;
+      columns.forEach((col) => {
+        const bookingEntry = this.adminFindBookingForSlot(assignments[col.id] || [], row.startMinutes, row.endMinutes);
+        if (bookingEntry) {
+          const booking = bookingEntry.booking || {};
+          const customer = booking.customer || booking.customerInfo || {};
+          const nameParts = [customer.firstName || '', customer.lastName || ''].map((part) => part.trim()).filter(Boolean);
+          const name = nameParts.join(' ') || customer.email || booking.id || 'Booking';
+          const phone = customer.phone || '';
+          const party = Number(booking.partySize) ? `${Number(booking.partySize)} ppl` : '';
+          const status = booking.status || 'pending';
+          const endTime = booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
+          html += '<td class="slot booked status-' + status + '"><div class="booking-card">';
+          html += '<div class="booking-name">' + name + '</div>';
+          if (party) html += '<div class="booking-detail">' + party + '</div>';
+          if (phone) html += '<div class="booking-detail">' + phone + '</div>';
+          html += '<div class="booking-detail">' + this.formatTime(booking.startTime) + ' - ' + this.formatTime(endTime) + '</div>';
+          html += '</div></td>';
+        } else {
+          html += '<td class="slot available"><span>Available</span></td>';
+        }
       });
       html += '</tr>';
     });
@@ -2861,64 +3177,81 @@ class BarjunkoApp {
     if (!tableBody) return;
 
     tableBody.innerHTML = '';
+    this.adminBookingsById = {};
 
     if (!Array.isArray(bookings) || bookings.length === 0) {
+      this.adminGridAssignments = this.adminAssignBookingsToColumns([]);
       const row = document.createElement('tr');
-      row.innerHTML = `<td colspan="6" style="text-align:center;color:var(--color-text-secondary)">No bookings today</td>`;
+      row.innerHTML = `<td colspan="7" style="text-align:center;color:var(--color-text-secondary)">No bookings today</td>`;
       tableBody.appendChild(row);
       return;
     }
 
+    this.adminEnsureColumnsFromBookings(bookings);
+
     bookings.forEach((booking) => {
-      const room = this.rooms.find((r) => r.id === booking.roomId);
+      const normalizedRoomId = this.normalizeRoomId(booking.roomId);
+      booking.roomId = normalizedRoomId;
+      const room = this.rooms.find((r) => r.id === normalizedRoomId);
+      const displayRoom = room?.name || this.adminRoomNameFromId(normalizedRoomId);
+
       const row = document.createElement('tr');
+      row.dataset.bookingId = booking.id;
+      row.classList.add('admin-booking-row');
+      row.tabIndex = 0;
       const startDisplay = `${new Date(booking.date).toLocaleDateString()} ${this.formatTime(booking.startTime)}`;
       const status = booking.status || 'pending';
       const customerName = booking.customerInfo ? `${booking.customerInfo.firstName || ''} ${booking.customerInfo.lastName || ''}`.trim() : '';
       const customerEmail = booking.customerInfo?.email || '';
+      const guestsDisplay = Number(booking.partySize) ? String(Number(booking.partySize)) : '-';
 
+      this.adminBookingsById[booking.id] = booking;
+
+      const canCancel = (status || '').toLowerCase() !== 'cancelled';
       row.innerHTML = `
-        <td>${booking.id}</td>
         <td>
-          <div>${customerName || '—'}</div>
+          <div>${booking.id}</div>
+          <div class="table-hint">Click row to reschedule</div>
+        </td>
+        <td>
+          <div>${customerName || '-'}</div>
           <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${customerEmail}</div>
         </td>
-        <td>${room?.name || booking.roomId}</td>
+        <td>${displayRoom}</td>
         <td>
           <div>${startDisplay}</div>
           <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${booking.duration || 1}h</div>
         </td>
+        <td data-field="guests">${guestsDisplay}</td>
         <td><span class="status-badge status-badge--${status}">${status}</span></td>
         <td>
           <div class="table-actions">
-            <button class="btn btn--table btn--secondary" data-action="admin-change" data-id="${booking.id}"><i class="fas fa-edit"></i></button>
-            <button class="btn btn--table btn--outline" data-action="admin-cancel" data-id="${booking.id}"><i class="fas fa-times"></i></button>
+            ${canCancel ? `<button class="btn btn--table btn--outline" data-action="admin-cancel" data-id="${booking.id}"><i class="fas fa-times"></i></button>` : ''}
           </div>
         </td>
       `;
 
       tableBody.appendChild(row);
-    
+    });
 
-    // Update stats: bookings count, total guests, revenue, occupancy
+    this.adminGridAssignments = this.adminAssignBookingsToColumns(bookings);
+
     try {
       const bookingsCount = Array.isArray(bookings) ? bookings.length : 0;
       const totalGuests = (Array.isArray(bookings) ? bookings : []).reduce((acc, b) => acc + (Number(b.partySize) || 0), 0);
       const totalRevenue = (Array.isArray(bookings) ? bookings : []).reduce((acc, b) => acc + (Number(b.depositAmount) || 0), 0);
 
-      // Occupancy: booked room-hours / (total room-hours available)
       const totalBookedHours = (Array.isArray(bookings) ? bookings : []).reduce((acc, b) => acc + (Number(b.duration) || 0), 0);
-      // Compute open hours from timeSlots (fallback to 8 if not computable)
       let openHours = 8;
       try {
-        const times = (this.timeSlots || []);
+        const times = this.timeSlots || [];
         const tmin = times[0];
         const tmax = times[times.length - 1];
         const [sh, sm] = (tmin || '18:00').split(':').map(Number);
         const [eh, em] = (tmax || '02:00').split(':').map(Number);
         let startM = sh * 60 + sm;
         let endM = eh * 60 + em;
-        if (endM <= startM) endM += 24 * 60; // wrap past midnight
+        if (endM <= startM) endM += 24 * 60;
         openHours = Math.max(1, Math.round((endM - startM) / 60));
       } catch (_) {}
       const totalRooms = (this.rooms || []).reduce((acc, r) => acc + (Number(r.inventory) || 0), 0) || 1;
@@ -2933,18 +3266,31 @@ class BarjunkoApp {
       if (guestsEl) guestsEl.textContent = String(totalGuests);
       if (revenueEl) revenueEl.textContent = `$${totalRevenue.toFixed(2)}`;
       if (occEl) occEl.textContent = `${isFinite(occupancyPct) ? occupancyPct : 0}%`;
-        } catch (e) {
+    } catch (e) {
       console.warn('Failed to update admin stats', e);
     }
-});
 
     tableBody.querySelectorAll('[data-action="admin-cancel"]').forEach((btn) => {
       btn.addEventListener('click', () => this.adminCancelBooking(btn.getAttribute('data-id')));
     });
 
-    tableBody.querySelectorAll('[data-action="admin-change"]').forEach((btn) => {
-      btn.addEventListener('click', () => this.adminChangeBookingPrompt(btn.getAttribute('data-id')));
-    });
+    if (!tableBody.__adminManageBound) {
+      tableBody.__adminManageBound = true;
+      tableBody.addEventListener('click', (event) => {
+        if (event.target.closest('[data-action]')) return;
+        const row = event.target.closest('tr[data-booking-id]');
+        if (!row) return;
+        this.adminOpenModifyModal(row.dataset.bookingId);
+      });
+      tableBody.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target.closest('[data-action]')) return;
+        const row = event.target.closest('tr[data-booking-id]');
+        if (!row) return;
+        event.preventDefault();
+        this.adminOpenModifyModal(row.dataset.bookingId);
+      });
+    }
   }
 
   async adminCancelBooking(bookingId) {
@@ -2957,7 +3303,7 @@ class BarjunkoApp {
     try {
       this.showLoading('Cancelling booking...');
       const fn = window.firebaseFunctions.httpsCallable('adminCancelBySecret');
-      const res = await fn({ bookingId, secret: window.ADMIN_API_SECRET });
+      await fn({ bookingId });
       this.hideLoading();
       this.showNotification('Booking cancelled', 'success');
       this.adminFetchForSelectedDate();
@@ -2968,30 +3314,261 @@ class BarjunkoApp {
     }
   }
 
-  async adminChangeBookingPrompt(bookingId) {
-    if (!bookingId) return;
+  toBusinessRelativeMinutes(time) {
+    if (!time) return null;
+    const parts = String(time).split(':');
+    if (parts.length !== 2) return null;
+    const h = Number(parts[0]);
+    const m = Number(parts[1]);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    let total = h * 60 + m;
+    const base = this.businessTimeConfig?.openMinutes ?? 0;
+    if (total < base) total += 24 * 60;
+    return total;
+  }
 
-    const newDate = prompt('New date (YYYY-MM-DD):');
-    if (!newDate) return;
-    const newStartTime = prompt('New start time (HH:mm, 24h):');
-    if (!newStartTime) return;
-    const newDurationStr = prompt('New duration (hours):', '1');
-    const newDuration = Number(newDurationStr);
-    if (!Number.isFinite(newDuration) || newDuration <= 0) return alert('Invalid duration');
+  adminIsWithinBusinessHours(startTime, durationHours) {
+    const startMinutes = this.toBusinessRelativeMinutes(startTime);
+    if (!Number.isFinite(startMinutes)) return false;
+    const durationMinutes = Number(durationHours) * 60;
+    if (!Number.isFinite(durationMinutes)) return false;
+    const endMinutes = startMinutes + durationMinutes;
+    const { openMinutes, closeMinutes } = this.businessTimeConfig;
+    return startMinutes >= openMinutes && endMinutes <= closeMinutes;
+  }
+
+  adminPopulateRescheduleTimes(selectEl, selected) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    const slots = this.timeSlots || [];
+    slots.forEach((slot) => {
+      const option = document.createElement('option');
+      option.value = slot;
+      option.textContent = this.formatTime(slot);
+      if (slot === selected) option.selected = true;
+      selectEl.appendChild(option);
+    });
+    if (selected && !selectEl.value) {
+      const option = document.createElement('option');
+      option.value = selected;
+      option.textContent = this.formatTime(selected);
+      option.selected = true;
+      selectEl.appendChild(option);
+    }
+  }
+
+  adminEnsureRescheduleFormBound() {
+    if (this.rescheduleFormBound) return;
+    const form = document.getElementById('admin-reschedule-form');
+    if (!form) return;
+    form.addEventListener('submit', (event) => this.adminHandleRescheduleSubmit(event));
+    ['resched-date', 'resched-start', 'resched-duration'].forEach((id) => {
+      const input = document.getElementById(id);
+      if (input) {
+        input.addEventListener('change', () => this.adminEvaluateRescheduleAvailability());
+      }
+    });
+    const cancelBtn = document.getElementById('resched-cancel');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        this.hideModal();
+        this.adminResetRescheduleState();
+      });
+    }
+    this.rescheduleFormBound = true;
+  }
+
+  adminOpenModifyModal(bookingId) {
+    if (!bookingId) return;
+    const booking = this.adminBookingsById ? this.adminBookingsById[bookingId] : null;
+    if (!booking) return;
+
+    this.adminEnsureRescheduleFormBound();
+
+    this.adminRescheduleState = {
+      bookingId,
+      roomId: booking.roomId,
+      originalDate: booking.date,
+      originalStartTime: booking.startTime,
+      duration: booking.duration || 1,
+      validPayload: null,
+    };
+    this.adminRescheduleRequestId += 1;
+
+    const idEl = document.getElementById('resched-booking-id');
+    if (idEl) idEl.value = bookingId;
+
+    const codeEl = document.getElementById('resched-booking-code');
+    if (codeEl) codeEl.value = bookingId;
+
+    const roomEl = document.getElementById('resched-room');
+    if (roomEl) {
+      const room = this.rooms.find((r) => r.id === booking.roomId);
+      roomEl.value = room ? room.name : booking.roomId;
+    }
+
+    const dateEl = document.getElementById('resched-date');
+    if (dateEl) dateEl.value = booking.date;
+
+    const durationEl = document.getElementById('resched-duration');
+    if (durationEl) {
+      const durationValue = String(booking.duration || 1);
+      Array.from(durationEl.options).forEach((opt) => {
+        if (!['1', '2', '3'].includes(opt.value)) opt.remove();
+      });
+      durationEl.value = durationValue;
+      if (durationEl.value !== durationValue) {
+        const opt = document.createElement('option');
+        opt.value = durationValue;
+        opt.textContent = `${durationValue} hour${durationValue === '1' ? '' : 's'}`;
+        opt.selected = true;
+        durationEl.appendChild(opt);
+      }
+    }
+
+    const timeSelect = document.getElementById('resched-start');
+    if (timeSelect) {
+      this.adminPopulateRescheduleTimes(timeSelect, booking.startTime);
+    }
+
+    const statusEl = document.getElementById('resched-status');
+    if (statusEl) statusEl.textContent = 'Select a new date and time.';
+
+    const submitBtn = document.getElementById('resched-submit');
+    if (submitBtn) submitBtn.disabled = true;
+
+    this.showModal('admin-reschedule-modal');
+    this.adminEvaluateRescheduleAvailability();
+  }
+
+  async adminEvaluateRescheduleAvailability() {
+    const state = this.adminRescheduleState;
+    const statusEl = document.getElementById('resched-status');
+    const submitBtn = document.getElementById('resched-submit');
+    if (!state) {
+      if (statusEl) statusEl.textContent = '';
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    const dateEl = document.getElementById('resched-date');
+    const timeEl = document.getElementById('resched-start');
+    const durationEl = document.getElementById('resched-duration');
+    if (!dateEl || !timeEl || !durationEl) return;
+
+    const date = dateEl.value;
+    const startTime = timeEl.value;
+    const duration = Number(durationEl.value || state.duration || 1);
+
+    this.adminRescheduleState.validPayload = null;
+
+    if (!date || !startTime || !Number.isFinite(duration)) {
+      if (statusEl) statusEl.textContent = 'Select date, time, and duration.';
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    if (!this.adminIsWithinBusinessHours(startTime, duration)) {
+      if (statusEl) statusEl.textContent = 'Outside business hours.';
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    const candidateStart = new Date(`${date}T${startTime}`);
+    if (Number.isNaN(candidateStart.getTime())) {
+      if (statusEl) statusEl.textContent = 'Invalid date/time.';
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    if (candidateStart.getTime() < Date.now()) {
+      if (statusEl) statusEl.textContent = 'Selected time is in the past.';
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      if (statusEl) statusEl.textContent = 'Functions unavailable.';
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    const requestId = ++this.adminRescheduleRequestId;
+    if (statusEl) statusEl.textContent = 'Checking availability...';
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const fn = window.firebaseFunctions.httpsCallable('getRoomAvailability');
+      const response = await fn({
+        date,
+        startTime,
+        duration,
+        roomIds: [state.roomId],
+        excludeBookingId: state.bookingId,
+      });
+      if (requestId !== this.adminRescheduleRequestId) return;
+
+      const remaining = Number(response?.data?.availability?.[state.roomId]);
+      if (Number.isFinite(remaining) && remaining > 0) {
+        if (statusEl) statusEl.textContent = 'Slot available.';
+        if (submitBtn) submitBtn.disabled = false;
+        this.adminRescheduleState.validPayload = { date, startTime, duration };
+      } else {
+        if (statusEl) statusEl.textContent = 'Selected time is unavailable.';
+        if (submitBtn) submitBtn.disabled = true;
+      }
+    } catch (error) {
+      if (requestId !== this.adminRescheduleRequestId) return;
+      console.error('adminEvaluateRescheduleAvailability', error);
+      if (statusEl) statusEl.textContent = error?.message || 'Unable to verify availability.';
+      if (submitBtn) submitBtn.disabled = true;
+    }
+  }
+
+  async adminHandleRescheduleSubmit(event) {
+    event.preventDefault();
+    const state = this.adminRescheduleState;
+    if (!state || !state.validPayload) {
+      this.showNotification('Select an available time before saving.', 'warning');
+      return;
+    }
+
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      this.showNotification('Functions not available', 'error');
+      return;
+    }
 
     try {
       this.showLoading('Updating booking...');
       const fn = window.firebaseFunctions.httpsCallable('adminRebookBySecret');
-      await fn({ bookingId, secret: window.ADMIN_API_SECRET, newDate, newStartTime, newDuration });
+      await fn({
+        bookingId: state.bookingId,
+        newDate: state.validPayload.date,
+        newStartTime: state.validPayload.startTime,
+        newDuration: state.validPayload.duration,
+        roomId: state.roomId,
+      });
       this.hideLoading();
+      this.hideModal();
+      this.adminResetRescheduleState();
       this.showNotification('Booking updated', 'success');
       this.adminFetchForSelectedDate();
     } catch (err) {
       this.hideLoading();
-      console.error('adminChangeBookingPrompt', err);
+      console.error('adminHandleRescheduleSubmit', err);
       this.showError(err.message || 'Unable to update booking');
     }
   }
+
+  adminResetRescheduleState() {
+    this.adminRescheduleState = null;
+    this.adminRescheduleRequestId += 1;
+    const statusEl = document.getElementById('resched-status');
+    if (statusEl) statusEl.textContent = '';
+    const submitBtn = document.getElementById('resched-submit');
+    if (submitBtn) submitBtn.disabled = true;
+  }
+
 
   viewBooking(bookingId) {
     const booking = this.mockBookings.find((b) => b.id === bookingId);
@@ -3066,14 +3643,18 @@ class BarjunkoApp {
   showModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-      modal.classList.add('show');
+      modal.classList.remove('hidden');
+      // Use rAF so CSS transitions fire consistently
+      requestAnimationFrame(() => modal.classList.add('show'));
     }
   }
 
   hideModal() {
     document.querySelectorAll('.modal').forEach((modal) => {
       modal.classList.remove('show');
+      modal.classList.add('hidden');
     });
+    this.adminResetRescheduleState();
   }
 
   showError(message) {
@@ -3099,6 +3680,12 @@ window.addEventListener('error', (e) => {
     app.showError('An unexpected error occurred. Please refresh the page and try again.');
   }
 });
+
+
+
+
+
+
 
 
 

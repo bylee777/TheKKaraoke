@@ -62,6 +62,13 @@
     console.error('[firebase-init] Failed to initialize Functions:', err);
   }
 
+  let auth = null;
+  try {
+    auth = firebase.auth();
+  } catch (err) {
+    console.error('[firebase-init] Failed to initialize Auth:', err);
+  }
+
   let db = null;
   try {
     db = firebase.firestore();
@@ -82,10 +89,16 @@
       location.hostname === 'localhost' ||
       location.hostname === '127.0.0.1';
     if (useEmu) {
-      // NOTE: Adjust ports to match your emulator settings
-      if (functions && functions.useEmulator) functions.useEmulator('localhost', 5001);
-      if (db && db.useEmulator) db.useEmulator('localhost', 8080);
-      if (storage && storage.useEmulator) storage.useEmulator('localhost', 9199);
+      // NOTE: Ports pinned in firebase.json -> emulators
+      const HOST = '127.0.0.1';
+      const FN_PORT = 5001;
+      const FS_PORT = 8085; // changed from 8080 to avoid conflicts
+      const ST_PORT = 9199;
+      const AUTH_PORT = 9099;
+      if (functions && functions.useEmulator) functions.useEmulator(HOST, FN_PORT);
+      if (db && db.useEmulator) db.useEmulator(HOST, FS_PORT);
+      if (storage && storage.useEmulator) storage.useEmulator(HOST, ST_PORT);
+      if (auth && auth.useEmulator) auth.useEmulator(`http://${HOST}:${AUTH_PORT}`);
       console.info('[firebase-init] Using Firebase Emulators');
     }
   } catch (err) {
@@ -101,12 +114,10 @@
 
   window.firebaseApp = firebase.app();
   window.firebaseFunctions = functions;
+  window.firebaseAuth = auth;
   window.firestore = db;
   window.storage = storage;
   window.stripe = stripe;
-
-  // Optional: shared secret for admin-only callables (configure in Functions too)
-  window.ADMIN_API_SECRET = window.ADMIN_API_SECRET || 'asefewrq1234';
 
   console.info('[firebase-init] Firebase & Stripe initialized', {
     projectId: firebaseConfig.projectId,

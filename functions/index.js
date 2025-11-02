@@ -1,14 +1,70 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require('firebase-admin/firestore');
 const Stripe = require('stripe');
+const twilio = require('twilio');
+
+const MINUTES_IN_DAY = 24 * 60;
+const BUSINESS_OPEN_TIME = '18:00';
+const BUSINESS_CLOSE_TIME = '02:00';
+const twilioAccountSid = (functions.config().twilio && functions.config().twilio.account_sid) || process.env.TWILIO_ACCOUNT_SID || null;
+const twilioAuthToken = (functions.config().twilio && functions.config().twilio.auth_token) || process.env.TWILIO_AUTH_TOKEN || null;
+const twilioFromNumber = (functions.config().twilio && functions.config().twilio.from) || process.env.TWILIO_FROM || null;
+const twilioNotifyNumber = (functions.config().twilio && functions.config().twilio.notify_to) || process.env.TWILIO_NOTIFY_TO || null;
+const hasTwilioCredentials = twilioAccountSid && twilioAuthToken && twilioFromNumber;
+const twilioClient = hasTwilioCredentials ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
 // Initialize the Firebase Admin SDK to access Firestore
 admin.initializeApp();
 const db = admin.firestore();
 
 const DEFAULT_TIMES = [
-  '18:00','18:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00','22:30','23:00','23:30','00:00','00:30','01:00','01:30','02:00'
+  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00', '22:30', '23:00', '23:30', '00:00', '00:30', '01:00', '01:30', '02:00',
 ];
+
+function timeStringToMinutes(time) {
+  if (typeof time !== 'string') return NaN;
+  const [h, m] = time.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+  return h * 60 + m;
+}
+
+const BUSINESS_OPEN_MINUTES = timeStringToMinutes(BUSINESS_OPEN_TIME);
+
+function toBusinessRelativeMinutes(time) {
+  let minutes = timeStringToMinutes(time);
+  if (!Number.isFinite(minutes)) return NaN;
+  if (minutes < BUSINESS_OPEN_MINUTES) {
+    minutes += MINUTES_IN_DAY;
+  }
+  return minutes;
+}
+
+const BUSINESS_CLOSE_MINUTES = toBusinessRelativeMinutes(BUSINESS_CLOSE_TIME);
+
+function ensureWithinBusinessHours(startTime, endTime) {
+  const start = toBusinessRelativeMinutes(startTime);
+  const end = toBusinessRelativeMinutes(endTime);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid time value provided.');
+  }
+  if (start < BUSINESS_OPEN_MINUTES || end > BUSINESS_CLOSE_MINUTES) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Booking must be scheduled between 6:00 PM and 2:00 AM.',
+    );
+  }
+}
+
+function ensureNotInPast(date, startTime) {
+  const startDate = combineDateTime(date, startTime);
+  if (Number.isNaN(startDate.getTime())) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid date or time provided.');
+  }
+  if (startDate.getTime() < Date.now()) {
+    throw new functions.https.HttpsError('failed-precondition', 'Cannot schedule bookings in the past.');
+  }
+}
 
 
 const ROOM_CONFIG = {
@@ -127,7 +183,9 @@ async function ensureRoomAvailability(
     }
   });
 
-  if (overlapping >= inventory) {
+  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+  const effectiveInventory = Math.max(inventory - reserved, 0);
+  if (overlapping >= effectiveInventory) {
     throw new functions.https.HttpsError(
       'failed-precondition',
       buildNoAvailabilityMessage(label, inventory),
@@ -155,21 +213,48 @@ const stripeSecretKey =
     : 'sk_test_51SE19lPArasY2JyAooAOIxctJ6eFQld3Y7rdrhAlB8BxeCitTYhK2902cqrOtUzkx67dVgrpjVari9nEBlkxwrIL00Kz81sHmD';
 const stripe = Stripe(stripeSecretKey);
 
-const ADMIN_SHARED_SECRET =
-  functions.config().admin && functions.config().admin.shared_secret
-    ? functions.config().admin.shared_secret
-    : process.env.ADMIN_SHARED_SECRET || 'Barjunko123';
-
-function verifyAdminSecret(secret) {
-  if (!secret || secret !== ADMIN_SHARED_SECRET) {
-    throw new functions.https.HttpsError('permission-denied', 'Invalid admin secret');
+function requireAdmin(context) {
+  if (!context || !context.auth || context.auth.token?.isAdmin !== true) {
+    throw new functions.https.HttpsError('permission-denied', 'Admin privileges required');
   }
 }
 
 // Helper: check time conflict between two bookings. Times are strings in
 // 24-hour format (HH:mm). Returns true if they overlap.
 function hasTimeConflict(startA, endA, startB, endB) {
-  return startA < endB && endA > startB;
+  const startAMin = toBusinessRelativeMinutes(startA);
+  const endAMin = toBusinessRelativeMinutes(endA);
+  const startBMin = toBusinessRelativeMinutes(startB);
+  const endBMin = toBusinessRelativeMinutes(endB);
+
+  if (!Number.isFinite(startAMin) || !Number.isFinite(endAMin) || !Number.isFinite(startBMin) || !Number.isFinite(endBMin)) {
+    return true;
+  }
+
+  return startAMin < endBMin && endAMin > startBMin;
+}
+
+// Reserve policy: keep 1 small and 1 medium room for Fri/Sat 21:00-23:00 (walk-ins)
+function isFridayOrSaturday(dateStr) {
+  try {
+    // Use midday to avoid edge cases around DST
+    const d = new Date(`${dateStr}T12:00:00`);
+    const day = d.getDay(); // 0=Sun ... 6=Sat
+    return day === 5 || day === 6; // Fri or Sat
+  } catch (_) {
+    return false;
+  }
+}
+
+function reservedSlotsForWindow(roomId, date, startTime, endTime) {
+  if (!roomId || !date) return 0;
+  const isTargetRoom = roomId === 'small' || roomId === 'medium';
+  if (!isTargetRoom) return 0;
+  if (!isFridayOrSaturday(date)) return 0;
+  // Walk-in hold window: 21:00 - 23:00
+  const holdStart = '21:00';
+  const holdEnd = '23:00';
+  return hasTimeConflict(startTime, endTime, holdStart, holdEnd) ? 1 : 0;
 }
 
 // Email sending stub. Integrate SendGrid or Mailgun here once credentials are
@@ -188,6 +273,42 @@ async function sendCancellationEmail(booking) {
 async function addBookingToCalendar(booking) {
   console.log('addBookingToCalendar stub:', booking.id);
   return;
+}
+
+async function sendSms(to, message) {
+  if (!to || !message) {
+    return;
+  }
+  if (!twilioClient) {
+    console.warn('[sms] Twilio not configured; skipping message for', to);
+    return;
+  }
+  try {
+    await twilioClient.messages.create({ to, from: twilioFromNumber, body: message });
+  } catch (err) {
+    console.error('[sms] Failed to send message', err);
+  }
+}
+
+async function sendFridaySaturdayBookingSms(bookingDoc) {
+  if (!bookingDoc || !isFridayOrSaturday(bookingDoc.date)) {
+    return;
+  }
+  const customer = bookingDoc.customerInfo || {};
+  const phone = (customer.phone || '').trim();
+  if (phone) {
+    const firstName = (customer.firstName || '').trim();
+    const friendlyTime = `${bookingDoc.date} ${bookingDoc.startTime}`;
+    const message = firstName
+      ? `Hi ${firstName}! Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon!`
+      : `Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon!`;
+    await sendSms(phone, message);
+  }
+  if (twilioNotifyNumber) {
+    const displayName = [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.email || bookingDoc.id;
+    const summary = `New booking ${bookingDoc.id || ''} (${displayName}) on ${bookingDoc.date} ${bookingDoc.startTime} in ${bookingDoc.roomId}`.trim();
+    await sendSms(twilioNotifyNumber, summary);
+  }
 }
 
 /**
@@ -215,6 +336,15 @@ async function createBookingInternal(params) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
   }
 
+  // Enforce maximum booking duration of 3 hours
+  const dur = Number(duration);
+  if (!Number.isFinite(dur) || dur <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Duration must be a positive number of hours');
+  }
+  if (dur > 3) {
+    throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
+  }
+
   const { inventory, label } = getRoomConfig(roomId);
   const noAvailabilityMessage = buildNoAvailabilityMessage(label, inventory);
 
@@ -230,8 +360,11 @@ async function createBookingInternal(params) {
 
   // Compute the end time based on start time and duration
   const dateObj = new Date(`${date}T${startTime}`);
-  dateObj.setHours(dateObj.getHours() + duration);
+  dateObj.setHours(dateObj.getHours() + dur);
   const endTime = dateObj.toTimeString().slice(0, 5);
+
+  ensureWithinBusinessHours(startTime, endTime);
+  ensureNotInPast(date, startTime);
 
   const bookingsQuery = db
     .collection('bookings')
@@ -249,7 +382,10 @@ async function createBookingInternal(params) {
     }
   }
 
-  if (overlappingCount >= inventory) {
+  // Apply reserved slot policy (Fri/Sat 21:00-23:00) for small/medium rooms
+  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+  const effectiveInventory = Math.max(inventory - reserved, 0);
+  if (overlappingCount >= effectiveInventory) {
     throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
   }
 
@@ -259,8 +395,9 @@ async function createBookingInternal(params) {
     paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(depositAmount * 100),
       currency: 'cad',
-      automatic_payment_methods: { enabled: true },
-      metadata: { roomId, date, startTime, duration },
+      capture_method: 'manual',
+      payment_method_types: ['card'],
+      metadata: { roomId, date, startTime, duration: dur },
     });
   } catch (err) {
     console.error('Stripe PaymentIntent creation failed', err);
@@ -272,7 +409,7 @@ async function createBookingInternal(params) {
     date,
     startTime,
     endTime,
-    duration,
+    duration: dur,
     totalCost,
     depositAmount,
     partySize: typeof partySize === 'number' ? partySize : null,
@@ -286,8 +423,8 @@ async function createBookingInternal(params) {
       rebooking: false,
     },
     status: 'pending',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   };
 
   let newBookingRef;
@@ -303,7 +440,9 @@ async function createBookingInternal(params) {
         }
       });
 
-      if (txnOverlapping >= inventory) {
+      const txnReserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+      const txnEffectiveInventory = Math.max(inventory - txnReserved, 0);
+      if (txnOverlapping >= txnEffectiveInventory) {
         throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
       }
 
@@ -326,6 +465,7 @@ async function createBookingInternal(params) {
   // Call stubs for email and calendar integrations. These return silently.
   await sendBookingEmail({ id: newBookingRef.id, ...bookingDoc });
   await addBookingToCalendar({ id: newBookingRef.id, ...bookingDoc });
+  await sendFridaySaturdayBookingSms({ id: newBookingRef.id, ...bookingDoc });
 
   return {
     id: newBookingRef.id,
@@ -342,13 +482,19 @@ async function cancelBookingInternal(bookingId) {
   }
   const booking = doc.data();
 
-  // Issue refund through Stripe if a payment intent exists
+  // Handle payment reversal through Stripe if a payment intent exists
   if (booking.paymentIntentId) {
     try {
-      await stripe.refunds.create({ payment_intent: booking.paymentIntentId });
+      const intent = await stripe.paymentIntents.retrieve(booking.paymentIntentId);
+      if (intent.status === 'requires_capture') {
+        // Authorization only, cancel to release hold
+        await stripe.paymentIntents.cancel(intent.id);
+      } else if (intent.status === 'succeeded' || intent.charges?.data?.length) {
+        await stripe.refunds.create({ payment_intent: intent.id });
+      }
     } catch (err) {
-      console.error('Stripe refund failed', err);
-      throw new functions.https.HttpsError('internal', 'Unable to issue refund');
+      console.error('Stripe reversal failed', err);
+      throw new functions.https.HttpsError('internal', 'Unable to reverse payment');
     }
   }
 
@@ -356,7 +502,7 @@ async function cancelBookingInternal(bookingId) {
   await ref.update({
     status: 'cancelled',
     paymentStatus: 'refunded',
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   // Send cancellation email via stub
@@ -461,6 +607,9 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   endDate.setHours(endDate.getHours() + duration);
   const endTime = endDate.toTimeString().slice(0, 5);
 
+  ensureWithinBusinessHours(startTime, endTime);
+  ensureNotInPast(date, startTime);
+
   const availabilityEntries = await Promise.all(
     roomIds.map(async (roomId) => {
       const { inventory } = getRoomConfig(roomId);
@@ -483,7 +632,8 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
         }
       });
 
-      const remaining = Math.max(inventory - overlapping, 0);
+      const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+      const remaining = Math.max(inventory - overlapping - reserved, 0);
       return [roomId, remaining];
     }),
   );
@@ -493,9 +643,9 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   return { availability };
 });
 
-exports.adminCancelBySecret = functions.https.onCall(async (data) => {
-  const { bookingId, secret } = data || {};
-  verifyAdminSecret(secret);
+exports.adminCancelBySecret = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
+  const { bookingId } = data || {};
   if (!bookingId) {
     throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
   }
@@ -504,9 +654,9 @@ exports.adminCancelBySecret = functions.https.onCall(async (data) => {
   return { message: 'Booking cancelled', booking: sanitizeBookingSnapshot(snap) };
 });
 
-exports.adminRebookBySecret = functions.https.onCall(async (data) => {
+exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
   const {
-    secret,
     bookingId,
     newDate,
     newStartTime,
@@ -521,7 +671,6 @@ exports.adminRebookBySecret = functions.https.onCall(async (data) => {
     bookingFee,
     requiredPurchaseAmount,
   } = data || {};
-  verifyAdminSecret(secret);
   if (!bookingId || !newDate || !newStartTime || !Number.isFinite(Number(newDuration))) {
     throw new functions.https.HttpsError(
       'invalid-argument',
@@ -529,6 +678,12 @@ exports.adminRebookBySecret = functions.https.onCall(async (data) => {
     );
   }
   const duration = Number(newDuration);
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Duration must be a positive number of hours');
+  }
+  if (duration > 3) {
+    throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
+  }
   const ref = db.collection('bookings').doc(bookingId);
   const snap = await ref.get();
   if (!snap.exists) {
@@ -536,7 +691,9 @@ exports.adminRebookBySecret = functions.https.onCall(async (data) => {
   }
   const current = snap.data();
   const targetRoomId = roomId || current.roomId;
+  ensureNotInPast(newDate, newStartTime);
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
+  ensureWithinBusinessHours(newStartTime, endTime);
   await db.runTransaction(async (transaction) => {
     await ensureRoomAvailability(
       targetRoomId,
@@ -552,7 +709,7 @@ exports.adminRebookBySecret = functions.https.onCall(async (data) => {
       startTime: newStartTime,
       endTime,
       duration,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
     if (Number.isFinite(Number(partySize))) updatePayload.partySize = Number(partySize);
     if (customerInfo) updatePayload.customerInfo = { ...current.customerInfo, ...customerInfo };
@@ -570,9 +727,152 @@ exports.adminRebookBySecret = functions.https.onCall(async (data) => {
   return { message: 'Booking updated', booking: sanitizeBookingSnapshot(updated) };
 });
 
-exports.adminGetBookingsByDate = functions.https.onCall(async (data) => {
-  const { secret, date } = data || {};
-  verifyAdminSecret(secret);
+/**
+ * Callable: adminUpsertBySecret
+ *
+ * Create or update a booking without the standard customer-facing restrictions.
+ * Admin callers (custom claim isAdmin=true) can override duration, pricing, etc.
+ * Pass a bookingId to update; omit it to create.
+ */
+exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
+  const {
+    bookingId,
+    roomId,
+    date,
+    startTime,
+    duration,
+    partySize,
+    customerInfo,
+    totalCost,
+    depositAmount,
+    bookingFee,
+    extraGuestFee,
+    requiredPurchaseAmount,
+    status,
+    paymentStatus,
+  } = data || {};
+
+  // Normalize commonly provided values
+  const durNum = Number(duration);
+  const normalizedCustomerInfo = customerInfo
+    ? {
+        ...customerInfo,
+        firstName: customerInfo?.firstName ? String(customerInfo.firstName).trim() : '',
+        lastName: customerInfo?.lastName ? String(customerInfo.lastName).trim() : '',
+        email: normalizeEmail(customerInfo?.email),
+        phone: customerInfo?.phone ? String(customerInfo.phone).trim() : '',
+      }
+    : undefined;
+
+  // Helper to compute end time if we have the needed inputs
+  function maybeComputeEnd(dateStr, start, dur) {
+    if (!dateStr || !start || !Number.isFinite(Number(dur))) return null;
+    const { endTime } = computeEndTime(dateStr, start, Number(dur));
+    return endTime;
+  }
+
+  if (bookingId) {
+    // Update existing booking (override)
+    const ref = db.collection('bookings').doc(String(bookingId).trim());
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Booking not found');
+    }
+
+    const current = snap.data() || {};
+    const updatePayload = { updatedAt: FieldValue.serverTimestamp() };
+
+    if (roomId) updatePayload.roomId = String(roomId);
+    if (date) updatePayload.date = String(date);
+    if (startTime) updatePayload.startTime = String(startTime);
+    if (Number.isFinite(durNum)) updatePayload.duration = durNum;
+    if (Number.isFinite(Number(partySize))) updatePayload.partySize = Number(partySize);
+    if (normalizedCustomerInfo) updatePayload.customerInfo = { ...current.customerInfo, ...normalizedCustomerInfo };
+    if (Number.isFinite(Number(totalCost))) updatePayload.totalCost = Number(totalCost);
+    if (Number.isFinite(Number(depositAmount))) updatePayload.depositAmount = Number(depositAmount);
+    if (Number.isFinite(Number(bookingFee))) updatePayload.bookingFee = Number(bookingFee);
+    if (Number.isFinite(Number(extraGuestFee))) updatePayload.extraGuestFee = Number(extraGuestFee);
+    if (Number.isFinite(Number(requiredPurchaseAmount)))
+      updatePayload.requiredPurchaseAmount = Number(requiredPurchaseAmount);
+    if (typeof status === 'string') updatePayload.status = status;
+    if (typeof paymentStatus === 'string') updatePayload.paymentStatus = paymentStatus;
+
+    const dateChanged = Object.prototype.hasOwnProperty.call(updatePayload, 'date');
+    const startChanged = Object.prototype.hasOwnProperty.call(updatePayload, 'startTime');
+    const durationChanged = Object.prototype.hasOwnProperty.call(updatePayload, 'duration');
+
+    if (dateChanged || startChanged || durationChanged) {
+      const nextDate = updatePayload.date || current.date;
+      const nextStart = updatePayload.startTime || current.startTime;
+      const nextDurationValue = durationChanged ? updatePayload.duration : current.duration;
+      const nextDuration = Number(nextDurationValue);
+      if (!Number.isFinite(nextDuration)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Duration must be a valid number of hours');
+      }
+
+      ensureNotInPast(nextDate, nextStart);
+      const end = maybeComputeEnd(nextDate, nextStart, nextDuration);
+      if (end) {
+        ensureWithinBusinessHours(nextStart, end);
+        updatePayload.endTime = end;
+      }
+    }
+
+    await ref.update(updatePayload);
+    const updated = await ref.get();
+    return { message: 'Booking upserted', booking: sanitizeBookingSnapshot(updated) };
+  }
+
+  // Create new booking (override)
+  if (!roomId || !date || !startTime || !Number.isFinite(durNum) || !customerInfo) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'roomId, date, startTime, duration, and customerInfo are required to create a booking',
+    );
+  }
+
+  ensureNotInPast(date, startTime);
+  const endTime = maybeComputeEnd(date, startTime, durNum);
+  if (endTime) {
+    ensureWithinBusinessHours(startTime, endTime);
+  }
+  const newDoc = {
+    roomId: String(roomId),
+    date: String(date),
+    startTime: String(startTime),
+    endTime: endTime,
+    duration: durNum,
+    partySize: Number.isFinite(Number(partySize)) ? Number(partySize) : null,
+    customerInfo: normalizedCustomerInfo,
+    totalCost: Number.isFinite(Number(totalCost)) ? Number(totalCost) : null,
+    depositAmount: Number.isFinite(Number(depositAmount)) ? Number(depositAmount) : null,
+    bookingFee: Number.isFinite(Number(bookingFee)) ? Number(bookingFee) : null,
+    extraGuestFee: Number.isFinite(Number(extraGuestFee)) ? Number(extraGuestFee) : null,
+    requiredPurchaseAmount: Number.isFinite(Number(requiredPurchaseAmount))
+      ? Number(requiredPurchaseAmount)
+      : null,
+    status: typeof status === 'string' ? status : 'confirmed',
+    paymentStatus: typeof paymentStatus === 'string' ? paymentStatus : null,
+    paymentIntentId: null,
+    calendarEventId: null,
+    textSent: { booking: false, cancellation: false, rebooking: false },
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  const ref = db.collection('bookings').doc();
+  await ref.set(newDoc);
+  if (isFridayOrSaturday(date)) {
+    await sendFridaySaturdayBookingSms({ id: ref.id, ...newDoc });
+  }
+  const created = await ref.get();
+  return { message: 'Booking created', booking: sanitizeBookingSnapshot(created) };
+});
+
+exports.adminGetBookingsByDate = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
+  const { date } = data || {};
   if (!date) {
     throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
   }
@@ -587,9 +887,9 @@ exports.adminGetBookingsByDate = functions.https.onCall(async (data) => {
   return { bookings };
 });
 
-exports.adminGetAvailabilityByDate = functions.https.onCall(async (data) => {
-  const { secret, date, times, duration } = data || {};
-  verifyAdminSecret(secret);
+exports.adminGetAvailabilityByDate = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
+  const { date, times, duration } = data || {};
   const dur = Number(duration) || 1;
   if (!date) {
     throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
@@ -622,7 +922,8 @@ exports.adminGetAvailabilityByDate = functions.https.onCall(async (data) => {
       const bookings = byRoom[roomId] || [];
       let overlapping = 0;
       bookings.forEach((b) => { if (hasTimeConflict(t, tEnd, b.startTime, b.endTime)) overlapping += 1; });
-      const remain = Math.max((cfg.inventory || 0) - overlapping, 0);
+      const reserved = reservedSlotsForWindow(roomId, date, t, tEnd);
+      const remain = Math.max((cfg.inventory || 0) - overlapping - reserved, 0);
       availability[t][roomId] = remain;
     });
   });
@@ -700,6 +1001,10 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
     );
   }
 
+  if (duration > 3) {
+    throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
+  }
+
   const bookingRef = db.collection('bookings').doc(bookingId);
   const bookingSnap = await bookingRef.get();
   if (!bookingSnap.exists) {
@@ -725,14 +1030,10 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
   }
 
   const newStart = combineDateTime(newDate, newStartTime);
-  if (newStart.getTime() - Date.now() < MIN_ADVANCE_HOURS * HOURS_TO_MS) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      `New booking times must be at least ${MIN_ADVANCE_HOURS} hours from now.`,
-    );
-  }
+  ensureNotInPast(newDate, newStartTime);
 
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
+  ensureWithinBusinessHours(newStartTime, endTime);
   const targetRoomId = requestedRoomId || booking.roomId;
 
   const normalizedCustomerInfo = customerInfo
@@ -785,7 +1086,7 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
         ? requestedPartySize
         : (currentData.partySize ?? null),
       customerInfo: normalizedCustomerInfo,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     if (Number.isFinite(totalCost)) {
@@ -831,9 +1132,7 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
  * the specified booking, issues a refund, and updates Firestore.
  */
 exports.cancelBooking = functions.https.onCall(async (data, context) => {
-  if (!context.auth || !context.auth.token || context.auth.token.admin !== true) {
-    throw new functions.https.HttpsError('permission-denied', 'Only admins can cancel bookings');
-  }
+  requireAdmin(context);
   const { bookingId } = data;
   if (!bookingId) {
     throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
@@ -850,9 +1149,7 @@ exports.cancelBooking = functions.https.onCall(async (data, context) => {
  * date and time. It returns the ID of the new booking.
  */
 exports.rebookBooking = functions.https.onCall(async (data, context) => {
-  if (!context.auth || !context.auth.token || context.auth.token.admin !== true) {
-    throw new functions.https.HttpsError('permission-denied', 'Only admins can rebook bookings');
-  }
+  requireAdmin(context);
   const { bookingId, newDate, newStartTime, newDuration, newTotalCost, newDepositAmount } = data;
   if (!bookingId || !newDate || !newStartTime || !newDuration) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required rebooking fields');
@@ -915,10 +1212,62 @@ exports.confirmBooking = functions.https.onCall(async (data, context) => {
     status: 'confirmed',
     paymentStatus: intent.status,
     paymentIntentId: intent.id,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return { ok: true };
+});
+
+/**
+ * Callable: adminCaptureBySecret
+ *
+ * Captures an authorized PaymentIntent for a booking.
+ * Only callers with the admin custom claim can invoke this function.
+ */
+exports.adminCaptureBySecret = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
+  const { bookingId } = data || {};
+  if (!bookingId) {
+    throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
+  }
+
+  const ref = db.collection('bookings').doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Booking not found');
+  }
+  const booking = snap.data();
+  const intentId = booking.paymentIntentId;
+  if (!intentId) {
+    throw new functions.https.HttpsError('failed-precondition', 'No payment intent to capture');
+  }
+
+  let intent;
+  try {
+    intent = await stripe.paymentIntents.retrieve(intentId);
+  } catch (err) {
+    console.error('Retrieve PaymentIntent failed', err);
+    throw new functions.https.HttpsError('internal', 'Unable to retrieve payment');
+  }
+
+  if (intent.status !== 'requires_capture') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      `PaymentIntent not capturable (status: ${intent.status})`,
+    );
+  }
+
+  try {
+    const captured = await stripe.paymentIntents.capture(intentId);
+    await ref.update({
+      paymentStatus: captured.status,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return { ok: true, status: captured.status };
+  } catch (err) {
+    console.error('Capture PaymentIntent failed', err);
+    throw new functions.https.HttpsError('internal', 'Capture failed');
+  }
 });
 
 /**

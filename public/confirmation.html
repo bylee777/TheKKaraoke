@@ -141,6 +141,7 @@
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
@@ -148,6 +149,14 @@
 
     <script src="js/firebase-init.js"></script>
     <script src="js/app.js"></script>
+    <script>
+      // Global hourly time slots
+      if (window.app) {
+        window.app.timeSlots = [
+          '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00', '01:00', '02:00',
+        ];
+      }
+    </script>
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const appInstance = window.app;
@@ -168,6 +177,26 @@
         if (bookingData && bookingData.customer && bookingData.room) {
           appInstance.bookingData = bookingData;
           appInstance.showConfirmationPage();
+          // Inject customer's phone number into the confirmation details if available
+          try {
+            const phone = bookingData.customer && bookingData.customer.phone;
+            if (phone) {
+              const details = document.getElementById('confirmation-details');
+              if (details) {
+                const row = document.createElement('div');
+                row.className = 'summary-row';
+                row.innerHTML = '<span class="summary-label">Phone:</span>' +
+                                `<span class="summary-value">${phone}</span>`;
+                const emailRow = Array.from(details.querySelectorAll('.summary-row'))
+                  .find(el => (el.textContent || '').trim().startsWith('Email:'));
+                if (emailRow && emailRow.nextSibling) {
+                  details.insertBefore(row, emailRow.nextSibling);
+                } else {
+                  details.appendChild(row);
+                }
+              }
+            }
+          } catch (_) {}
           return;
         }
 
