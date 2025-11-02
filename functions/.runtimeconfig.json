@@ -1,0 +1,11 @@
+{
+  "twilio": {
+    "notify_to": "+4379939941",
+    "auth_token": "3601a1f00114319f84d2af45807a3ee2",
+    "from": "+14352918041",
+    "account_sid": "ACb9e62a589ab970cb675814fa847079b2"
+  },
+  "google": {
+    "api_key": "AIzaSyBAlQmkR9MMjfKXofeuBBodzmZ5Gq20NO4"
+  }
+}

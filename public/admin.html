@@ -59,12 +59,12 @@
               <p>Secure login for Barjunko staff</p>
               <form id="admin-login-form">
                 <div class="form-group">
-                  <label class="form-label">Username</label>
-                  <input type="text" id="admin-username" class="form-control" required />
+                  <label class="form-label">Staff Email</label>
+                  <input type="email" id="admin-email" class="form-control" autocomplete="email" required />
                 </div>
                 <div class="form-group">
                   <label class="form-label">Password</label>
-                  <input type="password" id="admin-password" class="form-control" required />
+                  <input type="password" id="admin-password" class="form-control" autocomplete="current-password" required />
                 </div>
                 <button type="submit" class="btn btn--primary btn--full-width">
                   <i class="fas fa-sign-in-alt"></i>
@@ -72,17 +72,23 @@
                 </button>
               </form>
               <div class="login-hint">
-                <small>Demo: admin / Barjunko123</small>
+                <small>Sign in with your Firebase staff account.</small>
               </div>
             </div>
           </div>
           <div class="admin-dashboard hidden" id="admin-dashboard">
             <div class="dashboard-header">
               <h1 class="page-title">Admin <span class="neon-text">Dashboard</span></h1>
-              <button class="btn btn--outline" id="admin-logout">
-                <i class="fas fa-sign-out-alt"></i>
-                Logout
-              </button>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn--secondary" id="admin-modifier" title="Create a manual booking">
+                  <i class="fas fa-plus"></i>
+                  New Booking
+                </button>
+                <button class="btn btn--outline" id="admin-logout">
+                  <i class="fas fa-sign-out-alt"></i>
+                  Logout
+                </button>
+              </div>
             </div>
             <div class="dashboard-stats">
               <div class="stat-card">
@@ -124,7 +130,7 @@
             </div>
             <div class="dashboard-content">
               <div class="availability-table">
-                <h2>Room Availability</h2>
+                <h2>Daily Schedule</h2>
                 <div id="admin-availability-grid"></div>
               </div>
               <div class="bookings-table">
@@ -143,6 +149,7 @@
                         <th>Customer</th>
                         <th>Room</th>
                         <th>Date/Time</th>
+                        <th>Guests</th>
                         <th>Status</th>
                         <th>Actions</th>
                       </tr>
@@ -201,8 +208,155 @@
         </div>
       </div>
     </div>
+    
+    <!-- Admin Modifier Modal -->
+    <div class="modal hidden" id="admin-modifier-modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Manual Booking</h3>
+          <button class="modal-close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="admin-modifier-form">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Booking ID (optional)</label>
+                <input type="text" id="mod-booking-id" class="form-control" placeholder="BJ001" />
+                <small class="form-hint">Leave blank to create a new booking.</small>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Room</label>
+                <select id="mod-room-id" class="form-control" required>
+                  <option value="">Select room</option>
+                  <option value="small">Small</option>
+                  <option value="medium">Medium</option>
+                  <option value="large">Large</option>
+                  <option value="extra-large">Extra Large</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Date</label>
+                <input type="date" id="mod-date" class="form-control" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Start Time</label>
+                <input type="time" id="mod-start-time" class="form-control" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Duration (hours)</label>
+                <input type="number" id="mod-duration" class="form-control" min="1" step="1" value="1" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Party Size</label>
+                <input type="number" id="mod-party-size" class="form-control" min="1" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">First Name</label>
+                <input type="text" id="mod-first-name" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Last Name</label>
+                <input type="text" id="mod-last-name" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" id="mod-email" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Phone</label>
+                <input type="tel" id="mod-phone" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Total Cost (CAD)</label>
+                <input type="number" id="mod-total-cost" class="form-control" min="0" step="0.01" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Deposit Amount (CAD)</label>
+                <input type="number" id="mod-deposit" class="form-control" min="0" step="0.01" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Status</label>
+                <select id="mod-status" class="form-control">
+                  <option value="">(unchanged / default confirmed)</option>
+                  <option value="pending">pending</option>
+                  <option value="confirmed">confirmed</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer" style="margin-top: 12px;">
+              <button type="submit" class="btn btn--primary">
+                <i class="fas fa-save"></i>
+                Save
+              </button>
+              <button type="button" class="btn btn--outline modal-close">Close</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Reschedule Modal -->
+    <div class="modal hidden" id="admin-reschedule-modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Modify Booking</h3>
+          <button class="modal-close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="admin-reschedule-form">
+            <input type="hidden" id="resched-booking-id" />
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Booking ID</label>
+                <input type="text" id="resched-booking-code" class="form-control" readonly />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Room</label>
+                <input type="text" id="resched-room" class="form-control" readonly />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Date</label>
+                <input type="date" id="resched-date" class="form-control" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Start Time</label>
+                <select id="resched-start" class="form-control" required></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Duration</label>
+                <select id="resched-duration" class="form-control" required>
+                  <option value="1">1 hour</option>
+                  <option value="2">2 hours</option>
+                  <option value="3">3 hours</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Availability</label>
+              <div id="resched-status" style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Select a new date and time.</div>
+            </div>
+            <div class="modal-footer" style="margin-top: 12px;">
+              <button type="submit" class="btn btn--primary" id="resched-submit" disabled>
+                <i class="fas fa-save"></i>
+                Save Changes
+              </button>
+              <button type="button" class="btn btn--outline" id="resched-cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <!-- Firebase & Stripe SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
@@ -214,8 +368,287 @@
     <!-- Your app code (must come AFTER the SDKs + initializer) -->
     <script src="js/app.js"></script>
     <script>
+      // Global hourly time slots
+      if (window.app) {
+        window.app.timeSlots = [
+          '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00', '01:00', '02:00',
+        ];
+      }
       window.app.currentPage = 'admin';
       window.app.init();
+    </script>
+    <script>
+      // Inject a capture (checkmark) button into each booking row and handle capture clicks
+      (function () {
+        function injectCaptureButtons() {
+          const tbody = document.getElementById('bookings-table-body');
+          if (!tbody) return;
+
+          tbody.querySelectorAll('tr').forEach((row) => {
+            const idCell = row.querySelector('td');
+            const actions = row.querySelector('.table-actions');
+            if (!idCell || !actions) return;
+            const bookingId = (idCell.textContent || '').trim();
+
+            // Avoid duplicate buttons
+            if (actions.querySelector('[data-action="admin-capture"]')) return;
+
+            const btn = document.createElement('button');
+            btn.className = 'btn btn--table btn--primary';
+            btn.setAttribute('data-action', 'admin-capture');
+            btn.setAttribute('data-id', bookingId);
+            btn.setAttribute('title', 'Capture Payment');
+            btn.innerHTML = '<i class="fas fa-check"></i>';
+            actions.prepend(btn);
+
+            // Fetch payment status to enable/disable capture button
+            try {
+              if (window.firestore) {
+                window.firestore
+                  .collection('bookings')
+                  .doc(bookingId)
+                  .get()
+                  .then((doc) => {
+                    const data = doc && doc.exists ? doc.data() : null;
+                    const status = data && data.paymentStatus ? String(data.paymentStatus) : '';
+                    if (status !== 'requires_capture') {
+                      btn.disabled = true;
+                      btn.title = status ? `Payment status: ${status}` : 'Not capturable';
+                    }
+                  })
+                  .catch(() => {
+                    // leave button enabled; server will enforce
+                  });
+              }
+            } catch (_) {}
+          });
+
+          // Delegate click handling once
+          if (!tbody.__captureBound) {
+            tbody.__captureBound = true;
+            tbody.addEventListener('click', async (e) => {
+              const btn = e.target.closest('[data-action="admin-capture"]');
+              if (!btn) return;
+              const bookingId = btn.getAttribute('data-id');
+              if (!bookingId) return;
+              try {
+                if (window.app && window.app.showLoading) window.app.showLoading('Capturing payment...');
+                const fn = window.firebaseFunctions.httpsCallable('adminCaptureBySecret');
+                await fn({ bookingId });
+                if (window.app && window.app.hideLoading) window.app.hideLoading();
+                if (window.app && window.app.showNotification) window.app.showNotification('Payment captured', 'success');
+                // Reload the admin table to reflect new status
+                if (window.app && window.app.adminFetchForSelectedDate) window.app.adminFetchForSelectedDate();
+              } catch (err) {
+                if (window.app && window.app.hideLoading) window.app.hideLoading();
+                if (window.app && window.app.showError) window.app.showError(err.message || 'Capture failed');
+              }
+            });
+          }
+        }
+
+        // Patch render method to inject buttons after rows render
+        if (window.app) {
+          const original = window.app.renderAdminBookingsTable && window.app.renderAdminBookingsTable.bind(window.app);
+          if (original) {
+            window.app.renderAdminBookingsTable = function (bookings) {
+              original(bookings);
+              // Slight delay to ensure DOM is updated
+              setTimeout(() => {
+                injectCaptureButtons();
+                try {
+                  if (Array.isArray(bookings)) {
+                    const byId = Object.fromEntries(bookings.map(b => [b.id, b]));
+                    const tbody = document.getElementById('bookings-table-body');
+                    if (tbody) {
+                      tbody.querySelectorAll('tr').forEach(row => {
+                        const cells = row.querySelectorAll('td');
+                        if (cells.length >= 2) {
+                          const id = (cells[0].textContent || '').trim();
+                          const data = byId[id];
+                          if (!data) return;
+                          // Phone line under email
+                          const phone = data.customer && data.customer.phone;
+                          if (phone && !cells[1].querySelector('[data-field="phone"]')) {
+                            const div = document.createElement('div');
+                            div.setAttribute('data-field', 'phone');
+                            div.style.fontSize = 'var(--font-size-sm)';
+                            div.style.color = 'var(--color-text-secondary)';
+                            div.textContent = phone;
+                            cells[1].appendChild(div);
+                          }
+                        }
+                      });
+                    }
+                  }
+                } catch (_) {}
+              }, 0);
+            };
+          } else {
+            // Fallback if method not present yet
+            document.addEventListener('DOMContentLoaded', () => setTimeout(injectCaptureButtons, 250));
+          }
+        } else {
+          document.addEventListener('DOMContentLoaded', () => setTimeout(injectCaptureButtons, 250));
+        }
+      })();
+    </script>
+    <script>
+      // Admin Modifier: create/update bookings without restrictions
+      (function () {
+        function qs(id) {
+          return document.getElementById(id);
+        }
+
+        function resetForm() {
+          [
+            'mod-booking-id',
+            'mod-room-id',
+            'mod-date',
+            'mod-start-time',
+            'mod-duration',
+            'mod-party-size',
+            'mod-first-name',
+            'mod-last-name',
+            'mod-email',
+            'mod-phone',
+            'mod-total-cost',
+            'mod-deposit',
+            'mod-status',
+          ].forEach((id) => {
+            const el = qs(id);
+            if (!el) return;
+            if (el.tagName === 'SELECT') {
+              el.value = '';
+            } else {
+              el.value = '';
+            }
+          });
+          const dur = qs('mod-duration');
+          if (dur) dur.value = '1';
+        }
+
+        async function prefillFromBooking(bookingId) {
+          if (!bookingId || !window.firestore) return;
+          try {
+            const snap = await window.firestore.collection('bookings').doc(bookingId).get();
+            if (!snap.exists) return;
+            const b = snap.data() || {};
+            const setters = {
+              'mod-room-id': b.roomId || '',
+              'mod-date': b.date || '',
+              'mod-start-time': b.startTime || '',
+              'mod-duration': b.duration || '',
+              'mod-party-size': b.partySize || '',
+              'mod-first-name': b.customerInfo?.firstName || '',
+              'mod-last-name': b.customerInfo?.lastName || '',
+              'mod-email': b.customerInfo?.email || '',
+              'mod-phone': b.customerInfo?.phone || '',
+              'mod-total-cost': b.totalCost || '',
+              'mod-deposit': b.depositAmount || '',
+              'mod-status': b.status || '',
+            };
+            Object.entries(setters).forEach(([id, value]) => {
+              const el = qs(id);
+              if (!el) return;
+              if (value === undefined || value === null) return;
+              el.value = value;
+            });
+          } catch (err) {
+            console.warn('Unable to prefill booking', err);
+          }
+        }
+
+        async function openModifier(bookingId) {
+          resetForm();
+          if (bookingId) {
+            const idEl = qs('mod-booking-id');
+            if (idEl) idEl.value = bookingId;
+            await prefillFromBooking(bookingId);
+          }
+          const modalId = 'admin-modifier-modal';
+          if (window.app && window.app.showModal) {
+            window.app.showModal(modalId);
+          } else {
+            const modal = qs(modalId);
+            if (modal) modal.classList.add('show');
+          }
+        }
+
+        function bindUI() {
+          const openBtn = document.getElementById('admin-modifier');
+          if (openBtn && !openBtn.__bound) {
+            openBtn.__bound = true;
+            openBtn.addEventListener('click', () => openModifier(''));
+          }
+
+          const form = document.getElementById('admin-modifier-form');
+          if (form && !form.__bound) {
+            form.__bound = true;
+            form.addEventListener('submit', async (e) => {
+              e.preventDefault();
+              try {
+                if (!window.firebaseFunctions) throw new Error('Functions not available');
+                if (window.app && window.app.showLoading) window.app.showLoading('Saving booking...');
+                const payload = {};
+                const id = qs('mod-booking-id')?.value.trim();
+                if (id) payload.bookingId = id;
+                const roomId = qs('mod-room-id')?.value;
+                if (roomId) payload.roomId = roomId;
+                const date = qs('mod-date')?.value;
+                if (date) payload.date = date;
+                const startTime = qs('mod-start-time')?.value;
+                if (startTime) payload.startTime = startTime;
+                const duration = Number(qs('mod-duration')?.value);
+                if (Number.isFinite(duration)) payload.duration = duration;
+                const partySize = Number(qs('mod-party-size')?.value);
+                if (Number.isFinite(partySize)) payload.partySize = partySize;
+                const firstName = qs('mod-first-name')?.value || '';
+                const lastName = qs('mod-last-name')?.value || '';
+                const email = (qs('mod-email')?.value || '').trim();
+                const phone = qs('mod-phone')?.value || '';
+                const totalCost = Number(qs('mod-total-cost')?.value);
+                if (Number.isFinite(totalCost)) payload.totalCost = totalCost;
+                const depositAmount = Number(qs('mod-deposit')?.value);
+                if (Number.isFinite(depositAmount)) payload.depositAmount = depositAmount;
+                const statusSel = qs('mod-status')?.value;
+                if (statusSel) payload.status = statusSel;
+                payload.customerInfo = { firstName, lastName, email, phone };
+
+                const fn = window.firebaseFunctions.httpsCallable('adminUpsertBySecret');
+                await fn(payload);
+                if (window.app && window.app.hideLoading) window.app.hideLoading();
+                if (window.app && window.app.hideModal) window.app.hideModal();
+                if (window.app && window.app.showNotification) window.app.showNotification('Saved', 'success');
+                if (window.app && window.app.adminFetchForSelectedDate) window.app.adminFetchForSelectedDate();
+              } catch (err) {
+                if (window.app && window.app.hideLoading) window.app.hideLoading();
+                if (window.app && window.app.showError) window.app.showError(err.message || 'Save failed');
+              }
+            });
+          }
+
+          const bookingIdInput = qs('mod-booking-id');
+          if (bookingIdInput && !bookingIdInput.__bound) {
+            bookingIdInput.__bound = true;
+            bookingIdInput.addEventListener('change', async () => {
+              const id = bookingIdInput.value.trim();
+              resetForm();
+              if (!id) {
+                bookingIdInput.value = '';
+                return;
+              }
+              bookingIdInput.value = id;
+              await prefillFromBooking(id);
+            });
+          }
+        }
+
+        bindUI();
+        if (!window.app) {
+          document.addEventListener('DOMContentLoaded', bindUI);
+        }
+      })();
     </script>
   </body>
 </html>
