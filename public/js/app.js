@@ -84,6 +84,12 @@ class BarjunkoApp {
           'Song library 50k+',
           'Comfortable seating',
         ],
+        photos: [
+          'small/KakaoTalk_Photo_2025-11-04-20-57-23 001.jpeg',
+          'small/KakaoTalk_Photo_2025-11-04-20-57-23 002.jpeg',
+          'small/KakaoTalk_Photo_2025-11-04-20-57-23 003.jpeg',
+          'small/KakaoTalk_Photo_2025-11-04-20-57-26 004.jpeg',
+        ],
       },
       {
         id: 'medium',
@@ -103,6 +109,12 @@ class BarjunkoApp {
           'Party seating',
           'Mini fridge',
         ],
+        photos: [
+          'medium/KakaoTalk_Photo_2025-11-04-20-56-39 001.jpeg',
+          'medium/KakaoTalk_Photo_2025-11-04-20-56-40 002.jpeg',
+          'medium/KakaoTalk_Photo_2025-11-04-20-56-43 003.jpeg',
+          'medium/KakaoTalk_Photo_2025-11-04-20-56-46 004.jpeg',
+        ],
       },
       {
         id: 'large',
@@ -121,6 +133,9 @@ class BarjunkoApp {
           'Song library 50k+',
           'VIP seating',
           'Full bar service',
+        ],
+        photos: [
+          'large.jpeg',
         ],
       },
       {
@@ -146,6 +161,9 @@ class BarjunkoApp {
           'Full bar service',
           'Dance floor',
           'Includes required $100 house vodka or tequila purchase',
+        ],
+        photos: [
+          'xlarge.jpeg',
         ],
       },
     ];
@@ -462,33 +480,131 @@ class BarjunkoApp {
     roomsGrid.innerHTML = '';
 
     this.rooms.forEach((room) => {
+      const photoPaths = Array.isArray(room.photos) ? room.photos : [];
+      const hasPhotos = photoPaths.length > 0;
       const roomCard = document.createElement('div');
       roomCard.className = 'room-card';
+      let galleryMarkup;
+
+      if (hasPhotos) {
+        galleryMarkup = `
+          <div class="room-gallery" data-room="${room.id}">
+            <div class="room-gallery__stage">
+              <button type="button" class="room-gallery__nav room-gallery__nav--prev" aria-label="Previous photo"${photoPaths.length === 1 ? ' disabled' : ''}>
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <img src="${encodeURI(photoPaths[0])}" alt="${room.name} photo 1" class="room-gallery__image" loading="lazy" />
+              <button type="button" class="room-gallery__nav room-gallery__nav--next" aria-label="Next photo"${photoPaths.length === 1 ? ' disabled' : ''}>
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+            <div class="room-gallery__thumbnails">
+              ${photoPaths
+                .map(
+                  (photo, idx) => `
+                <button
+                  type="button"
+                  class="room-gallery__thumb${idx === 0 ? ' is-active' : ''}"
+                  data-index="${idx}"
+                  aria-label="Show ${room.name} photo ${idx + 1}"
+                  aria-pressed="${idx === 0 ? 'true' : 'false'}"
+                >
+                  <img src="${encodeURI(photo)}" alt="${room.name} thumbnail ${idx + 1}" loading="lazy" />
+                </button>
+              `,
+                )
+                .join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        galleryMarkup = `
+          <div class="room-gallery room-gallery--empty">
+            <div class="room-gallery__stage">
+              <div class="room-gallery__placeholder">
+                <i class="fas fa-microphone"></i>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       roomCard.innerHTML = `
-                <div class="room-image">
-                    <i class="fas fa-microphone"></i>
-                </div>
-                <div class="room-content">
-                    <div class="room-header">
-                        <h3 class="room-title">${room.name}</h3>
-                        <div class="room-price">$${room.hourlyRate}/hr</div>
-                    </div>
-                    <div class="room-capacity">
-                        <i class="fas fa-users"></i>
-                        ${room.capacity}
-                    </div>
-                    <ul class="room-features">
-                        ${room.features.map((feature) => `<li>${feature}</li>`).join('')}
-                    </ul>
-                    <button class="btn btn--primary btn--full-width" data-page="booking">
-                        <i class="fas fa-calendar-plus"></i>
-                        Book This Room
-                    </button>
-                </div>
-            `;
+        ${galleryMarkup}
+        <div class="room-content">
+          <div class="room-header">
+            <h3 class="room-title">${room.name}</h3>
+            <div class="room-price">$${room.hourlyRate}/hr</div>
+          </div>
+          <div class="room-capacity">
+            <i class="fas fa-users"></i>
+            ${room.capacity}
+          </div>
+          <ul class="room-features">
+            ${room.features.map((feature) => `<li>${feature}</li>`).join('')}
+          </ul>
+          <button class="btn btn--primary btn--full-width" data-page="booking">
+            <i class="fas fa-calendar-plus"></i>
+            Book This Room
+          </button>
+        </div>
+      `;
 
       roomsGrid.appendChild(roomCard);
+      if (hasPhotos) {
+        this.attachRoomGalleryHandlers(roomCard, room);
+      }
     });
+  }
+
+  attachRoomGalleryHandlers(roomCard, room) {
+    const photoPaths = Array.isArray(room.photos) ? room.photos : [];
+    if (!photoPaths.length) return;
+
+    const mainImg = roomCard.querySelector('.room-gallery__image');
+    if (!mainImg) return;
+
+    const prevBtn = roomCard.querySelector('.room-gallery__nav--prev');
+    const nextBtn = roomCard.querySelector('.room-gallery__nav--next');
+    const thumbButtons = Array.from(roomCard.querySelectorAll('.room-gallery__thumb'));
+
+    let currentIndex = 0;
+
+    const updateImage = (index) => {
+      currentIndex = Math.max(0, Math.min(index, photoPaths.length - 1));
+      const src = encodeURI(photoPaths[currentIndex]);
+      mainImg.src = src;
+      mainImg.setAttribute('alt', `${room.name} photo ${currentIndex + 1}`);
+
+      thumbButtons.forEach((btn, idx) => {
+        const isActive = idx === currentIndex;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+
+      if (prevBtn) prevBtn.disabled = currentIndex === 0;
+      if (nextBtn) nextBtn.disabled = currentIndex === photoPaths.length - 1;
+    };
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        updateImage(currentIndex - 1);
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        updateImage(currentIndex + 1);
+      });
+    }
+
+    thumbButtons.forEach((btn, idx) => {
+      btn.addEventListener('click', () => {
+        updateImage(idx);
+      });
+    });
+
+    updateImage(0);
   }
 
   renderTestimonials() {
@@ -870,6 +986,27 @@ class BarjunkoApp {
     const period = hours >= 12 ? 'PM' : 'AM';
     const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
     return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  }
+
+  formatPaymentStatus(status) {
+    const value = typeof status === 'string' ? status.trim().toLowerCase() : '';
+    switch (value) {
+      case '':
+        return 'Pending';
+      case 'requires_capture':
+        return 'Authorized - needs capture';
+      case 'succeeded':
+        return 'Captured';
+      case 'processing':
+        return 'Processing';
+      case 'canceled':
+      case 'cancelled':
+        return 'Canceled';
+      default: {
+        const cleaned = value.replace(/_/g, ' ').trim();
+        return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+      }
+    }
   }
 
   previousMonth() {
@@ -3197,11 +3334,25 @@ class BarjunkoApp {
 
       const row = document.createElement('tr');
       row.dataset.bookingId = booking.id;
+      row.dataset.paymentStatus = booking.paymentStatus || '';
       row.classList.add('admin-booking-row');
       row.tabIndex = 0;
       const startDisplay = `${new Date(booking.date).toLocaleDateString()} ${this.formatTime(booking.startTime)}`;
       const status = booking.status || 'pending';
-      const customerName = booking.customerInfo ? `${booking.customerInfo.firstName || ''} ${booking.customerInfo.lastName || ''}`.trim() : '';
+      const paymentStatusRaw = booking.paymentStatus || '';
+      const paymentStatus = paymentStatusRaw.toLowerCase();
+      const paymentLabel = `Payment: ${this.formatPaymentStatus(paymentStatusRaw)}`;
+      const paymentStatusClass =
+        paymentStatus === 'succeeded'
+          ? ' is-success'
+          : paymentStatus === 'requires_capture' || paymentStatus === 'processing'
+            ? ' is-warning'
+            : paymentStatus === 'canceled'
+              ? ' is-error'
+              : '';
+      const customerName = booking.customerInfo
+        ? `${booking.customerInfo.firstName || ''} ${booking.customerInfo.lastName || ''}`.trim()
+        : '';
       const customerEmail = booking.customerInfo?.email || '';
       const guestsDisplay = Number(booking.partySize) ? String(Number(booking.partySize)) : '-';
 
@@ -3223,7 +3374,10 @@ class BarjunkoApp {
           <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${booking.duration || 1}h</div>
         </td>
         <td data-field="guests">${guestsDisplay}</td>
-        <td><span class="status-badge status-badge--${status}">${status}</span></td>
+        <td>
+          <span class="status-badge status-badge--${status}">${status}</span>
+          <div class="table-hint table-hint--payment${paymentStatusClass}">${paymentLabel}</div>
+        </td>
         <td>
           <div class="table-actions">
             ${canCancel ? `<button class="btn btn--table btn--outline" data-action="admin-cancel" data-id="${booking.id}"><i class="fas fa-times"></i></button>` : ''}
@@ -3680,11 +3834,6 @@ window.addEventListener('error', (e) => {
     app.showError('An unexpected error occurred. Please refresh the page and try again.');
   }
 });
-
-
-
-
-
 
 
 

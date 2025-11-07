@@ -3,3 +3,4 @@
 .env.*
 !.env.example
 barjunko-admin.json
+node_modules

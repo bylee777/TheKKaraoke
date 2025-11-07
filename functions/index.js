@@ -133,6 +133,8 @@ function sanitizeBookingSnapshot(doc) {
     endTime: booking.endTime,
     duration: booking.duration,
     status: booking.status,
+    paymentStatus: booking.paymentStatus || null,
+    paymentIntentId: booking.paymentIntentId || null,
     totalCost: booking.totalCost ?? null,
     depositAmount: booking.depositAmount ?? null,
     remainingBalance: booking.remainingBalance ?? null,

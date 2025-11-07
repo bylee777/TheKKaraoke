@@ -385,13 +385,30 @@
           if (!tbody) return;
 
           tbody.querySelectorAll('tr').forEach((row) => {
-            const idCell = row.querySelector('td');
             const actions = row.querySelector('.table-actions');
-            if (!idCell || !actions) return;
-            const bookingId = (idCell.textContent || '').trim();
+            if (!actions) return;
+            const datasetId = row.dataset ? row.dataset.bookingId : '';
+            const idCell = row.querySelector('td');
+            const textId =
+              idCell && idCell.querySelector('div')
+                ? (idCell.querySelector('div').textContent || '').trim()
+                : '';
+            const bookingId = datasetId || textId;
+            if (!bookingId) return;
+
+            const datasetStatusRaw =
+              row.dataset && typeof row.dataset.paymentStatus === 'string'
+                ? row.dataset.paymentStatus
+                : '';
+            const paymentStatus = datasetStatusRaw.toLowerCase();
+            const existingBtn = actions.querySelector('[data-action="admin-capture"]');
+            if (paymentStatus !== 'requires_capture') {
+              if (existingBtn) existingBtn.remove();
+              return;
+            }
 
             // Avoid duplicate buttons
-            if (actions.querySelector('[data-action="admin-capture"]')) return;
+            if (existingBtn) return;
 
             const btn = document.createElement('button');
             btn.className = 'btn btn--table btn--primary';
@@ -410,10 +427,17 @@
                   .get()
                   .then((doc) => {
                     const data = doc && doc.exists ? doc.data() : null;
-                    const status = data && data.paymentStatus ? String(data.paymentStatus) : '';
-                    if (status !== 'requires_capture') {
+                    const statusRaw = data && data.paymentStatus ? String(data.paymentStatus) : '';
+                    const statusNorm = statusRaw.toLowerCase();
+                    row.dataset.paymentStatus = statusRaw;
+                    if (statusNorm !== 'requires_capture') {
+                      const formattedStatus =
+                        window.app && typeof window.app.formatPaymentStatus === 'function'
+                          ? window.app.formatPaymentStatus(statusRaw)
+                          : (statusRaw || 'Not capturable').replace(/_/g, ' ');
                       btn.disabled = true;
-                      btn.title = status ? `Payment status: ${status}` : 'Not capturable';
+                      btn.title = formattedStatus ? `Payment status: ${formattedStatus}` : 'Not capturable';
+                      btn.remove();
                     }
                   })
                   .catch(() => {
