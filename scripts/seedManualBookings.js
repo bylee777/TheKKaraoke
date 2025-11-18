@@ -28,6 +28,29 @@ admin.initializeApp({
 const db = admin.firestore();
 const { FieldValue } = admin.firestore;
 
+function shiftDate(dateStr, days) {
+  const base = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return dateStr;
+  base.setDate(base.getDate() + Number(days || 0));
+  const year = base.getFullYear();
+  const month = String(base.getMonth() + 1).padStart(2, '0');
+  const day = String(base.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function determineBusinessDate(dateStr, startTime) {
+  const [hours] = String(startTime || '')
+    .split(':')
+    .map((part) => Number(part));
+  if (!Number.isFinite(hours)) {
+    return dateStr;
+  }
+  if (hours < 12) {
+    return shiftDate(dateStr, -1);
+  }
+  return dateStr;
+}
+
 const ROOM_MAP = {
   S: 'small',
   M: 'medium',
@@ -236,6 +259,7 @@ async function seed() {
     }
     const startTime = normalizeTime(entry.startTime);
     const endTime = computeEndTime(startTime, entry.durationHours);
+    const businessDate = determineBusinessDate(entry.date, startTime);
     const [firstName, ...restName] = entry.name.trim().split(/\s+/);
     const lastName = restName.join(' ');
     const emailSlug = entry.name.replace(/\s+/g, '.').toLowerCase();
@@ -256,6 +280,7 @@ async function seed() {
         email: `seed+${emailSlug}@barzunko.test`,
         phone: entry.phone,
       },
+      businessDate,
       paymentIntentId: null,
       paymentStatus: 'succeeded',
       calendarEventId: null,

@@ -64,6 +64,7 @@ class BarzunkoApp {
     this.currentStaffUser = null;
     this.staffDashboardInitialized = false;
     this.staffSelectedDate = null;
+    this.adminAutoAdvanceTimer = null;
 
     this.currentDate = new Date();
     this.adminSelectedDate = null;
@@ -3092,6 +3093,7 @@ class BarzunkoApp {
   }
 
   adminShowLoginForm() {
+    this.adminStopAutoAdvanceTimer();
     const loginForm = document.getElementById('admin-login');
     const dashboard = document.getElementById('admin-dashboard');
     const emailEl =
@@ -3411,6 +3413,36 @@ class BarzunkoApp {
     this.adminBindDateControls();
     this.adminRenderDateLabel();
     this.adminFetchForSelectedDate();
+    this.adminStartAutoAdvanceTimer();
+  }
+
+  adminStartAutoAdvanceTimer() {
+    this.adminStopAutoAdvanceTimer();
+    this.adminAutoAdvanceTimer = window.setInterval(() => {
+      this.adminAutoAdvanceDateIfNeeded();
+    }, 60 * 1000);
+  }
+
+  adminStopAutoAdvanceTimer() {
+    if (this.adminAutoAdvanceTimer) {
+      clearInterval(this.adminAutoAdvanceTimer);
+      this.adminAutoAdvanceTimer = null;
+    }
+  }
+
+  adminAutoAdvanceDateIfNeeded() {
+    const todayStr = this.adminFormatYMD(new Date());
+    if (!this.adminSelectedDate) {
+      this.adminSelectedDate = todayStr;
+      this.adminRenderDateLabel();
+      this.adminFetchForSelectedDate();
+      return;
+    }
+    if (this.adminSelectedDate < todayStr) {
+      this.adminSelectedDate = todayStr;
+      this.adminRenderDateLabel();
+      this.adminFetchForSelectedDate();
+    }
   }
 
   adminBindModifierModal() {
@@ -3851,14 +3883,14 @@ class BarzunkoApp {
       return assignments;
     }
 
-    const normalizedBookings = bookings.map((booking) => ({
-      ...booking,
-      roomId: this.normalizeRoomId(booking.roomId),
-    }));
-
-    const assignableBookings = normalizedBookings.filter(
-      (booking) => (booking.status || '').toLowerCase() !== 'cancelled',
-    );
+    const assignableBookings = bookings
+      .map((booking) => ({
+        ...booking,
+        roomId: this.normalizeRoomId(booking.roomId),
+      }))
+      .filter(
+        (booking) => (booking.status || '').toLowerCase() !== 'cancelled',
+      );
 
     this.adminEnsureColumnsFromBookings(assignableBookings);
 
@@ -3866,13 +3898,24 @@ class BarzunkoApp {
       assignments[col.id] = [];
     });
 
-    const sorted = [...assignableBookings].sort(
-      (a, b) =>
-        (this.toBusinessRelativeMinutes(a.startTime) || 0) -
-        (this.toBusinessRelativeMinutes(b.startTime) || 0),
-    );
+    const bookingsWithRanges = assignableBookings
+      .map((booking) => {
+        const rawEnd =
+          booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
+        const range = this.adminNormalizeBookingRange(booking.startTime, rawEnd);
+        if (!range) return null;
+        return {
+          booking,
+          startMinutes: range.startMinutes,
+          endMinutes: range.endMinutes,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.startMinutes - b.startMinutes);
 
-    sorted.forEach((booking) => {
+    bookingsWithRanges.forEach((entry) => {
+      const booking = entry.booking;
+      const { startMinutes, endMinutes } = entry;
       const roomId = booking.roomId || this.normalizeRoomId(booking.roomId);
       let cols = (this.adminRoomColumnsByType && this.adminRoomColumnsByType[roomId]) || [];
       if (!cols.length) {
@@ -3884,11 +3927,6 @@ class BarzunkoApp {
           return;
         }
       }
-      const startMinutes = this.toBusinessRelativeMinutes(booking.startTime);
-      const rawEnd =
-        booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
-      const endMinutes = this.toBusinessRelativeMinutes(rawEnd);
-      if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) return;
       for (const col of cols) {
         if (!assignments[col.id]) assignments[col.id] = [];
         const list = assignments[col.id];
@@ -3917,6 +3955,16 @@ class BarzunkoApp {
     return `${hh}:${mm}`;
   }
 
+  adminNormalizeBookingRange(startTime, endTime) {
+    const start = this.timeStringToMinutes(startTime);
+    let end = this.timeStringToMinutes(endTime);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    if (end <= start) {
+      end += 24 * 60;
+    }
+    return { startMinutes: start, endMinutes: end };
+  }
+
   adminBuildGridTimes(times) {
     const increment = this.adminScheduleIncrementMinutes || 30;
     const dateStr =
@@ -3924,28 +3972,25 @@ class BarzunkoApp {
       this.staffSelectedDate ||
       this.selectedDate ||
       this.adminFormatYMD(new Date());
-    const schedule = this.getBusinessScheduleForDate(dateStr) || {
-      openMinutes: 18 * 60,
-      closeMinutes: 26 * 60,
-    };
     this.applyBusinessHoursForDate(dateStr);
-
-    const openMinutes = schedule.openMinutes;
-    const closeMinutes = schedule.closeMinutes;
-
+    const segments = this.getActualDaySegments(dateStr);
     const rows = [];
-    for (let cursor = openMinutes; cursor < closeMinutes; cursor += increment) {
-      const rowEnd = Math.min(cursor + increment, closeMinutes);
-      const startStr = this.minutesToTimeString(cursor);
-      const endStr = this.minutesToTimeString(rowEnd);
-      rows.push({
-        start: startStr,
-        end: endStr,
-        startMinutes: this.toBusinessRelativeMinutes(startStr),
-        endMinutes: this.toBusinessRelativeMinutes(endStr),
-        label: this.adminFormatTimeRange(startStr, endStr),
-      });
-    }
+    segments.forEach((segment) => {
+      const start = Math.max(0, segment.startMinutes || 0);
+      const endLimit = segment.closeMinutes;
+      for (let cursor = start; cursor < endLimit; cursor += increment) {
+        const rowEnd = Math.min(cursor + increment, endLimit);
+        const startStr = this.minutesToTimeString(cursor);
+        const endStr = this.minutesToTimeString(rowEnd);
+        rows.push({
+          start: startStr,
+          end: endStr,
+          startMinutes: cursor,
+          endMinutes: rowEnd,
+          label: this.adminFormatTimeRange(startStr, endStr),
+        });
+      }
+    });
     return rows;
   }
 
@@ -4404,6 +4449,41 @@ class BarzunkoApp {
     return `${yyyy}-${mm}-${dd}`;
   }
 
+  shiftDate(dateStr, days) {
+    const base = this.parseDateFromYMD(dateStr);
+    if (!base || !Number.isFinite(days)) return dateStr;
+    base.setDate(base.getDate() + Number(days));
+    return this.formatDateToYMD(base);
+  }
+
+  getActualDaySegments(dateStr) {
+    const segments = [];
+    const schedule = this.getBusinessScheduleForDate(dateStr);
+    const prevDate = this.shiftDate(dateStr, -1);
+    const prevSchedule = prevDate ? this.getBusinessScheduleForDate(prevDate) : null;
+
+    if (prevSchedule && prevSchedule.closeMinutes > 24 * 60) {
+      segments.push({
+        type: 'carryover',
+        startMinutes: 0,
+        closeMinutes: prevSchedule.closeMinutes - 24 * 60,
+        businessDate: prevDate,
+      });
+    }
+
+    if (schedule) {
+      const startMinutes = Math.max(0, Math.min(schedule.openMinutes, 24 * 60));
+      segments.push({
+        type: 'current',
+        startMinutes,
+        closeMinutes: schedule.closeMinutes,
+        businessDate: dateStr,
+      });
+    }
+
+    return segments;
+  }
+
   normalizeDuration(value, fallback = 1) {
     const parsed = Number.parseFloat(value);
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -4440,17 +4520,27 @@ class BarzunkoApp {
 
   buildBusinessTimeConfig(dateStr) {
     const schedule = this.getBusinessScheduleForDate(dateStr);
+    const prevDate = this.shiftDate(dateStr, -1);
+    const prevSchedule = prevDate ? this.getBusinessScheduleForDate(prevDate) : null;
+    const carryoverMinutes =
+      prevSchedule && prevSchedule.closeMinutes > 24 * 60
+        ? prevSchedule.closeMinutes - 24 * 60
+        : 0;
     if (!schedule) {
       return {
         schedule: null,
         openMinutes: 18 * 60,
         closeMinutes: (24 + 2) * 60,
+        carryoverMinutes,
+        segments: this.getActualDaySegments(dateStr),
       };
     }
     return {
       schedule,
       openMinutes: schedule.openMinutes,
       closeMinutes: schedule.closeMinutes,
+      carryoverMinutes,
+      segments: this.getActualDaySegments(dateStr),
     };
   }
 
@@ -4500,8 +4590,8 @@ class BarzunkoApp {
       this.adminSelectedDate ||
       this.staffSelectedDate ||
       this.adminFormatYMD(new Date());
-    const schedule = this.getBusinessScheduleForDate(targetDate);
-    if (!schedule) return [];
+    const segments = this.getActualDaySegments(targetDate);
+    if (!segments.length) return [];
     const durationMinutes = Math.max(
       this.minBookingDurationMinutes,
       Math.round(Number(durationHours) * 60) || this.minBookingDurationMinutes,
@@ -4511,19 +4601,38 @@ class BarzunkoApp {
       Number.isFinite(customIncrement) && customIncrement > 0
         ? customIncrement
         : this.slotIncrementMinutes || 30;
-    const lastStart = schedule.closeMinutes - durationMinutes;
-    if (lastStart < schedule.openMinutes) {
-      return [];
-    }
     const slots = [];
-    for (let cursor = schedule.openMinutes; cursor <= lastStart; cursor += increment) {
-      slots.push(this.minutesToTimeString(cursor));
-    }
-    const finalSlot = this.minutesToTimeString(lastStart);
-    if (finalSlot && !slots.includes(finalSlot) && lastStart >= schedule.openMinutes) {
-      slots.push(finalSlot);
-    }
-    return slots;
+    const seen = new Set();
+
+    segments.forEach((segment) => {
+      const start = Math.max(0, segment.startMinutes || 0);
+      const dayLimit = segment.closeMinutes;
+      let latestStart = Math.min(segment.closeMinutes - durationMinutes, dayLimit);
+      if (!Number.isFinite(latestStart) || latestStart < start) {
+        return;
+      }
+      for (let cursor = start; cursor <= latestStart; cursor += increment) {
+        if (cursor < 0) continue;
+        const label = this.minutesToTimeString(cursor);
+        if (!seen.has(label)) {
+          seen.add(label);
+          slots.push({ minutes: cursor, label });
+        }
+      }
+
+      const needsFinalSlot = ((latestStart - start) % increment !== 0) && latestStart >= start;
+      if (needsFinalSlot) {
+        const label = this.minutesToTimeString(latestStart);
+        if (!seen.has(label)) {
+          seen.add(label);
+          slots.push({ minutes: latestStart, label });
+        }
+      }
+    });
+
+    return slots
+      .sort((a, b) => a.minutes - b.minutes)
+      .map((entry) => entry.label);
   }
 
   timeStringToMinutes(time) {
@@ -4574,27 +4683,25 @@ class BarzunkoApp {
     }
   }
 
-  toBusinessRelativeMinutes(time) {
-    if (!time) return null;
-    const parts = String(time).split(':');
-    if (parts.length !== 2) return null;
-    const h = Number(parts[0]);
-    const m = Number(parts[1]);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-    let total = h * 60 + m;
-    const base = this.businessTimeConfig?.openMinutes ?? 0;
-    if (total < base) total += 24 * 60;
-    return total;
-  }
-
   adminIsWithinBusinessHours(startTime, durationHours) {
-    const startMinutes = this.toBusinessRelativeMinutes(startTime);
+    const startMinutes = this.timeStringToMinutes(startTime);
     if (!Number.isFinite(startMinutes)) return false;
     const durationMinutes = Number(durationHours) * 60;
     if (!Number.isFinite(durationMinutes)) return false;
     const endMinutes = startMinutes + durationMinutes;
-    const { openMinutes, closeMinutes } = this.businessTimeConfig;
-    return startMinutes >= openMinutes && endMinutes <= closeMinutes;
+    const segments = this.businessTimeConfig?.segments || [];
+    return segments.some((segment) => {
+      if (segment.type === 'carryover') {
+        if (startMinutes < 0 || startMinutes >= segment.closeMinutes) {
+          return false;
+        }
+        return endMinutes <= segment.closeMinutes;
+      }
+      if (startMinutes < segment.startMinutes) {
+        return false;
+      }
+      return endMinutes <= segment.closeMinutes;
+    });
   }
 
   adminPopulateRescheduleTimes(selectEl, selected, dateOverride, options = {}) {
