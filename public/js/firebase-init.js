@@ -1,4 +1,5 @@
 // public/js/firebase-init.js
+/* global firebase, Stripe */
 // Initializes Firebase (App, Firestore, Storage, Functions) and Stripe,
 // then exposes them on window so app.js can use them.
 //
@@ -29,7 +30,7 @@
   const FUNCTIONS_REGION = null; // e.g., "northamerica-northeast1" (Toronto) or "us-central1"
 
   const STRIPE_PUBLISHABLE_KEY =
-    'pk_test_51SE19lPArasY2JyAyD1AgMkGL0UKMXELw463gjg90UG0uaTZQ6ohnhDCzbFd8wkCfm1D6sQazczdibV0GtwrpVJj00BRm07Pvb';
+    'pk_live_51KemZfB7gDWZecdIgivhhujMb6iWslsm37W4aDjUhwdUNlZPltc8IwIB05CkHDlcPPo2Wu9ZixEJdnpMlnmwPStm00TM78V9JV';
 
   // ===== 3) Sanity checks for SDKs loaded via HTML <script> tags =====
   if (typeof firebase === 'undefined') {

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Staff Schedule | Barzunko</title>
+    <link rel="icon" type="image/x-icon" href="image/logo.ico" />
+    <meta
+      name="description"
+      content="Secure schedule access for Barzunko front-of-house staff."
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <div class="nav-brand">
+          <i class="fas fa-microphone brand-icon"></i>
+          <span class="brand-text">Barzunko</span>
+        </div>
+        <ul class="nav-menu">
+          <li><a href="barzunko.html">Home</a></li>
+          <li><a href="booking.html">Book Now</a></li>
+          <li><a href="manage.html">Manage Booking</a></li>
+          <li><a href="admin.html">Admin</a></li>
+          <li><a href="staff.html" class="active">Staff</a></li>
+        </ul>
+        <div class="hamburger">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </div>
+      </div>
+      <div class="mobile-menu">
+        <ul class="mobile-nav-list">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="booking.html">Book Now</a></li>
+          <li><a href="manage.html">Manage Booking</a></li>
+          <li><a href="admin.html">Admin</a></li>
+          <li><a href="staff.html" class="active">Staff</a></li>
+        </ul>
+        <div class="mobile-cta">
+          <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
+        </div>
+      </div>
+    </nav>
+
+    <main id="app">
+      <div id="staff-page" class="page active">
+        <div class="container">
+          <div class="admin-login" id="staff-login">
+            <div class="login-form">
+              <h2>Staff Access</h2>
+              <p>Sign in to view today's room schedule</p>
+              <form id="staff-login-form">
+                <div class="form-group">
+                  <label class="form-label">Email</label>
+                  <input
+                    type="email"
+                    id="staff-email"
+                    class="form-control"
+                    autocomplete="email"
+                    required
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Password</label>
+                  <input
+                    type="password"
+                    id="staff-password"
+                    class="form-control"
+                    autocomplete="current-password"
+                    required
+                  />
+                </div>
+                <button type="submit" class="btn btn--primary btn--full-width">
+                  <i class="fas fa-door-open"></i>
+                  Enter
+                </button>
+              </form>
+              <div class="login-hint">
+                <small>Use your Barzunko staff account.</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="admin-dashboard hidden" id="staff-dashboard">
+            <div class="dashboard-header">
+              <h1 class="page-title">Daily <span class="neon-text">Schedule</span></h1>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn--outline" id="staff-logout">
+                  <i class="fas fa-sign-out-alt"></i>
+                  Logout
+                </button>
+              </div>
+            </div>
+            <div class="availability-table">
+              <div class="staff-date-controls">
+                <button class="btn btn--outline" id="staff-prev-day">
+                  <i class="fas fa-chevron-left"></i>
+                  Prev
+                </button>
+                <input type="date" id="staff-date" class="form-control" style="max-width: 170px;" />
+                <button class="btn btn--outline" id="staff-next-day">
+                  Next
+                  <i class="fas fa-chevron-right"></i>
+                </button>
+                <button class="btn btn--secondary" id="staff-today">Today</button>
+              </div>
+              <div id="staff-availability-grid" style="margin-top: 16px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="loading-overlay hidden" id="loading-overlay">
+      <div class="loading-spinner">
+        <i class="fas fa-microphone"></i>
+        <div class="loading-text">Processing...</div>
+      </div>
+    </div>
+    <div class="notification-toast hidden" id="notification-toast">
+      <div class="toast-content">
+        <i class="toast-icon"></i>
+        <span class="toast-message"></span>
+      </div>
+      <button class="toast-close">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="modal hidden" id="error-modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Oops! Something went wrong</h3>
+          <button class="modal-close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="error-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+          <p id="error-message">An unexpected error occurred. Please try again.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn--primary modal-close">Try Again</button>
+          <button class="btn btn--outline" onclick="window.location.href='tel:+14169680909'">
+            <i class="fas fa-phone"></i>
+            Call Us
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    <script src="https://js.stripe.com/v3/"></script>
+
+    <script src="js/firebase-init.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+      window.app.currentPage = 'staff';
+      window.app.init();
+    </script>
+  </body>
+</html>

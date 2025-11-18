@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Dashboard | Barjunko</title>
-    <meta name="description" content="Secure login and booking management for Barjunko staff." />
+    <title>Admin Dashboard | Barzunko</title>
+    <link rel="icon" type="image/x-icon" href="image/logo.ico" />
+    <meta name="description" content="Secure login and booking management for Barzunko staff." />
     <link rel="stylesheet" href="style.css" />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
@@ -21,14 +22,14 @@
       <div class="nav-container">
         <div class="nav-brand">
           <i class="fas fa-microphone brand-icon"></i>
-          <span class="brand-text">Barjunko</span>
+          <span class="brand-text">Barzunko</span>
         </div>
         <ul class="nav-menu">
           <li><a href="index.html">Home</a></li>
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
-          <li class="nav-cta"><a href="booking.html" class="btn btn--primary">Book Now</a></li>
+          <li><a href="staff.html">Staff</a></li>
         </ul>
         <div class="hamburger">
           <span class="hamburger-line"></span>
@@ -42,6 +43,7 @@
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
+          <li><a href="staff.html">Staff</a></li>
         </ul>
         <div class="mobile-cta">
           <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
@@ -56,7 +58,7 @@
           <div class="admin-login" id="admin-login">
             <div class="login-form">
               <h2>Admin Access</h2>
-              <p>Secure login for Barjunko staff</p>
+              <p>Secure login for Barzunko staff</p>
               <form id="admin-login-form">
                 <div class="form-group">
                   <label class="form-label">Staff Email</label>
@@ -130,8 +132,23 @@
             </div>
             <div class="dashboard-content">
               <div class="availability-table">
-                <h2>Daily Schedule</h2>
-                <div id="admin-availability-grid"></div>
+                <div class="availability-table__header">
+                  <h2>Daily Schedule</h2>
+                  <div class="availability-table__actions">
+                    <button class="btn btn--outline" id="admin-export-schedule">
+                      <i class="fas fa-file-export"></i>
+                      Export CSV
+                    </button>
+                    <div class="availability-table__legend">
+                      <span><span class="legend-dot is-available"></span>Open</span>
+                      <span><span class="legend-dot is-booked"></span>Booked</span>
+                      <span><span class="legend-dot is-mixed"></span>Mixed</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="admin-availability-wrapper">
+                  <div id="admin-availability-grid"></div>
+                </div>
               </div>
               <div class="bookings-table">
                 <h2>Recent Bookings</h2>
@@ -243,11 +260,19 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Start Time</label>
-                <input type="time" id="mod-start-time" class="form-control" required />
+                <select id="mod-start-time" class="form-control" required></select>
               </div>
               <div class="form-group">
                 <label class="form-label">Duration (hours)</label>
-                <input type="number" id="mod-duration" class="form-control" min="1" step="1" value="1" required />
+                <input
+                  type="number"
+                  id="mod-duration"
+                  class="form-control"
+                  min="0.5"
+                  step="0.5"
+                  value="1"
+                  required
+                />
               </div>
               <div class="form-group">
                 <label class="form-label">Party Size</label>
@@ -319,7 +344,11 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Room</label>
-                <input type="text" id="resched-room" class="form-control" readonly />
+                <select id="resched-room-id" class="form-control"></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Party Size</label>
+                <input type="number" id="resched-party-size" class="form-control" min="1" max="30" />
               </div>
               <div class="form-group">
                 <label class="form-label">Date</label>
@@ -333,7 +362,9 @@
                 <label class="form-label">Duration</label>
                 <select id="resched-duration" class="form-control" required>
                   <option value="1">1 hour</option>
+                  <option value="1.5">1.5 hours</option>
                   <option value="2">2 hours</option>
+                  <option value="2.5">2.5 hours</option>
                   <option value="3">3 hours</option>
                 </select>
               </div>
@@ -368,12 +399,6 @@
     <!-- Your app code (must come AFTER the SDKs + initializer) -->
     <script src="js/app.js"></script>
     <script>
-      // Global hourly time slots
-      if (window.app) {
-        window.app.timeSlots = [
-          '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00', '01:00', '02:00',
-        ];
-      }
       window.app.currentPage = 'admin';
       window.app.init();
     </script>
@@ -514,163 +539,6 @@
           }
         } else {
           document.addEventListener('DOMContentLoaded', () => setTimeout(injectCaptureButtons, 250));
-        }
-      })();
-    </script>
-    <script>
-      // Admin Modifier: create/update bookings without restrictions
-      (function () {
-        function qs(id) {
-          return document.getElementById(id);
-        }
-
-        function resetForm() {
-          [
-            'mod-booking-id',
-            'mod-room-id',
-            'mod-date',
-            'mod-start-time',
-            'mod-duration',
-            'mod-party-size',
-            'mod-first-name',
-            'mod-last-name',
-            'mod-email',
-            'mod-phone',
-            'mod-total-cost',
-            'mod-deposit',
-            'mod-status',
-          ].forEach((id) => {
-            const el = qs(id);
-            if (!el) return;
-            if (el.tagName === 'SELECT') {
-              el.value = '';
-            } else {
-              el.value = '';
-            }
-          });
-          const dur = qs('mod-duration');
-          if (dur) dur.value = '1';
-        }
-
-        async function prefillFromBooking(bookingId) {
-          if (!bookingId || !window.firestore) return;
-          try {
-            const snap = await window.firestore.collection('bookings').doc(bookingId).get();
-            if (!snap.exists) return;
-            const b = snap.data() || {};
-            const setters = {
-              'mod-room-id': b.roomId || '',
-              'mod-date': b.date || '',
-              'mod-start-time': b.startTime || '',
-              'mod-duration': b.duration || '',
-              'mod-party-size': b.partySize || '',
-              'mod-first-name': b.customerInfo?.firstName || '',
-              'mod-last-name': b.customerInfo?.lastName || '',
-              'mod-email': b.customerInfo?.email || '',
-              'mod-phone': b.customerInfo?.phone || '',
-              'mod-total-cost': b.totalCost || '',
-              'mod-deposit': b.depositAmount || '',
-              'mod-status': b.status || '',
-            };
-            Object.entries(setters).forEach(([id, value]) => {
-              const el = qs(id);
-              if (!el) return;
-              if (value === undefined || value === null) return;
-              el.value = value;
-            });
-          } catch (err) {
-            console.warn('Unable to prefill booking', err);
-          }
-        }
-
-        async function openModifier(bookingId) {
-          resetForm();
-          if (bookingId) {
-            const idEl = qs('mod-booking-id');
-            if (idEl) idEl.value = bookingId;
-            await prefillFromBooking(bookingId);
-          }
-          const modalId = 'admin-modifier-modal';
-          if (window.app && window.app.showModal) {
-            window.app.showModal(modalId);
-          } else {
-            const modal = qs(modalId);
-            if (modal) modal.classList.add('show');
-          }
-        }
-
-        function bindUI() {
-          const openBtn = document.getElementById('admin-modifier');
-          if (openBtn && !openBtn.__bound) {
-            openBtn.__bound = true;
-            openBtn.addEventListener('click', () => openModifier(''));
-          }
-
-          const form = document.getElementById('admin-modifier-form');
-          if (form && !form.__bound) {
-            form.__bound = true;
-            form.addEventListener('submit', async (e) => {
-              e.preventDefault();
-              try {
-                if (!window.firebaseFunctions) throw new Error('Functions not available');
-                if (window.app && window.app.showLoading) window.app.showLoading('Saving booking...');
-                const payload = {};
-                const id = qs('mod-booking-id')?.value.trim();
-                if (id) payload.bookingId = id;
-                const roomId = qs('mod-room-id')?.value;
-                if (roomId) payload.roomId = roomId;
-                const date = qs('mod-date')?.value;
-                if (date) payload.date = date;
-                const startTime = qs('mod-start-time')?.value;
-                if (startTime) payload.startTime = startTime;
-                const duration = Number(qs('mod-duration')?.value);
-                if (Number.isFinite(duration)) payload.duration = duration;
-                const partySize = Number(qs('mod-party-size')?.value);
-                if (Number.isFinite(partySize)) payload.partySize = partySize;
-                const firstName = qs('mod-first-name')?.value || '';
-                const lastName = qs('mod-last-name')?.value || '';
-                const email = (qs('mod-email')?.value || '').trim();
-                const phone = qs('mod-phone')?.value || '';
-                const totalCost = Number(qs('mod-total-cost')?.value);
-                if (Number.isFinite(totalCost)) payload.totalCost = totalCost;
-                const depositAmount = Number(qs('mod-deposit')?.value);
-                if (Number.isFinite(depositAmount)) payload.depositAmount = depositAmount;
-                const statusSel = qs('mod-status')?.value;
-                if (statusSel) payload.status = statusSel;
-                payload.customerInfo = { firstName, lastName, email, phone };
-
-                const fn = window.firebaseFunctions.httpsCallable('adminUpsertBySecret');
-                await fn(payload);
-                if (window.app && window.app.hideLoading) window.app.hideLoading();
-                if (window.app && window.app.hideModal) window.app.hideModal();
-                if (window.app && window.app.showNotification) window.app.showNotification('Saved', 'success');
-                if (window.app && window.app.adminFetchForSelectedDate) window.app.adminFetchForSelectedDate();
-              } catch (err) {
-                if (window.app && window.app.hideLoading) window.app.hideLoading();
-                if (window.app && window.app.showError) window.app.showError(err.message || 'Save failed');
-              }
-            });
-          }
-
-          const bookingIdInput = qs('mod-booking-id');
-          if (bookingIdInput && !bookingIdInput.__bound) {
-            bookingIdInput.__bound = true;
-            bookingIdInput.addEventListener('change', async () => {
-              const id = bookingIdInput.value.trim();
-              resetForm();
-              if (!id) {
-                bookingIdInput.value = '';
-                return;
-              }
-              bookingIdInput.value = id;
-              await prefillFromBooking(id);
-            });
-          }
-        }
-
-        bindUI();
-        if (!window.app) {
-          document.addEventListener('DOMContentLoaded', bindUI);
         }
       })();
     </script>
