@@ -39,6 +39,36 @@ const twilioClient = hasTwilioCredentials ? twilio(twilioAccountSid, twilioAuthT
 admin.initializeApp();
 const db = admin.firestore();
 
+function parseDateFromYMD(dateStr, hours = 12) {
+  if (typeof dateStr !== 'string') return null;
+  const safe = new Date(`${dateStr}T${String(hours).padStart(2, '0')}:00:00`);
+  if (Number.isNaN(safe.getTime())) {
+    return null;
+  }
+  return safe;
+}
+
+function formatDateToYMD(dateObj) {
+  if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) {
+    return null;
+  }
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function shiftDate(dateStr, days) {
+  const base = parseDateFromYMD(dateStr);
+  if (!base || !Number.isFinite(days)) return dateStr;
+  base.setDate(base.getDate() + Number(days));
+  return formatDateToYMD(base) || dateStr;
+}
+
+function getPreviousDate(dateStr) {
+  return shiftDate(dateStr, -1);
+}
+
 function timeStringToMinutes(time) {
   if (typeof time !== 'string') return NaN;
   const [h, m] = time.split(':').map(Number);
@@ -79,16 +109,6 @@ function getBusinessScheduleForDate(dateStr) {
   };
 }
 
-function toBusinessRelativeMinutes(time, schedule) {
-  if (!schedule) return NaN;
-  let minutes = timeStringToMinutes(time);
-  if (!Number.isFinite(minutes)) return NaN;
-  if (minutes < schedule.openMinutes) {
-    minutes += MINUTES_IN_DAY;
-  }
-  return minutes;
-}
-
 function formatTimeLabel(timeStr) {
   if (typeof timeStr !== 'string') return timeStr;
   const [h, m] = timeStr.split(':').map(Number);
@@ -104,38 +124,177 @@ function buildBusinessHoursLabel(schedule) {
   return `${formatTimeLabel(schedule.openTime)} and ${formatTimeLabel(schedule.closeTime)}`;
 }
 
+function isCarryoverStart(dateStr, startTime) {
+  const schedule = getBusinessScheduleForDate(dateStr);
+  const minutes = timeStringToMinutes(startTime);
+  if (!schedule || !Number.isFinite(minutes)) {
+    return false;
+  }
+  return minutes < schedule.openMinutes;
+}
+
+function getActualDaySegments(dateStr) {
+  const segments = [];
+  const schedule = getBusinessScheduleForDate(dateStr);
+  const prevDate = getPreviousDate(dateStr);
+  const prevSchedule = prevDate ? getBusinessScheduleForDate(prevDate) : null;
+
+  if (prevSchedule && prevSchedule.closeMinutes > MINUTES_IN_DAY) {
+    segments.push({
+      type: 'carryover',
+      startMinutes: 0,
+      closeMinutes: prevSchedule.closeMinutes - MINUTES_IN_DAY,
+      businessDate: prevDate,
+      schedule: prevSchedule,
+    });
+  }
+
+  if (schedule) {
+    const segmentStart = Math.max(0, Math.min(schedule.openMinutes, MINUTES_IN_DAY));
+    segments.push({
+      type: 'current',
+      startMinutes: segmentStart,
+      closeMinutes: schedule.closeMinutes,
+      businessDate: dateStr,
+      schedule,
+    });
+  }
+
+  return segments;
+}
+
+function determineBusinessDate(dateStr, startTime) {
+  const segments = getActualDaySegments(dateStr);
+  const start = timeStringToMinutes(startTime);
+  if (!Number.isFinite(start)) {
+    return dateStr;
+  }
+  for (const segment of segments) {
+    if (segment.type === 'carryover' && start < segment.closeMinutes) {
+      return segment.businessDate;
+    }
+    if (segment.type === 'current' && start >= segment.startMinutes) {
+      return segment.businessDate;
+    }
+  }
+  return dateStr;
+}
+
+async function fetchActiveRoomBookingsForBusinessDate(roomId, businessDate, transaction = null) {
+  const baseQuery = db
+    .collection('bookings')
+    .where('roomId', '==', roomId)
+    .where('status', 'in', ACTIVE_BOOKING_STATUSES)
+    .where('businessDate', '==', businessDate);
+
+  const fallbackQuery = db
+    .collection('bookings')
+    .where('roomId', '==', roomId)
+    .where('status', 'in', ACTIVE_BOOKING_STATUSES)
+    .where('date', '==', businessDate);
+
+  const baseSnap = transaction ? await transaction.get(baseQuery) : await baseQuery.get();
+  const fallbackSnap = transaction ? await transaction.get(fallbackQuery) : await fallbackQuery.get();
+
+  const docs = new Map();
+  baseSnap.forEach((doc) => docs.set(doc.id, doc));
+  fallbackSnap.forEach((doc) => docs.set(doc.id, doc));
+  return Array.from(docs.values());
+}
+
+async function fetchActiveBookingsForBusinessDate(businessDate) {
+  const baseQuery = db
+    .collection('bookings')
+    .where('status', 'in', ACTIVE_BOOKING_STATUSES)
+    .where('businessDate', '==', businessDate);
+  const fallbackQuery = db
+    .collection('bookings')
+    .where('status', 'in', ACTIVE_BOOKING_STATUSES)
+    .where('date', '==', businessDate);
+
+  const [baseSnap, fallbackSnap] = await Promise.all([baseQuery.get(), fallbackQuery.get()]);
+  const docs = new Map();
+  baseSnap.forEach((doc) => docs.set(doc.id, doc));
+  fallbackSnap.forEach((doc) => docs.set(doc.id, doc));
+  return Array.from(docs.values());
+}
+
 function ensureWithinBusinessHours(date, startTime, endTime) {
-  const schedule = getBusinessScheduleForDate(date);
-  const start = toBusinessRelativeMinutes(startTime, schedule);
-  const end = toBusinessRelativeMinutes(endTime, schedule);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+  const startMinutes = timeStringToMinutes(startTime);
+  const endMinutesRaw = timeStringToMinutes(endTime);
+  if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutesRaw)) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid time value provided.');
   }
-  if (start < schedule.openMinutes || end > schedule.closeMinutes) {
+
+  const segments = getActualDaySegments(date);
+  if (!segments.length) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date provided.');
+  }
+
+  let normalizedEnd = endMinutesRaw;
+  if (normalizedEnd <= startMinutes) {
+    normalizedEnd += MINUTES_IN_DAY;
+  }
+
+  const matchesSegment = segments.some((segment) => {
+    if (segment.type === 'carryover') {
+      if (startMinutes < 0 || startMinutes >= segment.closeMinutes) {
+        return false;
+      }
+      return normalizedEnd <= segment.closeMinutes;
+    }
+
+    if (startMinutes < segment.startMinutes) {
+      return false;
+    }
+    return normalizedEnd <= segment.closeMinutes;
+  });
+
+  if (!matchesSegment) {
     throw new functions.https.HttpsError(
       'failed-precondition',
-      `Booking must be scheduled between ${buildBusinessHoursLabel(schedule)}.`,
+      'Booking must be scheduled during our operating hours for that date.',
     );
   }
 }
 
 function buildTimeSlotsForDate(dateStr, durationMinutes = MIN_BOOKING_DURATION_MINUTES) {
-  const schedule = getBusinessScheduleForDate(dateStr);
-  if (!schedule) return [];
-  const times = [];
-  const lastStart = schedule.closeMinutes - durationMinutes;
-  for (
-    let cursor = schedule.openMinutes;
-    cursor <= lastStart;
-    cursor += SLOT_INCREMENT_MINUTES
-  ) {
-    times.push(minutesToTimeString(cursor));
-  }
-  const finalSlot = minutesToTimeString(lastStart);
-  if (finalSlot && !times.includes(finalSlot) && lastStart >= schedule.openMinutes) {
-    times.push(finalSlot);
-  }
-  return times;
+  const segments = getActualDaySegments(dateStr);
+  if (!segments.length) return [];
+  const increment = SLOT_INCREMENT_MINUTES;
+  const slots = [];
+  const seen = new Set();
+
+  segments.forEach((segment) => {
+    const start = Math.max(0, segment.startMinutes || 0);
+    const dayLimit = segment.closeMinutes;
+    let latestStart = Math.min(segment.closeMinutes - durationMinutes, dayLimit);
+    if (!Number.isFinite(latestStart) || latestStart < start) {
+      return;
+    }
+
+    for (let cursor = start; cursor <= latestStart; cursor += increment) {
+      if (cursor < 0) continue;
+      const label = minutesToTimeString(cursor);
+      if (!seen.has(label)) {
+        seen.add(label);
+        slots.push({ minutes: cursor, label });
+      }
+    }
+
+    const needsFinalSlot = ((latestStart - start) % increment !== 0) && latestStart >= start;
+    if (needsFinalSlot) {
+      const label = minutesToTimeString(latestStart);
+      if (!seen.has(label)) {
+        seen.add(label);
+        slots.push({ minutes: latestStart, label });
+      }
+    }
+  });
+
+  return slots
+    .sort((a, b) => a.minutes - b.minutes)
+    .map((entry) => entry.label);
 }
 
 function getZonedDateParts(date, timeZone = BUSINESS_TIMEZONE) {
@@ -281,6 +440,7 @@ function sanitizeBookingSnapshot(doc) {
     roomId: booking.roomId,
     roomName: roomConfig.label,
     date: booking.date,
+    businessDate: booking.businessDate || booking.date,
     startTime: booking.startTime,
     endTime: booking.endTime,
     duration: booking.duration,
@@ -323,13 +483,12 @@ async function ensureRoomAvailability(
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
   }
-  const query = db
-    .collection('bookings')
-    .where('roomId', '==', roomId)
-    .where('date', '==', date)
-    .where('status', 'in', ACTIVE_BOOKING_STATUSES);
-
-  const snapshot = transaction ? await transaction.get(query) : await query.get();
+  const businessDate = determineBusinessDate(date, startTime);
+  const snapshot = await fetchActiveRoomBookingsForBusinessDate(
+    roomId,
+    businessDate,
+    transaction || null,
+  );
 
   let overlapping = 0;
   snapshot.forEach((doc) => {
@@ -337,12 +496,12 @@ async function ensureRoomAvailability(
       return;
     }
     const booking = doc.data();
-    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
+    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
       overlapping += 1;
     }
   });
 
-  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
+  const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
   const effectiveInventory = Math.max(inventory - reserved, 0);
   if (overlapping >= effectiveInventory) {
     throw new functions.https.HttpsError(
@@ -380,24 +539,27 @@ function requireAdmin(context) {
   }
 }
 
+function normalizeTimeRange(start, end) {
+  const startMinutes = timeStringToMinutes(start);
+  let endMinutes = timeStringToMinutes(end);
+  if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+    return null;
+  }
+  if (endMinutes <= startMinutes) {
+    endMinutes += MINUTES_IN_DAY;
+  }
+  return { start: startMinutes, end: endMinutes };
+}
+
 // Helper: check time conflict between two bookings. Times are strings in
 // 24-hour format (HH:mm). Returns true if they overlap.
-function hasTimeConflict(startA, endA, startB, endB, schedule) {
-  const startAMin = toBusinessRelativeMinutes(startA, schedule);
-  const endAMin = toBusinessRelativeMinutes(endA, schedule);
-  const startBMin = toBusinessRelativeMinutes(startB, schedule);
-  const endBMin = toBusinessRelativeMinutes(endB, schedule);
-
-  if (
-    !Number.isFinite(startAMin) ||
-    !Number.isFinite(endAMin) ||
-    !Number.isFinite(startBMin) ||
-    !Number.isFinite(endBMin)
-  ) {
+function hasTimeConflict(startA, endA, startB, endB) {
+  const rangeA = normalizeTimeRange(startA, endA);
+  const rangeB = normalizeTimeRange(startB, endB);
+  if (!rangeA || !rangeB) {
     return true;
   }
-
-  return startAMin < endBMin && endAMin > startBMin;
+  return rangeA.start < rangeB.end && rangeA.end > rangeB.start;
 }
 
 // Reserve policy: keep 1 small and 1 medium room for Fri/Sat 21:00-24:00 (walk-ins)
@@ -420,8 +582,7 @@ function reservedSlotsForWindow(roomId, date, startTime, endTime, schedule) {
   // Walk-in hold window: 21:00 - 00:00
   const holdStart = '21:00';
   const holdEnd = '00:00';
-  const activeSchedule = schedule || getBusinessScheduleForDate(date);
-  return hasTimeConflict(startTime, endTime, holdStart, holdEnd, activeSchedule) ? 1 : 0;
+  return hasTimeConflict(startTime, endTime, holdStart, holdEnd) ? 1 : 0;
 }
 
 // Email sending stub. Integrate SendGrid or Mailgun here once credentials are
@@ -558,24 +719,20 @@ async function createBookingInternal(params) {
   ensureWithinBusinessHours(date, startTime, endTime);
   ensureNotInPast(date, startTime);
 
-  const bookingsQuery = db
-    .collection('bookings')
-    .where('roomId', '==', roomId)
-    .where('date', '==', date)
-    .where('status', 'in', ACTIVE_BOOKING_STATUSES);
+  const businessDate = determineBusinessDate(date, startTime);
 
   // Quick availability check before creating payment intent
-  const existing = await bookingsQuery.get();
+  const existing = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
   let overlappingCount = 0;
-  for (const doc of existing.docs) {
+  for (const doc of existing) {
     const booking = doc.data();
-    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
+    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
       overlappingCount += 1;
     }
   }
 
   // Apply reserved slot policy (Fri/Sat 21:00-23:00) for small/medium rooms
-  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
+  const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
   const effectiveInventory = Math.max(inventory - reserved, 0);
   if (overlappingCount >= effectiveInventory) {
     throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
@@ -599,6 +756,7 @@ async function createBookingInternal(params) {
   const bookingDoc = {
     roomId,
     date,
+    businessDate,
     startTime,
     endTime,
     duration: dur,
@@ -622,17 +780,21 @@ async function createBookingInternal(params) {
   let newBookingRef;
   try {
     await db.runTransaction(async (transaction) => {
-      const txnSnapshot = await transaction.get(bookingsQuery);
+      const txnSnapshot = await fetchActiveRoomBookingsForBusinessDate(
+        roomId,
+        businessDate,
+        transaction,
+      );
       let txnOverlapping = 0;
 
       txnSnapshot.forEach((doc) => {
         const booking = doc.data();
-        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
+        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
           txnOverlapping += 1;
         }
       });
 
-      const txnReserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
+      const txnReserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
       const txnEffectiveInventory = Math.max(inventory - txnReserved, 0);
       if (txnOverlapping >= txnEffectiveInventory) {
         throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
@@ -821,15 +983,12 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   ensureWithinBusinessHours(date, startTime, endTime);
   ensureNotInPast(date, startTime);
 
+  const businessDate = determineBusinessDate(date, startTime);
+
   const availabilityEntries = await Promise.all(
     roomIds.map(async (roomId) => {
       const { inventory } = getRoomConfig(roomId);
-      const snapshot = await db
-        .collection('bookings')
-        .where('roomId', '==', roomId)
-        .where('date', '==', date)
-        .where('status', 'in', ACTIVE_BOOKING_STATUSES)
-        .get();
+      const snapshot = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
 
       let overlapping = 0;
       snapshot.forEach((doc) => {
@@ -838,12 +997,12 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
         }
 
         const booking = doc.data();
-        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
+        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
           overlapping += 1;
         }
       });
 
-      const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
+      const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
       const remaining = Math.max(inventory - overlapping - reserved, 0);
       return [roomId, remaining];
     }),
@@ -919,6 +1078,7 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
   ensureNotInPast(newDate, newStartTime);
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
   ensureWithinBusinessHours(newDate, newStartTime, endTime);
+  const businessDate = determineBusinessDate(newDate, newStartTime);
   await db.runTransaction(async (transaction) => {
     await ensureRoomAvailability(
       targetRoomId,
@@ -931,6 +1091,7 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
     const updatePayload = {
       roomId: targetRoomId,
       date: newDate,
+      businessDate,
       startTime: newStartTime,
       endTime,
       duration,
@@ -1095,6 +1256,7 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
         ensureWithinBusinessHours(nextDate, nextStart, end);
         updatePayload.endTime = end;
       }
+      updatePayload.businessDate = determineBusinessDate(nextDate, nextStart);
     }
 
     await ref.update(updatePayload);
@@ -1115,9 +1277,11 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
   if (endTime) {
     ensureWithinBusinessHours(date, startTime, endTime);
   }
+  const businessDate = determineBusinessDate(date, startTime);
   const newDoc = {
     roomId: String(roomId),
     date: String(date),
+    businessDate,
     startTime: String(startTime),
     endTime: endTime,
     duration: durNum,
@@ -1171,6 +1335,8 @@ exports.adminGetAvailabilityByDate = functions.https.onCall(async (data, context
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date provided.');
   }
+  const prevDate = getPreviousDate(date);
+  const prevSchedule = prevDate ? getBusinessScheduleForDate(prevDate) : null;
   const slotDurationMinutes = Math.max(
     MIN_BOOKING_DURATION_MINUTES,
     Math.round(dur * 60) || MIN_BOOKING_DURATION_MINUTES,
@@ -1179,37 +1345,54 @@ exports.adminGetAvailabilityByDate = functions.https.onCall(async (data, context
     Array.isArray(times) && times.length
       ? times.map(String)
       : buildTimeSlotsForDate(date, slotDurationMinutes);
-  // Fetch all bookings for date once
-  const snap = await db
-    .collection('bookings')
-    .where('date', '==', date)
-    .where('status', 'in', ACTIVE_BOOKING_STATUSES)
-    .get();
-  const byRoom = {};
-  snap.forEach((doc) => {
-    const b = doc.data();
-    const r = b.roomId;
-    if (!byRoom[r]) byRoom[r] = [];
-    const start = b.startTime;
-    const end = b.endTime || computeEndTime(date, b.startTime, b.duration || 1).endTime;
-    byRoom[r].push({ startTime: start, endTime: end });
-  });
+
+  const businessDatesToFetch = new Set([date]);
+  if (prevDate) {
+    businessDatesToFetch.add(prevDate);
+  }
+  const byRoomByBusinessDate = {};
+  await Promise.all(
+    Array.from(businessDatesToFetch).map(async (bizDate) => {
+      const docs = await fetchActiveBookingsForBusinessDate(bizDate);
+      docs.forEach((doc) => {
+        const booking = doc.data();
+        if (!byRoomByBusinessDate[bizDate]) {
+          byRoomByBusinessDate[bizDate] = {};
+        }
+        const roomId = booking.roomId;
+        if (!byRoomByBusinessDate[bizDate][roomId]) {
+          byRoomByBusinessDate[bizDate][roomId] = [];
+        }
+        const endValue =
+          booking.endTime || computeEndTime(booking.date, booking.startTime, booking.duration || 1).endTime;
+        byRoomByBusinessDate[bizDate][roomId].push({
+          startTime: booking.startTime,
+          endTime: endValue,
+        });
+      });
+    }),
+  );
+
   const availability = {};
-  Object.keys(ROOM_CONFIG).forEach((roomId) => {
-    if (!byRoom[roomId]) byRoom[roomId] = [];
-  });
   timeList.forEach((t) => {
     const endD = new Date(`${date}T${t}`);
     addDurationMinutes(endD, dur);
     const tEnd = endD.toTimeString().slice(0, 5);
+    const timeMinutes = timeStringToMinutes(t);
+    const usePrev = Number.isFinite(timeMinutes) && timeMinutes < schedule.openMinutes;
+    const bizDateForSlot = usePrev ? prevDate : date;
+    const segmentSchedule = usePrev ? prevSchedule : schedule;
+    const roomMap = bizDateForSlot ? byRoomByBusinessDate[bizDateForSlot] || {} : {};
     availability[t] = {};
     Object.entries(ROOM_CONFIG).forEach(([roomId, cfg]) => {
-      const bookings = byRoom[roomId] || [];
+      const bookings = roomMap[roomId] || [];
       let overlapping = 0;
       bookings.forEach((b) => {
-        if (hasTimeConflict(t, tEnd, b.startTime, b.endTime, schedule)) overlapping += 1;
+        if (hasTimeConflict(t, tEnd, b.startTime, b.endTime)) overlapping += 1;
       });
-      const reserved = reservedSlotsForWindow(roomId, date, t, tEnd, schedule);
+      const reserved = bizDateForSlot
+        ? reservedSlotsForWindow(roomId, bizDateForSlot, t, tEnd, segmentSchedule)
+        : 0;
       const remain = Math.max((cfg.inventory || 0) - overlapping - reserved, 0);
       availability[t][roomId] = remain;
     });
@@ -1321,6 +1504,7 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
 
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
   ensureWithinBusinessHours(newDate, newStartTime, endTime);
+  const businessDate = determineBusinessDate(newDate, newStartTime);
   const targetRoomId = requestedRoomId || booking.roomId;
 
   const normalizedCustomerInfo = customerInfo
@@ -1366,6 +1550,7 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
     const updatePayload = {
       roomId: targetRoomId,
       date: newDate,
+      businessDate,
       startTime: newStartTime,
       endTime,
       duration,
