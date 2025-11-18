@@ -144,7 +144,7 @@ class BarzunkoApp {
         minCapacity: 1,
         maxCapacity: 17,
         includedGuests: 15,
-        hourlyRate: 90,
+        hourlyRate: 100,
         bookingFee: 0,
         extraGuestRate: 5,
         inventory: 1,
@@ -1789,15 +1789,15 @@ class BarzunkoApp {
       extraGuestRate,
       totalCostWithTax: totalWithTax,
     });
-    const { beforeTax: depositBeforeTax, tax: depositTax, total: depositAmount } =
-      this.getDepositBreakdown(rawDepositAmount);
+    const {
+      beforeTax: depositBeforeTax,
+      tax: depositTax,
+      total: depositAmount,
+    } = this.getDepositBreakdown(rawDepositAmount);
     const remainingPreTax = Math.max(totalCost - depositBeforeTax, 0);
     const rawRemainingBalance = Math.max(totalWithTax - depositAmount, 0);
     const remainingBalance = Math.round(rawRemainingBalance * 100) / 100;
-    const remainingTax = Math.max(
-      Math.round((remainingBalance - remainingPreTax) * 100) / 100,
-      0,
-    );
+    const remainingTax = Math.max(Math.round((remainingBalance - remainingPreTax) * 100) / 100, 0);
     this.bookingData.depositAmount = depositAmount;
     this.bookingData.depositBeforeTax = depositBeforeTax;
     this.bookingData.depositTax = depositTax;
@@ -2077,15 +2077,15 @@ class BarzunkoApp {
       extraGuestRate,
       totalCostWithTax: totalWithTax,
     });
-    const { beforeTax: depositBeforeTax, tax: depositTax, total: depositAmount } =
-      this.getDepositBreakdown(rawDepositAmount);
+    const {
+      beforeTax: depositBeforeTax,
+      tax: depositTax,
+      total: depositAmount,
+    } = this.getDepositBreakdown(rawDepositAmount);
     const remainingPreTax = Math.max(totalCost - depositBeforeTax, 0);
     const rawRemainingBalance = Math.max(totalWithTax - depositAmount, 0);
     const remainingBalance = Math.round(rawRemainingBalance * 100) / 100;
-    const remainingTax = Math.max(
-      Math.round((remainingBalance - remainingPreTax) * 100) / 100,
-      0,
-    );
+    const remainingTax = Math.max(Math.round((remainingBalance - remainingPreTax) * 100) / 100, 0);
 
     const extraRows = [];
 
@@ -2952,9 +2952,7 @@ class BarzunkoApp {
           preferredRoomId:
             rebookRoomSelect && rebookRoomSelect.value ? rebookRoomSelect.value : null,
           preferredPartySize:
-            rebookPartyInput && rebookPartyInput.value
-              ? Number(rebookPartyInput.value)
-              : null,
+            rebookPartyInput && rebookPartyInput.value ? Number(rebookPartyInput.value) : null,
         };
         this.startRebookingFlow(booking, preferences);
       });
@@ -2972,8 +2970,7 @@ class BarzunkoApp {
 
     const normalizedPreferences = {
       preferredRoomId:
-        typeof preferences.preferredRoomId === 'string' &&
-        preferences.preferredRoomId.trim() !== ''
+        typeof preferences.preferredRoomId === 'string' && preferences.preferredRoomId.trim() !== ''
           ? preferences.preferredRoomId.trim()
           : null,
       preferredPartySize:
@@ -3888,9 +3885,7 @@ class BarzunkoApp {
         ...booking,
         roomId: this.normalizeRoomId(booking.roomId),
       }))
-      .filter(
-        (booking) => (booking.status || '').toLowerCase() !== 'cancelled',
-      );
+      .filter((booking) => (booking.status || '').toLowerCase() !== 'cancelled');
 
     this.adminEnsureColumnsFromBookings(assignableBookings);
 
@@ -4062,7 +4057,8 @@ class BarzunkoApp {
           const depositLine = Number.isFinite(depositValue)
             ? `Deposit: $${depositValue.toFixed(2)}`
             : '';
-          const special = booking.customer?.specialRequests || booking.customerInfo?.specialRequests || '';
+          const special =
+            booking.customer?.specialRequests || booking.customerInfo?.specialRequests || '';
           const status = booking.status || 'pending';
           const endTime =
             booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
@@ -4523,9 +4519,7 @@ class BarzunkoApp {
     const prevDate = this.shiftDate(dateStr, -1);
     const prevSchedule = prevDate ? this.getBusinessScheduleForDate(prevDate) : null;
     const carryoverMinutes =
-      prevSchedule && prevSchedule.closeMinutes > 24 * 60
-        ? prevSchedule.closeMinutes - 24 * 60
-        : 0;
+      prevSchedule && prevSchedule.closeMinutes > 24 * 60 ? prevSchedule.closeMinutes - 24 * 60 : 0;
     if (!schedule) {
       return {
         schedule: null,
@@ -4620,7 +4614,7 @@ class BarzunkoApp {
         }
       }
 
-      const needsFinalSlot = ((latestStart - start) % increment !== 0) && latestStart >= start;
+      const needsFinalSlot = (latestStart - start) % increment !== 0 && latestStart >= start;
       if (needsFinalSlot) {
         const label = this.minutesToTimeString(latestStart);
         if (!seen.has(label)) {
@@ -4630,9 +4624,7 @@ class BarzunkoApp {
       }
     });
 
-    return slots
-      .sort((a, b) => a.minutes - b.minutes)
-      .map((entry) => entry.label);
+    return slots.sort((a, b) => a.minutes - b.minutes).map((entry) => entry.label);
   }
 
   timeStringToMinutes(time) {
@@ -4904,8 +4896,7 @@ class BarzunkoApp {
     if (roomSelect) {
       roomSelect.addEventListener('change', () => {
         if (this.adminRescheduleState) {
-          this.adminRescheduleState.roomId =
-            roomSelect.value || this.adminRescheduleState.roomId;
+          this.adminRescheduleState.roomId = roomSelect.value || this.adminRescheduleState.roomId;
         }
         this.adminEvaluateRescheduleAvailability();
       });
