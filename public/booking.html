@@ -3,10 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Book Your Karaoke Experience | Barjunko</title>
+    <title>Book Your Karaoke Experience | Barzunko</title>
+    <link rel="icon" type="image/x-icon" href="image/logo.ico" />
     <meta
       name="description"
-      content="Choose a date, select a room and party details, and pay your deposit to reserve your karaoke night at Barjunko."
+      content="Choose a date, select a room and party details, and pay your deposit to reserve your karaoke night at Barzunko."
     />
     <link rel="stylesheet" href="style.css" />
     <link
@@ -24,14 +25,14 @@
       <div class="nav-container">
         <div class="nav-brand">
           <i class="fas fa-microphone brand-icon"></i>
-          <span class="brand-text">Barjunko</span>
+          <span class="brand-text">Barzunko</span>
         </div>
         <ul class="nav-menu">
           <li><a href="index.html">Home</a></li>
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
-          <li class="nav-cta"><a href="booking.html" class="btn btn--primary">Book Now</a></li>
+          <li><a href="staff.html">Staff</a></li>
         </ul>
         <div class="hamburger">
           <span class="hamburger-line"></span>
@@ -45,6 +46,7 @@
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
+          <li><a href="staff.html">Staff</a></li>
         </ul>
         <div class="mobile-cta">
           <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
@@ -204,8 +206,10 @@
                     <h3 class="terms-title">Terms &amp; Conditions</h3>
                     <ol class="terms-list">
                       <li>
-                        Customers must be 19 years of age or older on Fridays, Saturdays, and
-                        holiday weekends, as well as every day after 9:00 PM.
+                        <strong>
+                          Customers must be 19 years of age or older on Fridays, Saturdays, and
+                          holiday weekends, as well as every day after 9:00 PM.
+                        </strong>
                       </li>
                       <li>
                         The space is calculated based on how many people can comfortably fit in the
@@ -239,6 +243,12 @@
                         For everyone's safety, the entire karaoke area is monitored by video
                         recording.
                       </li>
+                      <li>
+                        It is the customer’s responsibility to ensure that all contact details
+                        provided (such as email and phone number) are correct. BarZunko will not be
+                        held responsible for any issues, missed communications, or booking
+                        complications caused by inaccurate information submitted by the customer.
+                      </li>
                     </ol>
                     <label class="terms-consent">
                       <input type="checkbox" id="terms-checkbox" />
@@ -262,7 +272,7 @@
             <div class="booking-step" id="step-5">
               <div class="step-content">
                 <h2>Complete Your Booking</h2>
-                <p class="step-description">Secure your reservation with a 50% deposit</p>
+                <p class="step-description">Secure your reservation with a one-hour deposit</p>
                 <div class="payment-content">
                   <div class="payment-summary">
                     <h3>Payment Summary</h3>
@@ -371,20 +381,6 @@
     <script src="js/firebase-init.js"></script>
     <script src="js/app.js"></script>
     <script>
-      // Global hourly time slots
-      if (window.app) {
-        window.app.timeSlots = [
-          '18:00',
-          '19:00',
-          '20:00',
-          '21:00',
-          '22:00',
-          '23:00',
-          '00:00',
-          '01:00',
-          '02:00',
-        ];
-      }
       window.app.currentPage = 'booking';
       window.app.init();
     </script>

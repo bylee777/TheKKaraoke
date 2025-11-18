@@ -1,7 +1,7 @@
 {
-  "name": "barjunko-firebase",
+  "name": "barzunko-firebase",
   "version": "1.0.0",
-  "description": "Barjunko karaoke booking site with Firebase Hosting and Cloud Functions",
+  "description": "Barzunko karaoke booking site with Firebase Hosting and Cloud Functions",
   "private": true,
   "scripts": {
     "lint": "eslint . --ext .js --fix",

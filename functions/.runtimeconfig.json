@@ -1,11 +1,14 @@
 {
-  "twilio": {
-    "notify_to": "+4379939941",
-    "auth_token": "3601a1f00114319f84d2af45807a3ee2",
-    "from": "+14352918041",
-    "account_sid": "ACb9e62a589ab970cb675814fa847079b2"
+  "stripe": {
+    "secret_key": "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"
   },
   "google": {
     "api_key": "AIzaSyBAlQmkR9MMjfKXofeuBBodzmZ5Gq20NO4"
+  },
+  "twilio": {
+    "auth_token": "3601a1f00114319f84d2af45807a3ee2",
+    "notify_to": "+4379939941",
+    "from": "+14352918041",
+    "account_sid": "ACb9e62a589ab970cb675814fa847079b2"
   }
 }

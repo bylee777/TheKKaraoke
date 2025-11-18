@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Booking Confirmation | Barjunko</title>
+    <title>Booking Confirmation | Barzunko</title>
+    <link rel="icon" type="image/x-icon" href="image/logo.ico" />
     <meta
       name="description"
       content="Your karaoke booking is confirmed! View the details of your reservation and get ready to sing the night away."
@@ -24,14 +25,14 @@
       <div class="nav-container">
         <div class="nav-brand">
           <i class="fas fa-microphone brand-icon"></i>
-          <span class="brand-text">Barjunko</span>
+          <span class="brand-text">Barzunko</span>
         </div>
         <ul class="nav-menu">
           <li><a href="index.html">Home</a></li>
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
-          <li class="nav-cta"><a href="booking.html" class="btn btn--primary">Book Now</a></li>
+          <li><a href="staff.html">Staff</a></li>
         </ul>
         <div class="hamburger">
           <span class="hamburger-line"></span>
@@ -45,6 +46,7 @@
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
+          <li><a href="staff.html">Staff</a></li>
         </ul>
         <div class="mobile-cta">
           <a href="booking.html" class="btn btn--primary btn--full-width">Book Your Room</a>
@@ -150,14 +152,6 @@
     <script src="js/firebase-init.js"></script>
     <script src="js/app.js"></script>
     <script>
-      // Global hourly time slots
-      if (window.app) {
-        window.app.timeSlots = [
-          '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00', '01:00', '02:00',
-        ];
-      }
-    </script>
-    <script>
       document.addEventListener('DOMContentLoaded', () => {
         const appInstance = window.app;
         if (!appInstance) {
@@ -169,12 +163,15 @@
 
         let bookingData = null;
         try {
-          bookingData = JSON.parse(localStorage.getItem('barjunkoBooking') || 'null');
+          bookingData = JSON.parse(localStorage.getItem('barzunkoBooking') || 'null');
         } catch (err) {
           bookingData = null;
         }
 
         if (bookingData && bookingData.customer && bookingData.room) {
+          if (typeof appInstance.normalizeDuration === 'function') {
+            bookingData.duration = appInstance.normalizeDuration(bookingData.duration, 1);
+          }
           appInstance.bookingData = bookingData;
           appInstance.showConfirmationPage();
           // Inject customer's phone number into the confirmation details if available

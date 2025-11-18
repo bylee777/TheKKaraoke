@@ -5,22 +5,39 @@ const Stripe = require('stripe');
 const twilio = require('twilio');
 
 const MINUTES_IN_DAY = 24 * 60;
-const BUSINESS_OPEN_TIME = '18:00';
-const BUSINESS_CLOSE_TIME = '02:00';
-const twilioAccountSid = (functions.config().twilio && functions.config().twilio.account_sid) || process.env.TWILIO_ACCOUNT_SID || null;
-const twilioAuthToken = (functions.config().twilio && functions.config().twilio.auth_token) || process.env.TWILIO_AUTH_TOKEN || null;
-const twilioFromNumber = (functions.config().twilio && functions.config().twilio.from) || process.env.TWILIO_FROM || null;
-const twilioNotifyNumber = (functions.config().twilio && functions.config().twilio.notify_to) || process.env.TWILIO_NOTIFY_TO || null;
+const BUSINESS_TIMEZONE = 'America/Toronto';
+const SLOT_INCREMENT_MINUTES = 60;
+const MIN_BOOKING_DURATION_MINUTES = 60;
+const BUSINESS_SCHEDULE = {
+  0: { openTime: '13:00', closeTime: '02:30', label: 'Sunday' },
+  1: { openTime: '18:00', closeTime: '02:30', label: 'Monday' },
+  2: { openTime: '18:00', closeTime: '02:30', label: 'Tuesday' },
+  3: { openTime: '18:00', closeTime: '02:30', label: 'Wednesday' },
+  4: { openTime: '18:00', closeTime: '02:30', label: 'Thursday' },
+  5: { openTime: '18:00', closeTime: '03:00', label: 'Friday' },
+  6: { openTime: '13:00', closeTime: '03:00', label: 'Saturday' },
+};
+const DEFAULT_SCHEDULE_DAY = 1; // Monday fallback
+const twilioAccountSid =
+  (functions.config().twilio && functions.config().twilio.account_sid) ||
+  process.env.TWILIO_ACCOUNT_SID ||
+  null;
+const twilioAuthToken =
+  (functions.config().twilio && functions.config().twilio.auth_token) ||
+  process.env.TWILIO_AUTH_TOKEN ||
+  null;
+const twilioFromNumber =
+  (functions.config().twilio && functions.config().twilio.from) || process.env.TWILIO_FROM || null;
+const twilioNotifyNumber =
+  (functions.config().twilio && functions.config().twilio.notify_to) ||
+  process.env.TWILIO_NOTIFY_TO ||
+  null;
 const hasTwilioCredentials = twilioAccountSid && twilioAuthToken && twilioFromNumber;
 const twilioClient = hasTwilioCredentials ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
 // Initialize the Firebase Admin SDK to access Firestore
 admin.initializeApp();
 const db = admin.firestore();
-
-const DEFAULT_TIMES = [
-  '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00', '22:30', '23:00', '23:30', '00:00', '00:30', '01:00', '01:30', '02:00',
-];
 
 function timeStringToMinutes(time) {
   if (typeof time !== 'string') return NaN;
@@ -29,31 +46,155 @@ function timeStringToMinutes(time) {
   return h * 60 + m;
 }
 
-const BUSINESS_OPEN_MINUTES = timeStringToMinutes(BUSINESS_OPEN_TIME);
+function minutesToTimeString(totalMinutes) {
+  if (!Number.isFinite(totalMinutes)) return null;
+  const normalized = ((totalMinutes % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
+  const hours = String(Math.floor(normalized / 60)).padStart(2, '0');
+  const minutes = String(normalized % 60).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
 
-function toBusinessRelativeMinutes(time) {
+function parseDateDay(dateStr) {
+  if (typeof dateStr !== 'string') return null;
+  const safeDate = new Date(`${dateStr}T12:00:00`);
+  if (Number.isNaN(safeDate.getTime())) return null;
+  return safeDate.getDay();
+}
+
+function getBusinessScheduleForDate(dateStr) {
+  const day = parseDateDay(dateStr);
+  const schedule = BUSINESS_SCHEDULE[day ?? DEFAULT_SCHEDULE_DAY] || BUSINESS_SCHEDULE[DEFAULT_SCHEDULE_DAY];
+  const openMinutes = timeStringToMinutes(schedule.openTime);
+  let closeMinutes = timeStringToMinutes(schedule.closeTime);
+  if (!Number.isFinite(openMinutes) || !Number.isFinite(closeMinutes)) {
+    return null;
+  }
+  if (closeMinutes <= openMinutes) {
+    closeMinutes += MINUTES_IN_DAY;
+  }
+  return {
+    ...schedule,
+    openMinutes,
+    closeMinutes,
+  };
+}
+
+function toBusinessRelativeMinutes(time, schedule) {
+  if (!schedule) return NaN;
   let minutes = timeStringToMinutes(time);
   if (!Number.isFinite(minutes)) return NaN;
-  if (minutes < BUSINESS_OPEN_MINUTES) {
+  if (minutes < schedule.openMinutes) {
     minutes += MINUTES_IN_DAY;
   }
   return minutes;
 }
 
-const BUSINESS_CLOSE_MINUTES = toBusinessRelativeMinutes(BUSINESS_CLOSE_TIME);
+function formatTimeLabel(timeStr) {
+  if (typeof timeStr !== 'string') return timeStr;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return timeStr;
+  const period = h >= 12 ? 'PM' : 'AM';
+  let hour12 = h % 12;
+  if (hour12 === 0) hour12 = 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+}
 
-function ensureWithinBusinessHours(startTime, endTime) {
-  const start = toBusinessRelativeMinutes(startTime);
-  const end = toBusinessRelativeMinutes(endTime);
+function buildBusinessHoursLabel(schedule) {
+  if (!schedule) return 'our operating hours';
+  return `${formatTimeLabel(schedule.openTime)} and ${formatTimeLabel(schedule.closeTime)}`;
+}
+
+function ensureWithinBusinessHours(date, startTime, endTime) {
+  const schedule = getBusinessScheduleForDate(date);
+  const start = toBusinessRelativeMinutes(startTime, schedule);
+  const end = toBusinessRelativeMinutes(endTime, schedule);
   if (!Number.isFinite(start) || !Number.isFinite(end)) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid time value provided.');
   }
-  if (start < BUSINESS_OPEN_MINUTES || end > BUSINESS_CLOSE_MINUTES) {
+  if (start < schedule.openMinutes || end > schedule.closeMinutes) {
     throw new functions.https.HttpsError(
       'failed-precondition',
-      'Booking must be scheduled between 6:00 PM and 2:00 AM.',
+      `Booking must be scheduled between ${buildBusinessHoursLabel(schedule)}.`,
     );
   }
+}
+
+function buildTimeSlotsForDate(dateStr, durationMinutes = MIN_BOOKING_DURATION_MINUTES) {
+  const schedule = getBusinessScheduleForDate(dateStr);
+  if (!schedule) return [];
+  const times = [];
+  const lastStart = schedule.closeMinutes - durationMinutes;
+  for (
+    let cursor = schedule.openMinutes;
+    cursor <= lastStart;
+    cursor += SLOT_INCREMENT_MINUTES
+  ) {
+    times.push(minutesToTimeString(cursor));
+  }
+  const finalSlot = minutesToTimeString(lastStart);
+  if (finalSlot && !times.includes(finalSlot) && lastStart >= schedule.openMinutes) {
+    times.push(finalSlot);
+  }
+  return times;
+}
+
+function getZonedDateParts(date, timeZone = BUSINESS_TIMEZONE) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = {};
+  formatter.formatToParts(date).forEach(({ type, value }) => {
+    if (type !== 'literal') {
+      parts[type] = value;
+    }
+  });
+  return parts;
+}
+
+function getLatestCompletedBusinessDate(now = new Date()) {
+  const parts = getZonedDateParts(now);
+  if (!parts.year || !parts.month || !parts.day) {
+    return null;
+  }
+  const todayStr = `${parts.year}-${parts.month}-${parts.day}`;
+  const schedule = getBusinessScheduleForDate(todayStr);
+  if (!schedule) {
+    return todayStr;
+  }
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  let relativeMinutes = minutes;
+  if (relativeMinutes < schedule.openMinutes && schedule.closeMinutes > MINUTES_IN_DAY) {
+    relativeMinutes += MINUTES_IN_DAY;
+  }
+  if (relativeMinutes >= schedule.closeMinutes) {
+    return todayStr;
+  }
+  const base = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
+  base.setUTCDate(base.getUTCDate() - 1);
+  return base.toISOString().slice(0, 10);
+}
+
+function getUpcomingFridaySaturdayDates(now = new Date()) {
+  const current = new Date(now.getTime());
+  const day = current.getDay();
+  const thursdayOffset = (4 - day + 7) % 7;
+  current.setDate(current.getDate() + thursdayOffset);
+  const friday = new Date(current.getTime());
+  friday.setDate(friday.getDate() + 1);
+  const saturday = new Date(current.getTime());
+  saturday.setDate(saturday.getDate() + 2);
+  return {
+    thursdayDate: current.toISOString().slice(0, 10),
+    fridayDate: friday.toISOString().slice(0, 10),
+    saturdayDate: saturday.toISOString().slice(0, 10),
+  };
 }
 
 function ensureNotInPast(date, startTime) {
@@ -62,10 +203,12 @@ function ensureNotInPast(date, startTime) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date or time provided.');
   }
   if (startDate.getTime() < Date.now()) {
-    throw new functions.https.HttpsError('failed-precondition', 'Cannot schedule bookings in the past.');
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Cannot schedule bookings in the past.',
+    );
   }
 }
-
 
 const ROOM_CONFIG = {
   small: { inventory: 4, label: 'Small Room' },
@@ -92,9 +235,18 @@ function combineDateTime(date, time) {
   return new Date(`${date}T${time}`);
 }
 
+function addDurationMinutes(dateObj, durationHours) {
+  const minutesToAdd = Math.round(Number(durationHours) * 60);
+  if (!Number.isFinite(minutesToAdd)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid duration provided.');
+  }
+  dateObj.setMinutes(dateObj.getMinutes() + minutesToAdd);
+  return dateObj;
+}
+
 function computeEndTime(date, startTime, duration) {
   const endDate = combineDateTime(date, startTime);
-  endDate.setHours(endDate.getHours() + duration);
+  addDurationMinutes(endDate, duration);
   return {
     endDate,
     endTime: endDate.toTimeString().slice(0, 5),
@@ -147,6 +299,7 @@ function sanitizeBookingSnapshot(doc) {
       lastName: booking.customerInfo?.lastName || '',
       email: booking.customerInfo?.email || '',
       phone: booking.customerInfo?.phone || '',
+      specialRequests: booking.customerInfo?.specialRequests || '',
     },
     canCancel,
     canRebook,
@@ -166,6 +319,10 @@ async function ensureRoomAvailability(
   transaction,
 ) {
   const { inventory, label } = getRoomConfig(roomId);
+  const schedule = getBusinessScheduleForDate(date);
+  if (!schedule) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
+  }
   const query = db
     .collection('bookings')
     .where('roomId', '==', roomId)
@@ -180,12 +337,12 @@ async function ensureRoomAvailability(
       return;
     }
     const booking = doc.data();
-    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
+    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
       overlapping += 1;
     }
   });
 
-  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
   const effectiveInventory = Math.max(inventory - reserved, 0);
   if (overlapping >= effectiveInventory) {
     throw new functions.https.HttpsError(
@@ -208,11 +365,13 @@ function assertGuestOwnership(booking, email) {
 
 // Determine the Stripe secret key from runtime configuration. To set this
 // configuration run:
-//   firebase functions:config:set stripe.secret_key="sk_test_yourSecretHere"
-const stripeSecretKey =
-  functions.config().stripe && functions.config().stripe.secret_key
-    ? functions.config().stripe.secret_key
-    : 'sk_test_51SE19lPArasY2JyAooAOIxctJ6eFQld3Y7rdrhAlB8BxeCitTYhK2902cqrOtUzkx67dVgrpjVari9nEBlkxwrIL00Kz81sHmD';
+//   firebase functions:config:set stripe.secret_key="sk_live_yourSecretHere"
+const stripeSecretKey = functions.config().stripe && functions.config().stripe.secret_key;
+if (!stripeSecretKey) {
+  throw new Error(
+    'Stripe secret key is not configured. Run `firebase functions:config:set stripe.secret_key="..."`.',
+  );
+}
 const stripe = Stripe(stripeSecretKey);
 
 function requireAdmin(context) {
@@ -223,20 +382,25 @@ function requireAdmin(context) {
 
 // Helper: check time conflict between two bookings. Times are strings in
 // 24-hour format (HH:mm). Returns true if they overlap.
-function hasTimeConflict(startA, endA, startB, endB) {
-  const startAMin = toBusinessRelativeMinutes(startA);
-  const endAMin = toBusinessRelativeMinutes(endA);
-  const startBMin = toBusinessRelativeMinutes(startB);
-  const endBMin = toBusinessRelativeMinutes(endB);
+function hasTimeConflict(startA, endA, startB, endB, schedule) {
+  const startAMin = toBusinessRelativeMinutes(startA, schedule);
+  const endAMin = toBusinessRelativeMinutes(endA, schedule);
+  const startBMin = toBusinessRelativeMinutes(startB, schedule);
+  const endBMin = toBusinessRelativeMinutes(endB, schedule);
 
-  if (!Number.isFinite(startAMin) || !Number.isFinite(endAMin) || !Number.isFinite(startBMin) || !Number.isFinite(endBMin)) {
+  if (
+    !Number.isFinite(startAMin) ||
+    !Number.isFinite(endAMin) ||
+    !Number.isFinite(startBMin) ||
+    !Number.isFinite(endBMin)
+  ) {
     return true;
   }
 
   return startAMin < endBMin && endAMin > startBMin;
 }
 
-// Reserve policy: keep 1 small and 1 medium room for Fri/Sat 21:00-23:00 (walk-ins)
+// Reserve policy: keep 1 small and 1 medium room for Fri/Sat 21:00-24:00 (walk-ins)
 function isFridayOrSaturday(dateStr) {
   try {
     // Use midday to avoid edge cases around DST
@@ -248,15 +412,16 @@ function isFridayOrSaturday(dateStr) {
   }
 }
 
-function reservedSlotsForWindow(roomId, date, startTime, endTime) {
+function reservedSlotsForWindow(roomId, date, startTime, endTime, schedule) {
   if (!roomId || !date) return 0;
   const isTargetRoom = roomId === 'small' || roomId === 'medium';
   if (!isTargetRoom) return 0;
   if (!isFridayOrSaturday(date)) return 0;
-  // Walk-in hold window: 21:00 - 23:00
+  // Walk-in hold window: 21:00 - 00:00
   const holdStart = '21:00';
-  const holdEnd = '23:00';
-  return hasTimeConflict(startTime, endTime, holdStart, holdEnd) ? 1 : 0;
+  const holdEnd = '00:00';
+  const activeSchedule = schedule || getBusinessScheduleForDate(date);
+  return hasTimeConflict(startTime, endTime, holdStart, holdEnd, activeSchedule) ? 1 : 0;
 }
 
 // Email sending stub. Integrate SendGrid or Mailgun here once credentials are
@@ -292,25 +457,42 @@ async function sendSms(to, message) {
   }
 }
 
-async function sendFridaySaturdayBookingSms(bookingDoc) {
+async function sendBookingConfirmationSms(bookingDoc) {
+  if (!bookingDoc) return;
+  const customer = bookingDoc.customerInfo || {};
+  const phone = (customer.phone || '').trim();
+  if (phone) {
+    const firstName = (customer.firstName || '').trim();
+    const contactLine = 'Need anything? Call 416-968-0909.';
+    const message = firstName
+      ? `Hi ${firstName}! Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`
+      : `Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`;
+    await sendSms(phone, message);
+  }
+  if (twilioNotifyNumber) {
+    const displayName =
+      [customer.firstName, customer.lastName].filter(Boolean).join(' ') ||
+      customer.email ||
+      bookingDoc.id;
+    const summary =
+      `New booking ${bookingDoc.id || ''} (${displayName}) on ${bookingDoc.date} ${bookingDoc.startTime} in ${bookingDoc.roomId}`.trim();
+    await sendSms(twilioNotifyNumber, summary);
+  }
+}
+
+async function sendFridaySaturdayReminderSms(bookingDoc) {
   if (!bookingDoc || !isFridayOrSaturday(bookingDoc.date)) {
     return;
   }
   const customer = bookingDoc.customerInfo || {};
   const phone = (customer.phone || '').trim();
-  if (phone) {
-    const firstName = (customer.firstName || '').trim();
-    const friendlyTime = `${bookingDoc.date} ${bookingDoc.startTime}`;
-    const message = firstName
-      ? `Hi ${firstName}! Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon!`
-      : `Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon!`;
-    await sendSms(phone, message);
-  }
-  if (twilioNotifyNumber) {
-    const displayName = [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.email || bookingDoc.id;
-    const summary = `New booking ${bookingDoc.id || ''} (${displayName}) on ${bookingDoc.date} ${bookingDoc.startTime} in ${bookingDoc.roomId}`.trim();
-    await sendSms(twilioNotifyNumber, summary);
-  }
+  if (!phone) return;
+  const firstName = (customer.firstName || '').trim();
+  const contactLine = 'Need anything? Call 416-968-0909.';
+  const message = firstName
+    ? `Reminder: Hi ${firstName}, your BarJunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`
+    : `Reminder: Your BarJunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`;
+  await sendSms(phone, message);
 }
 
 /**
@@ -341,7 +523,10 @@ async function createBookingInternal(params) {
   // Enforce maximum booking duration of 3 hours
   const dur = Number(duration);
   if (!Number.isFinite(dur) || dur <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'Duration must be a positive number of hours');
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Duration must be a positive number of hours',
+    );
   }
   if (dur > 3) {
     throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
@@ -362,10 +547,15 @@ async function createBookingInternal(params) {
 
   // Compute the end time based on start time and duration
   const dateObj = new Date(`${date}T${startTime}`);
-  dateObj.setHours(dateObj.getHours() + dur);
+  addDurationMinutes(dateObj, dur);
   const endTime = dateObj.toTimeString().slice(0, 5);
 
-  ensureWithinBusinessHours(startTime, endTime);
+  const schedule = getBusinessScheduleForDate(date);
+  if (!schedule) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date provided.');
+  }
+
+  ensureWithinBusinessHours(date, startTime, endTime);
   ensureNotInPast(date, startTime);
 
   const bookingsQuery = db
@@ -379,13 +569,13 @@ async function createBookingInternal(params) {
   let overlappingCount = 0;
   for (const doc of existing.docs) {
     const booking = doc.data();
-    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
+    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
       overlappingCount += 1;
     }
   }
 
   // Apply reserved slot policy (Fri/Sat 21:00-23:00) for small/medium rooms
-  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+  const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
   const effectiveInventory = Math.max(inventory - reserved, 0);
   if (overlappingCount >= effectiveInventory) {
     throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
@@ -437,12 +627,12 @@ async function createBookingInternal(params) {
 
       txnSnapshot.forEach((doc) => {
         const booking = doc.data();
-        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
+        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
           txnOverlapping += 1;
         }
       });
 
-      const txnReserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+      const txnReserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
       const txnEffectiveInventory = Math.max(inventory - txnReserved, 0);
       if (txnOverlapping >= txnEffectiveInventory) {
         throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
@@ -467,7 +657,7 @@ async function createBookingInternal(params) {
   // Call stubs for email and calendar integrations. These return silently.
   await sendBookingEmail({ id: newBookingRef.id, ...bookingDoc });
   await addBookingToCalendar({ id: newBookingRef.id, ...bookingDoc });
-  await sendFridaySaturdayBookingSms({ id: newBookingRef.id, ...bookingDoc });
+  await sendBookingConfirmationSms({ id: newBookingRef.id, ...bookingDoc });
 
   return {
     id: newBookingRef.id,
@@ -508,6 +698,20 @@ async function cancelBookingInternal(bookingId) {
   });
 
   // Send cancellation email via stub
+  await sendCancellationEmail({ id: bookingId, ...booking });
+}
+
+async function cancelBookingWithoutRefund(bookingId) {
+  const ref = db.collection('bookings').doc(bookingId);
+  const doc = await ref.get();
+  if (!doc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Booking not found');
+  }
+  const booking = doc.data();
+  await ref.update({
+    status: 'cancelled',
+    updatedAt: FieldValue.serverTimestamp(),
+  });
   await sendCancellationEmail({ id: bookingId, ...booking });
 }
 
@@ -606,10 +810,15 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   }
 
   const endDate = new Date(startDate.getTime());
-  endDate.setHours(endDate.getHours() + duration);
+  addDurationMinutes(endDate, duration);
   const endTime = endDate.toTimeString().slice(0, 5);
 
-  ensureWithinBusinessHours(startTime, endTime);
+  const schedule = getBusinessScheduleForDate(date);
+  if (!schedule) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
+  }
+
+  ensureWithinBusinessHours(date, startTime, endTime);
   ensureNotInPast(date, startTime);
 
   const availabilityEntries = await Promise.all(
@@ -629,12 +838,12 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
         }
 
         const booking = doc.data();
-        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
+        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime, schedule)) {
           overlapping += 1;
         }
       });
 
-      const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime);
+      const reserved = reservedSlotsForWindow(roomId, date, startTime, endTime, schedule);
       const remaining = Math.max(inventory - overlapping - reserved, 0);
       return [roomId, remaining];
     }),
@@ -654,6 +863,17 @@ exports.adminCancelBySecret = functions.https.onCall(async (data, context) => {
   await cancelBookingInternal(bookingId);
   const snap = await db.collection('bookings').doc(bookingId).get();
   return { message: 'Booking cancelled', booking: sanitizeBookingSnapshot(snap) };
+});
+
+exports.adminCancelWithoutRefund = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
+  const { bookingId } = data || {};
+  if (!bookingId) {
+    throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
+  }
+  await cancelBookingWithoutRefund(bookingId);
+  const snap = await db.collection('bookings').doc(bookingId).get();
+  return { message: 'Booking cancelled (no refund)', booking: sanitizeBookingSnapshot(snap) };
 });
 
 exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
@@ -681,7 +901,10 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
   }
   const duration = Number(newDuration);
   if (!Number.isFinite(duration) || duration <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'Duration must be a positive number of hours');
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Duration must be a positive number of hours',
+    );
   }
   if (duration > 3) {
     throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
@@ -695,7 +918,7 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
   const targetRoomId = roomId || current.roomId;
   ensureNotInPast(newDate, newStartTime);
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
-  ensureWithinBusinessHours(newStartTime, endTime);
+  ensureWithinBusinessHours(newDate, newStartTime, endTime);
   await db.runTransaction(async (transaction) => {
     await ensureRoomAvailability(
       targetRoomId,
@@ -727,6 +950,55 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
   });
   const updated = await ref.get();
   return { message: 'Booking updated', booking: sanitizeBookingSnapshot(updated) };
+});
+
+exports.adminRefundBySecret = functions.https.onCall(async (data, context) => {
+  requireAdmin(context);
+  const { bookingId } = data || {};
+  if (!bookingId) {
+    throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
+  }
+  const ref = db.collection('bookings').doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Booking not found');
+  }
+  const booking = snap.data();
+  const intentId = booking.paymentIntentId;
+  if (!intentId) {
+    throw new functions.https.HttpsError('failed-precondition', 'No payment intent to refund');
+  }
+  let intent;
+  try {
+    intent = await stripe.paymentIntents.retrieve(intentId);
+  } catch (err) {
+    console.error('[adminRefund] Retrieve PaymentIntent failed', err);
+    throw new functions.https.HttpsError('internal', 'Unable to retrieve payment');
+  }
+
+  try {
+    if (intent.status === 'requires_capture') {
+      await stripe.paymentIntents.cancel(intentId);
+    } else if (intent.status === 'canceled') {
+      // already canceled, nothing to do
+    } else {
+      await stripe.refunds.create({ payment_intent: intentId });
+    }
+  } catch (err) {
+    console.error('[adminRefund] Refund failed', err);
+    throw new functions.https.HttpsError('internal', 'Refund failed');
+  }
+
+  await ref.update({
+    paymentStatus: 'refunded',
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  const updated = await ref.get();
+  return {
+    message: 'Payment refunded',
+    booking: sanitizeBookingSnapshot(updated),
+  };
 });
 
 /**
@@ -790,7 +1062,8 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
     if (startTime) updatePayload.startTime = String(startTime);
     if (Number.isFinite(durNum)) updatePayload.duration = durNum;
     if (Number.isFinite(Number(partySize))) updatePayload.partySize = Number(partySize);
-    if (normalizedCustomerInfo) updatePayload.customerInfo = { ...current.customerInfo, ...normalizedCustomerInfo };
+    if (normalizedCustomerInfo)
+      updatePayload.customerInfo = { ...current.customerInfo, ...normalizedCustomerInfo };
     if (Number.isFinite(Number(totalCost))) updatePayload.totalCost = Number(totalCost);
     if (Number.isFinite(Number(depositAmount))) updatePayload.depositAmount = Number(depositAmount);
     if (Number.isFinite(Number(bookingFee))) updatePayload.bookingFee = Number(bookingFee);
@@ -810,13 +1083,16 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
       const nextDurationValue = durationChanged ? updatePayload.duration : current.duration;
       const nextDuration = Number(nextDurationValue);
       if (!Number.isFinite(nextDuration)) {
-        throw new functions.https.HttpsError('invalid-argument', 'Duration must be a valid number of hours');
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'Duration must be a valid number of hours',
+        );
       }
 
       ensureNotInPast(nextDate, nextStart);
       const end = maybeComputeEnd(nextDate, nextStart, nextDuration);
       if (end) {
-        ensureWithinBusinessHours(nextStart, end);
+        ensureWithinBusinessHours(nextDate, nextStart, end);
         updatePayload.endTime = end;
       }
     }
@@ -837,7 +1113,7 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
   ensureNotInPast(date, startTime);
   const endTime = maybeComputeEnd(date, startTime, durNum);
   if (endTime) {
-    ensureWithinBusinessHours(startTime, endTime);
+    ensureWithinBusinessHours(date, startTime, endTime);
   }
   const newDoc = {
     roomId: String(roomId),
@@ -865,9 +1141,7 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
 
   const ref = db.collection('bookings').doc();
   await ref.set(newDoc);
-  if (isFridayOrSaturday(date)) {
-    await sendFridaySaturdayBookingSms({ id: ref.id, ...newDoc });
-  }
+  await sendBookingConfirmationSms({ id: ref.id, ...newDoc });
   const created = await ref.get();
   return { message: 'Booking created', booking: sanitizeBookingSnapshot(created) };
 });
@@ -878,10 +1152,7 @@ exports.adminGetBookingsByDate = functions.https.onCall(async (data, context) =>
   if (!date) {
     throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
   }
-  const snapshot = await db
-    .collection('bookings')
-    .where('date', '==', date)
-    .get();
+  const snapshot = await db.collection('bookings').where('date', '==', date).get();
   const bookings = snapshot.docs
     .map((doc) => sanitizeBookingSnapshot(doc))
     .filter(Boolean)
@@ -896,7 +1167,18 @@ exports.adminGetAvailabilityByDate = functions.https.onCall(async (data, context
   if (!date) {
     throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
   }
-  const timeList = Array.isArray(times) && times.length ? times.map(String) : DEFAULT_TIMES;
+  const schedule = getBusinessScheduleForDate(date);
+  if (!schedule) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid date provided.');
+  }
+  const slotDurationMinutes = Math.max(
+    MIN_BOOKING_DURATION_MINUTES,
+    Math.round(dur * 60) || MIN_BOOKING_DURATION_MINUTES,
+  );
+  const timeList =
+    Array.isArray(times) && times.length
+      ? times.map(String)
+      : buildTimeSlotsForDate(date, slotDurationMinutes);
   // Fetch all bookings for date once
   const snap = await db
     .collection('bookings')
@@ -913,18 +1195,21 @@ exports.adminGetAvailabilityByDate = functions.https.onCall(async (data, context
     byRoom[r].push({ startTime: start, endTime: end });
   });
   const availability = {};
-  Object.keys(ROOM_CONFIG).forEach((roomId) => { if (!byRoom[roomId]) byRoom[roomId] = []; });
+  Object.keys(ROOM_CONFIG).forEach((roomId) => {
+    if (!byRoom[roomId]) byRoom[roomId] = [];
+  });
   timeList.forEach((t) => {
-    const [h,m] = t.split(':').map(Number);
     const endD = new Date(`${date}T${t}`);
-    endD.setHours(h + dur, m, 0, 0);
-    const tEnd = endD.toTimeString().slice(0,5);
+    addDurationMinutes(endD, dur);
+    const tEnd = endD.toTimeString().slice(0, 5);
     availability[t] = {};
     Object.entries(ROOM_CONFIG).forEach(([roomId, cfg]) => {
       const bookings = byRoom[roomId] || [];
       let overlapping = 0;
-      bookings.forEach((b) => { if (hasTimeConflict(t, tEnd, b.startTime, b.endTime)) overlapping += 1; });
-      const reserved = reservedSlotsForWindow(roomId, date, t, tEnd);
+      bookings.forEach((b) => {
+        if (hasTimeConflict(t, tEnd, b.startTime, b.endTime, schedule)) overlapping += 1;
+      });
+      const reserved = reservedSlotsForWindow(roomId, date, t, tEnd, schedule);
       const remain = Math.max((cfg.inventory || 0) - overlapping - reserved, 0);
       availability[t][roomId] = remain;
     });
@@ -1035,7 +1320,7 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
   ensureNotInPast(newDate, newStartTime);
 
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
-  ensureWithinBusinessHours(newStartTime, endTime);
+  ensureWithinBusinessHours(newDate, newStartTime, endTime);
   const targetRoomId = requestedRoomId || booking.roomId;
 
   const normalizedCustomerInfo = customerInfo
@@ -1220,6 +1505,91 @@ exports.confirmBooking = functions.https.onCall(async (data, context) => {
   return { ok: true };
 });
 
+exports.autoCaptureDailyPayments = functions.pubsub
+  .schedule('every 30 minutes')
+  .timeZone(BUSINESS_TIMEZONE)
+  .onRun(async () => {
+    const targetDate = getLatestCompletedBusinessDate(new Date());
+    if (!targetDate) {
+      console.warn('[autoCapture] Unable to determine target business date.');
+      return null;
+    }
+
+    const snap = await db
+      .collection('bookings')
+      .where('paymentStatus', '==', 'requires_capture')
+      .get();
+
+    if (snap.empty) {
+      console.log('[autoCapture] No payments awaiting capture.');
+      return null;
+    }
+
+    let reviewed = 0;
+    let captured = 0;
+    for (const doc of snap.docs) {
+      reviewed += 1;
+      const booking = doc.data();
+      const bookingDate = typeof booking.date === 'string' ? booking.date : null;
+      if (!bookingDate || bookingDate > targetDate) {
+        continue;
+      }
+      const status = (booking.status || '').toLowerCase();
+      if (status === 'cancelled' || status === 'canceled') {
+        continue;
+      }
+      const ok = await capturePaymentIntentAutomatically(doc);
+      if (ok) {
+        captured += 1;
+      }
+    }
+
+    console.log(
+      `[autoCapture] Business date ${targetDate}: reviewed ${reviewed} capturable bookings, captured ${captured}.`,
+    );
+    return null;
+  });
+
+exports.sendWeekendReminderTexts = functions.pubsub
+  .schedule('every thursday 10:00')
+  .timeZone(BUSINESS_TIMEZONE)
+  .onRun(async () => {
+    const { fridayDate, saturdayDate } = getUpcomingFridaySaturdayDates(new Date());
+    const targets = [fridayDate, saturdayDate].filter(Boolean);
+    if (!targets.length) {
+      console.warn('[reminder] No target dates for weekend reminders.');
+      return null;
+    }
+
+    const snap = await db
+      .collection('bookings')
+      .where('date', 'in', targets)
+      .where('status', 'in', ACTIVE_BOOKING_STATUSES)
+      .get();
+
+    if (snap.empty) {
+      console.log('[reminder] No bookings found for upcoming weekend.');
+      return null;
+    }
+
+    let notified = 0;
+    await Promise.all(
+      snap.docs.map(async (doc) => {
+        try {
+          await sendFridaySaturdayReminderSms({ id: doc.id, ...doc.data() });
+          notified += 1;
+        } catch (err) {
+          console.error('[reminder] Failed to send reminder for booking', doc.id, err);
+        }
+      }),
+    );
+
+    console.log(
+      `[reminder] Sent reminders for ${notified} bookings on ${fridayDate} and ${saturdayDate}.`,
+    );
+    return null;
+  });
+
 /**
  * Callable: adminCaptureBySecret
  *
@@ -1272,6 +1642,37 @@ exports.adminCaptureBySecret = functions.https.onCall(async (data, context) => {
   }
 });
 
+async function capturePaymentIntentAutomatically(doc) {
+  if (!doc || !doc.exists) return false;
+  const booking = doc.data();
+  const intentId = booking.paymentIntentId;
+  if (!intentId) {
+    return false;
+  }
+  let intent;
+  try {
+    intent = await stripe.paymentIntents.retrieve(intentId);
+  } catch (err) {
+    console.error('[autoCapture] Unable to retrieve PaymentIntent', intentId, err.message || err);
+    return false;
+  }
+  if (intent.status !== 'requires_capture') {
+    return false;
+  }
+  try {
+    const captured = await stripe.paymentIntents.capture(intentId);
+    await doc.ref.update({
+      paymentStatus: captured.status,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    console.log('[autoCapture] Captured PaymentIntent', intentId, 'for booking', doc.id);
+    return true;
+  } catch (err) {
+    console.error('[autoCapture] Capture failed for', intentId, 'booking', doc.id, err.message || err);
+    return false;
+  }
+}
+
 /**
  * HTTPS Function: getGoogleReviews
  *
@@ -1293,7 +1694,9 @@ exports.getGoogleReviews = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    const API_KEY = process.env.GOOGLE_MAPS_API_KEY || (functions.config().google && functions.config().google.api_key);
+    const API_KEY =
+      process.env.GOOGLE_MAPS_API_KEY ||
+      (functions.config().google && functions.config().google.api_key);
     if (!API_KEY) {
       res.status(503).json({ error: 'Google API key not configured' });
       return;
@@ -1318,7 +1721,9 @@ exports.getGoogleReviews = functions.https.onRequest(async (req, res) => {
     const reviews = Array.isArray(details?.result?.reviews) ? details.result.reviews : [];
 
     // Prioritize 5-star reviews by recency, fall back to 4-star if needed.
-    const fiveStar = reviews.filter((r) => Number(r?.rating) === 5).sort((a, b) => (b?.time || 0) - (a?.time || 0));
+    const fiveStar = reviews
+      .filter((r) => Number(r?.rating) === 5)
+      .sort((a, b) => (b?.time || 0) - (a?.time || 0));
     let selected = fiveStar.slice(0, 3);
     if (selected.length < 3) {
       const fourStar = reviews
