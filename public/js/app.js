@@ -1064,6 +1064,7 @@ class BarzunkoApp {
 
       // Check if day is available
       const dayTimeSlots = this.getTimeSlotsForDate(dayDateString, this.bookingData.duration || 1);
+      // console.log(this.bookingData.duration);
       const hasAvailableSlot = dayTimeSlots.some((slot) => {
         const [slotHours, slotMinutes] = slot.split(':').map(Number);
         const slotDateTime = new Date(dayDate);
@@ -1128,7 +1129,13 @@ class BarzunkoApp {
     const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
 
     const slots = this.getTimeSlotsForDate(this.selectedDate, this.bookingData.duration || 1);
-    if (!slots.length) {
+    const weekday = selectedDateTime.getDay();
+    const filteredSlots = slots.filter((time) => {
+      if (weekday === 5 && time === '02:00') return false;
+      if (weekday === 0 && time === '01:30') return false;
+      return true;
+    });
+    if (!filteredSlots.length) {
       const empty = document.createElement('div');
       empty.className = 'time-slot disabled';
       empty.textContent = 'No times available';
@@ -1136,7 +1143,7 @@ class BarzunkoApp {
       return;
     }
 
-    slots.forEach((time) => {
+    filteredSlots.forEach((time) => {
       const slotDateTime = new Date(selectedDateTime.getTime());
       const [hours, minutes] = time.split(':').map(Number);
       slotDateTime.setHours(hours, minutes, 0, 0);
