@@ -1,0 +1,56 @@
+[debug] [2025-11-19T21:03:50.496Z] ----------------------------------------------------------------------
+[debug] [2025-11-19T21:03:50.498Z] Command:       /opt/homebrew/Cellar/node@20/20.19.5/bin/node /Users/simonlee/TheKKaraoke/node_modules/.bin/firebase emulators:start --only hosting
+[debug] [2025-11-19T21:03:50.498Z] CLI Version:   14.24.2
+[debug] [2025-11-19T21:03:50.498Z] Platform:      darwin
+[debug] [2025-11-19T21:03:50.498Z] Node Version:  v20.19.5
+[debug] [2025-11-19T21:03:50.498Z] Time:          Wed Nov 19 2025 16:03:50 GMT-0500 (Eastern Standard Time)
+[debug] [2025-11-19T21:03:50.498Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-11-19T21:03:50.617Z] Object "/functions" in "firebase.json" has unknown property: {"additionalProperty":"platform"}
+[debug] [2025-11-19T21:03:50.617Z] Object "/functions" in "firebase.json" is missing required property: {"missingProperty":"remoteSource"}
+[debug] [2025-11-19T21:03:50.617Z] Field "/functions" in "firebase.json" is possibly invalid: must be array
+[debug] [2025-11-19T21:03:50.617Z] Field "/functions" in "firebase.json" is possibly invalid: must match a schema in anyOf
+[debug] [2025-11-19T21:03:50.621Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-19T21:03:50.622Z] > authorizing via signed-in user (leebueyo@gmail.com)
+[info] i  emulators: Starting emulators: hosting {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: hosting"}}
+[debug] [2025-11-19T21:03:50.818Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2025-11-19T21:03:50.818Z] assigned listening specs for emulators {"user":{"hosting":[{"address":"127.0.0.1","family":"IPv4","port":5002}],"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2025-11-19T21:03:50.821Z] Emulator locator file path: /var/folders/2j/tbp1w5994bq6xytfjj6g6c7m0000gn/T/hub-thek-karaoke.json
+[debug] [2025-11-19T21:03:50.821Z] [hub] writing locator at /var/folders/2j/tbp1w5994bq6xytfjj6g6c7m0000gn/T/hub-thek-karaoke.json
+[debug] [2025-11-19T21:03:50.828Z] Checked if tokens are valid: true, expires at: 1763588498689
+[debug] [2025-11-19T21:03:50.828Z] Checked if tokens are valid: true, expires at: 1763588498689
+[debug] [2025-11-19T21:03:50.828Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/thek-karaoke/sites 
+[debug] [2025-11-19T21:03:53.644Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/thek-karaoke/sites 200
+[debug] [2025-11-19T21:03:53.644Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/thek-karaoke/sites {"sites":[{"name":"projects/thek-karaoke/sites/thek-karaoke","defaultUrl":"https://thek-karaoke.web.app","type":"DEFAULT_SITE"}]}
+[debug] [2025-11-19T21:03:53.644Z] Checked if tokens are valid: true, expires at: 1763588498689
+[debug] [2025-11-19T21:03:53.644Z] Checked if tokens are valid: true, expires at: 1763588498689
+[debug] [2025-11-19T21:03:53.644Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/thek-karaoke/webApps/-/config [none]
+[debug] [2025-11-19T21:03:54.044Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/thek-karaoke/webApps/-/config 200
+[debug] [2025-11-19T21:03:54.044Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/thek-karaoke/webApps/-/config {"projectId":"thek-karaoke","appId":"1:508456771115:web:6e792cd798414ca8ac146e","storageBucket":"thek-karaoke.firebasestorage.app","apiKey":"AIzaSyBAlQmkR9MMjfKXofeuBBodzmZ5Gq20NO4","authDomain":"thek-karaoke.firebaseapp.com","messagingSenderId":"508456771115","measurementId":"G-6S02LBR6NQ","projectNumber":"508456771115","version":"2"}
+[debug] [2025-11-19T21:03:54.061Z] Checked if tokens are valid: true, expires at: 1763588498689
+[debug] [2025-11-19T21:03:54.061Z] Checked if tokens are valid: true, expires at: 1763588498689
+[debug] [2025-11-19T21:03:54.061Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/thek-karaoke [none]
+[debug] [2025-11-19T21:03:54.269Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/thek-karaoke 200
+[debug] [2025-11-19T21:03:54.269Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/thek-karaoke {"projectId":"thek-karaoke","projectNumber":"508456771115","displayName":"TheK-Karaoke","name":"projects/thek-karaoke","resources":{"hostingSite":"thek-karaoke"},"state":"ACTIVE","etag":"1_2e78cdb3-d904-4d06-ab48-87693ab042f6"}
+[info] i  hosting[thek-karaoke]: Serving hosting files from: public {"metadata":{"emulator":{"name":"hosting"},"message":"Serving hosting files from: \u001b[1mpublic\u001b[22m"}}
+[info] ✔  hosting[thek-karaoke]: Local server: http://127.0.0.1:5002 {"metadata":{"emulator":{"name":"hosting"},"message":"Local server: \u001b[4m\u001b[1mhttp://127.0.0.1:5002\u001b[22m\u001b[24m"}}
+[warn] ⚠  emulators: The Emulator UI is not starting because none of the running emulators have a UI component. {"metadata":{"emulator":{"name":"hub"},"message":"The Emulator UI is not starting because none of the running emulators have a UI component."}}
+[debug] [2025-11-19T21:03:54.317Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+└─────────────────────────────────────────────────────────────┘
+
+┌──────────┬────────────────┐
+│ Emulator │ Host:Port      │
+├──────────┼────────────────┤
+│ Hosting  │ 127.0.0.1:5002 │
+└──────────┴────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
+[info] i  hosting: 127.0.0.1 - - [19/Nov/2025:21:03:54 +0000] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 187 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [19/Nov/2025:21:03:54 +0000] \"GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1\" 404 187 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [19/Nov/2025:21:03:57 +0000] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 187 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [19/Nov/2025:21:03:57 +0000] \"GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1\" 404 187 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
+[info] i  hosting: 127.0.0.1 - - [19/Nov/2025:21:03:57 +0000] "GET /js/app.js HTTP/1.1" 200 - "http://127.0.0.1:5002/booking.html" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" {"metadata":{"emulator":{"name":"hosting"},"message":"127.0.0.1 - - [19/Nov/2025:21:03:57 +0000] \"GET /js/app.js HTTP/1.1\" 200 - \"http://127.0.0.1:5002/booking.html\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36\""}}
