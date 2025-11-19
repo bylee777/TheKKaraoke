@@ -2481,6 +2481,10 @@ class BarzunkoApp {
                 <span class="summary-label">Remaining Balance:</span>
                 <span class="summary-value">$${this.bookingData.remainingBalance} (due on arrival)</span>
             </div>
+            <div class="summary-row">
+                <span class="summary-label">Text Notification:</span>
+                <span class="summary-value">Confirmation text has been sent to your phone.</span>
+            </div>
             <div style="margin-top: var(--space-20); padding: var(--space-16); background: rgba(139, 92, 246, 0.1); border-radius: var(--radius-base); border: 1px solid rgba(139, 92, 246, 0.2);">
                 <h4 style="margin: 0 0 var(--space-8) 0; color: var(--neon-purple);">Important Notes:</h4>
                 <ul style="margin: 0; padding-left: var(--space-16); color: var(--color-text-secondary);">
