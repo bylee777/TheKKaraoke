@@ -2939,6 +2939,11 @@ th {
   
   .booking-controls {
     flex-direction: column;
+    margin-bottom: var(--space-32);
+  }
+
+  .booking-step {
+    padding-bottom: var(--space-40);
   }
   
   .confirmation-actions {
