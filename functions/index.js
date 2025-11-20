@@ -35,6 +35,22 @@ const twilioNotifyNumber =
 const hasTwilioCredentials = twilioAccountSid && twilioAuthToken && twilioFromNumber;
 const twilioClient = hasTwilioCredentials ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
+const telegramBotToken =
+  (functions.config().telegram && functions.config().telegram.bot_token) ||
+  process.env.TELEGRAM_BOT_TOKEN ||
+  null;
+let telegramChatIds = [];
+try {
+  const raw =
+    (functions.config().telegram && functions.config().telegram.chat_ids) ||
+    process.env.TELEGRAM_CHAT_IDS;
+  if (raw) {
+    telegramChatIds = Array.isArray(raw) ? raw : JSON.parse(raw);
+  }
+} catch (_) {
+  telegramChatIds = [];
+}
+
 // Initialize the Firebase Admin SDK to access Firestore
 admin.initializeApp();
 const db = admin.firestore();
@@ -604,6 +620,24 @@ async function addBookingToCalendar(booking) {
   return;
 }
 
+async function sendTelegramMessage(text) {
+  if (!telegramBotToken || !telegramChatIds.length || !text) return;
+  const urlBase = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
+  await Promise.all(
+    telegramChatIds.map(async (chatId) => {
+      try {
+        await fetch(urlBase, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text }),
+        });
+      } catch (err) {
+        console.error('[telegram] Failed to send message to', chatId, err.message || err);
+      }
+    }),
+  );
+}
+
 async function sendSms(to, message) {
   if (!to || !message) {
     return;
@@ -827,6 +861,17 @@ async function createBookingInternal(params) {
   await sendBookingEmail({ id: newBookingRef.id, ...bookingDoc });
   await addBookingToCalendar({ id: newBookingRef.id, ...bookingDoc });
   await sendBookingConfirmationSms({ id: newBookingRef.id, ...bookingDoc });
+  await sendTelegramMessage(
+    [
+      '📅 New Booking',
+      `Date: ${bookingDoc.date} ${bookingDoc.startTime}`,
+      `Room: ${bookingDoc.roomId}`,
+      `Name: ${bookingDoc.customerInfo?.firstName || ''} ${bookingDoc.customerInfo?.lastName || ''}`,
+      `Phone: ${bookingDoc.customerInfo?.phone || 'n/a'}`,
+      `Party Size: ${bookingDoc.partySize ?? 'n/a'}`,
+      `Deposit: $${bookingDoc.depositAmount ?? 0}`,
+    ].join('\n'),
+  );
 
   return {
     id: newBookingRef.id,
@@ -868,6 +913,16 @@ async function cancelBookingInternal(bookingId) {
 
   // Send cancellation email via stub
   await sendCancellationEmail({ id: bookingId, ...booking });
+  await sendTelegramMessage(
+    [
+      '⚠️ Booking Cancelled',
+      `Date: ${booking.date} ${booking.startTime}`,
+      `Room: ${booking.roomId}`,
+      `Name: ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''}`,
+      `Phone: ${booking.customerInfo?.phone || 'n/a'}`,
+      `Status: ${booking.status || 'cancelled'}`,
+    ].join('\n'),
+  );
 }
 
 async function cancelBookingWithoutRefund(bookingId) {
@@ -882,6 +937,16 @@ async function cancelBookingWithoutRefund(bookingId) {
     updatedAt: FieldValue.serverTimestamp(),
   });
   await sendCancellationEmail({ id: bookingId, ...booking });
+  await sendTelegramMessage(
+    [
+      '⚠️ Booking Cancelled (no refund)',
+      `Date: ${booking.date} ${booking.startTime}`,
+      `Room: ${booking.roomId}`,
+      `Name: ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''}`,
+      `Phone: ${booking.customerInfo?.phone || 'n/a'}`,
+      `Status: ${booking.status || 'cancelled'}`,
+    ].join('\n'),
+  );
 }
 
 /**
@@ -1313,6 +1378,17 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
   const ref = db.collection('bookings').doc();
   await ref.set(newDoc);
   await sendBookingConfirmationSms({ id: ref.id, ...newDoc });
+  await sendTelegramMessage(
+    [
+      '📅 New Booking (manual)',
+      `Date: ${newDoc.date} ${newDoc.startTime}`,
+      `Room: ${newDoc.roomId}`,
+      `Name: ${newDoc.customerInfo?.firstName || ''} ${newDoc.customerInfo?.lastName || ''}`,
+      `Phone: ${newDoc.customerInfo?.phone || 'n/a'}`,
+      `Party Size: ${newDoc.partySize ?? 'n/a'}`,
+      `Deposit: $${newDoc.depositAmount ?? 0}`,
+    ].join('\n'),
+  );
   const created = await ref.get();
   return { message: 'Booking created', booking: sanitizeBookingSnapshot(created) };
 });

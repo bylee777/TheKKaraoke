@@ -77,6 +77,11 @@ class BarzunkoApp {
     this.applicationInitialized = false;
     this.domReadyHandlerAttached = false;
 
+    this.navigationCooldownMs = 2000;
+    this.lastNavigationTime = 0;
+    this.submitCooldownMs = 5000;
+    this.lastSubmitTime = 0;
+
     // Business data
     this.businessData = {
       name: 'Barzunko',
@@ -726,12 +731,29 @@ class BarzunkoApp {
     });
   }
 
+  temporarilyDisableButton(buttonId, durationMs) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    button.disabled = true;
+    window.setTimeout(() => {
+      button.disabled = false;
+    }, durationMs);
+  }
+
   nextStep() {
+    const now = Date.now();
+    if (now < this.lastNavigationTime + this.navigationCooldownMs) {
+      this.showNotification('Please wait a moment before continuing.', 'warning');
+      return;
+    }
+
     if (!this.validateCurrentStep()) {
       return;
     }
 
     if (this.currentStep < this.maxStep) {
+      this.lastNavigationTime = now;
+      this.temporarilyDisableButton('next-btn', this.navigationCooldownMs);
       this.showBookingStep(this.currentStep + 1);
     }
   }
@@ -2267,6 +2289,11 @@ class BarzunkoApp {
   }
 
   async completeBooking() {
+    const now = Date.now();
+    if (now < this.lastSubmitTime + this.submitCooldownMs) {
+      this.showNotification('Please wait a moment before submitting again.', 'warning');
+      return;
+    }
     // Validate the current step (ensures date/room/customer info are filled)
     if (!this.validateCurrentStep()) return;
 
@@ -2279,11 +2306,15 @@ class BarzunkoApp {
     this.bookingData.termsAccepted = true;
 
     if (this.isRebookingFlow) {
+      this.lastSubmitTime = now;
+      this.temporarilyDisableButton('complete-booking-btn', this.submitCooldownMs);
       this.showLoading('Updating your booking...');
       await this.completeRebookingFlow();
       return;
     }
 
+    this.lastSubmitTime = now;
+    this.temporarilyDisableButton('complete-booking-btn', this.submitCooldownMs);
     // Show a loading overlay
     this.showLoading('Processing your booking...');
 
@@ -4236,10 +4267,9 @@ class BarzunkoApp {
             : paymentStatus === 'canceled'
               ? ' is-error'
               : '';
-      const customerName = booking.customerInfo
-        ? `${booking.customerInfo.firstName || ''} ${booking.customerInfo.lastName || ''}`.trim()
-        : '';
-      const customerEmail = booking.customerInfo?.email || '';
+      const customer = booking.customerInfo || booking.customer || {};
+      const customerName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
+      const customerEmail = customer.email || '';
       const guestsDisplay = Number(booking.partySize) ? String(Number(booking.partySize)) : '-';
 
       this.adminBookingsById[booking.id] = booking;
