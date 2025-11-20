@@ -1719,6 +1719,7 @@ main {
   display: flex;
   justify-content: center;
   gap: var(--space-16);
+  margin-bottom: var(--space-32);
 }
 
 /* ===== CALENDAR ===== */
