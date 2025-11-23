@@ -3134,6 +3134,12 @@ th {
   border-radius: var(--radius-lg);
 }
 
+#admin-availability-grid,
+#staff-availability-grid {
+  width: 100%;
+  overflow-x: auto;
+}
+
 /* Admin schedule grid */
 .admin-schedule-table {
   width: 100%;
@@ -3142,6 +3148,7 @@ th {
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-md);
+  min-width: 1200px;
 }
 
 .admin-schedule-table thead {
