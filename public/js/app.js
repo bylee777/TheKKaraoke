@@ -89,7 +89,7 @@ class BarzunkoApp {
       phone: '+1-416-968-0909',
       hours:
         'Mon-Thu: 6:00 PM - 2:30 AM | Fri: 6:00 PM - 3:00 AM | Sat: 1:00 PM - 3:00 AM | Sun: 1:00 PM - 2:30 AM',
-      email: 'info@Barzunko.com',
+      email: 'barzunko@gmail.com',
     };
 
     this.rooms = [
@@ -174,7 +174,7 @@ class BarzunkoApp {
         extraGuestRate: 5,
         requiredPurchase: {
           description:
-            'Required house vodka or tequila purchase (for under age it can be foods or drinks)',
+            'Required house vodka or tequila purchase on Fri/Sat only (for under age it can be foods or drinks)',
           amount: 120,
         },
         inventory: 1,
@@ -185,7 +185,7 @@ class BarzunkoApp {
           'Premium lounge',
           'Full bar service',
           'Dance floor',
-          'Includes required $100 house vodka or tequila purchase',
+          'Required house vodka or tequila purchase on Fri/Sat only (for under age it can be foods or drinks)',
         ],
         photos: ['xlarge.jpeg'],
       },
@@ -1485,13 +1485,29 @@ class BarzunkoApp {
         ? preferredPartySize
         : defaultPartySize;
 
-    this.bookingData.totalCost = booking.totalCost ?? null;
-    this.bookingData.depositAmount = booking.depositAmount ?? null;
-    this.bookingData.remainingBalance =
-      booking.remainingBalance ??
-      (booking.totalCost != null && booking.depositAmount != null
-        ? booking.totalCost - booking.depositAmount
+    const totalCostBeforeTax = Number.isFinite(Number(booking.totalCost))
+      ? Number(booking.totalCost)
+      : null;
+    const totalCostWithTaxFromDoc = Number.isFinite(Number(booking.totalCostWithTax))
+      ? Number(booking.totalCostWithTax)
+      : null;
+    const totalCostWithTax =
+      totalCostWithTaxFromDoc ??
+      (totalCostBeforeTax != null
+        ? Math.round(totalCostBeforeTax * (1 + this.taxRate) * 100) / 100
         : null);
+
+    this.bookingData.totalCost = totalCostBeforeTax;
+    this.bookingData.totalCostWithTax = totalCostWithTax;
+    this.bookingData.depositAmount = Number.isFinite(Number(booking.depositAmount))
+      ? Number(booking.depositAmount)
+      : null;
+    this.bookingData.remainingBalance =
+      Number.isFinite(Number(booking.remainingBalance))
+        ? Number(booking.remainingBalance)
+        : totalCostWithTax != null && this.bookingData.depositAmount != null
+          ? Math.max(totalCostWithTax - this.bookingData.depositAmount, 0)
+          : null;
 
     this.bookingData.customer = {
       firstName: booking.customer?.firstName || '',
@@ -1802,16 +1818,19 @@ class BarzunkoApp {
 
     const extraGuestFee = extraGuestRate * extraGuests * duration;
 
-    const requiredPurchaseAmount = room.requiredPurchase ? room.requiredPurchase.amount : 0;
+    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room, this.selectedDate, time);
 
     const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
     const taxRate = this.taxRate || 0;
     const taxRateLabel = Math.round(taxRate * 100);
+    const depositTaxRateLabel = 0;
     const totalTax = Math.round(totalCost * taxRate * 100) / 100;
     const totalWithTax = Math.round((totalCost + totalTax) * 100) / 100;
 
     const rawDepositAmount = this.computeDepositAmount({
       room,
+      date: this.selectedDate,
+      startTime: time,
       duration,
       extraGuests,
       bookingFee,
@@ -1827,6 +1846,7 @@ class BarzunkoApp {
     const rawRemainingBalance = Math.max(totalWithTax - depositAmount, 0);
     const remainingBalance = Math.round(rawRemainingBalance * 100) / 100;
     const remainingTax = Math.max(Math.round((remainingBalance - remainingPreTax) * 100) / 100, 0);
+    const remainingBalanceNote = remainingBalance > 0 ? 'due on arrival' : 'paid in full';
     this.bookingData.depositAmount = depositAmount;
     this.bookingData.depositBeforeTax = depositBeforeTax;
     this.bookingData.depositTax = depositTax;
@@ -1963,18 +1983,18 @@ class BarzunkoApp {
             </div>
 
             <div class="summary-row">
-                <span class="summary-label">Deposit tax (${taxRateLabel}%):</span>
+                <span class="summary-label">Deposit tax (${depositTaxRateLabel}%):</span>
                 <span class="summary-value">${formatCurrency(depositTax)}</span>
             </div>
 
             <div class="summary-row">
-                <span class="summary-label">Deposit Total:</span>
+                <span class="summary-label">Deposit Paid Today (incl. tax):</span>
                 <span class="summary-value">${formatCurrency(depositAmount)}</span>
             </div>
 
             <div class="summary-row">
-                <span class="summary-label">Balance on Arrival (incl. tax):</span>
-                <span class="summary-value">${formatCurrency(remainingBalance)}</span>
+                <span class="summary-label">Remaining Balance (incl. tax):</span>
+                <span class="summary-value">${formatCurrency(remainingBalance)} (${remainingBalanceNote})</span>
             </div>
 
         `;
@@ -1992,61 +2012,63 @@ class BarzunkoApp {
     this.bookingData.remainingBalance = remainingBalance;
   }
 
-  computeDepositAmount({
-    room,
-    duration,
-    extraGuests,
-    bookingFee,
-    extraGuestRate,
-    totalCostWithTax,
-  }) {
-    if (!room) return 0;
-    const perHourExtraGuestCost = (extraGuestRate || 0) * (extraGuests || 0);
-    const firstHourCost = room.hourlyRate + perHourExtraGuestCost;
-    const taxMultiplier = 1 + (this.taxRate || 0);
-    const requiredPurchaseAmount = this.shouldIncludeRequiredPurchaseInDeposit(room)
-      ? Number(room.requiredPurchase?.amount) || 0
-      : 0;
-    const baseBeforeTax = Math.max(firstHourCost + (bookingFee || 0) + requiredPurchaseAmount, 0);
-    let depositAmount = baseBeforeTax * taxMultiplier;
-    if (Number.isFinite(totalCostWithTax)) {
-      depositAmount = Math.min(totalCostWithTax, depositAmount);
-    }
-
-    if (this.isRebookingFlow && Number.isFinite(this.rebookContext?.booking?.depositAmount)) {
-      depositAmount = this.rebookContext.booking.depositAmount;
-    }
-
-    if (!Number.isFinite(depositAmount)) {
-      return 0;
-    }
-    return Math.round(depositAmount * 100) / 100;
+  getDepositBaseAmount(roomId, dateStr) {
+    if (!roomId) return 0;
+    const safeDate = typeof dateStr === 'string' && dateStr ? new Date(`${dateStr}T12:00:00`) : null;
+    const day = safeDate && !Number.isNaN(safeDate.getTime()) ? safeDate.getDay() : null; // 0=Sun
+    const isWeekend = day === 5 || day === 6; // Fri/Sat
+    const weekdayDeposits = {
+      small: 20,
+      medium: 30,
+      large: 50,
+      'extra-large': 100,
+    };
+    const weekendDeposits = {
+      small: 30,
+      medium: 60,
+      large: 100,
+      'extra-large': 150,
+    };
+    const table = isWeekend ? weekendDeposits : weekdayDeposits;
+    return table[roomId] ?? 0;
   }
 
-  shouldIncludeRequiredPurchaseInDeposit(room) {
-    if (!room) return false;
-    if (room.requiredPurchase?.depositRequired) return true;
-    return room.id === 'extra-large';
+  getRequiredPurchaseAmount(room, dateStr, startTime) {
+    if (!room || !room.requiredPurchase) return 0;
+    if (room.id !== 'extra-large') return room.requiredPurchase.amount || 0;
+    const businessDate = dateStr ? this.determineBusinessDate(dateStr, startTime) : null;
+    const safeDate = businessDate ? new Date(`${businessDate}T12:00:00`) : null;
+    const day = safeDate && !Number.isNaN(safeDate.getTime()) ? safeDate.getDay() : null; // 0=Sun
+    const isWeekend = day === 5 || day === 6;
+    return isWeekend ? room.requiredPurchase.amount || 0 : 0;
+  }
+
+  computeDepositAmount({ room, date, startTime, totalCostWithTax }) {
+    if (this.isRebookingFlow && Number.isFinite(this.rebookContext?.booking?.depositAmount)) {
+      return Math.round(this.rebookContext.booking.depositAmount * 100) / 100;
+    }
+    const bookingDate = date || this.selectedDate || this.bookingData?.date || null;
+    const bookingTime = startTime || this.selectedTime || this.bookingData?.startTime || null;
+    const businessDate = bookingDate ? this.determineBusinessDate(bookingDate, bookingTime) : null;
+    const roomId = room?.id || this.selectedRoom?.id || this.bookingData?.room?.id;
+    const baseBeforeTax = this.getDepositBaseAmount(roomId, businessDate || bookingDate);
+    if (!Number.isFinite(baseBeforeTax) || baseBeforeTax <= 0) {
+      return 0;
+    }
+    const depositTotal = Math.round(baseBeforeTax * 100) / 100;
+    if (!Number.isFinite(totalCostWithTax) || totalCostWithTax <= 0) {
+      return depositTotal;
+    }
+    const cappedTotal = Math.min(depositTotal, Math.round(totalCostWithTax * 100) / 100);
+    return cappedTotal;
   }
 
   getDepositBreakdown(depositAmount) {
-    const taxRate = this.taxRate ?? 0;
     const safeAmount = Number.isFinite(depositAmount) ? depositAmount : 0;
     const roundedTotal = Math.round(safeAmount * 100) / 100;
-    if (taxRate <= 0) {
-      return {
-        beforeTax: roundedTotal,
-        tax: 0,
-        total: roundedTotal,
-      };
-    }
-
-    const beforeTaxRaw = roundedTotal / (1 + taxRate);
-    const roundedBeforeTax = Math.round(beforeTaxRaw * 100) / 100;
-    const roundedTax = Math.max(Math.round((roundedTotal - roundedBeforeTax) * 100) / 100, 0);
     return {
-      beforeTax: roundedBeforeTax,
-      tax: roundedTax,
+      beforeTax: roundedTotal,
+      tax: 0,
       total: roundedTotal,
     };
   }
@@ -2061,6 +2083,8 @@ class BarzunkoApp {
     const formatCurrency = (value) => (Number.isFinite(value) ? `$${value.toFixed(2)}` : 'N/A');
 
     const room = this.selectedRoom;
+    const date = this.selectedDate || this.bookingData.date || null;
+    const startTime = this.selectedTime || this.bookingData.startTime || null;
 
     const durationEl = document.getElementById('duration');
 
@@ -2086,13 +2110,14 @@ class BarzunkoApp {
 
     const extraGuestFee = extraGuestRate * extraGuests * duration;
 
-    const requiredPurchaseAmount = room.requiredPurchase ? room.requiredPurchase.amount : 0;
+    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room, date, startTime);
 
     const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
 
     const taxRate = this.taxRate || 0;
 
     const taxRateLabel = Math.round(taxRate * 100);
+    const depositTaxRateLabel = 0;
 
     const totalTax = Math.round(totalCost * taxRate * 100) / 100;
 
@@ -2100,6 +2125,8 @@ class BarzunkoApp {
 
     const rawDepositAmount = this.computeDepositAmount({
       room,
+      date,
+      startTime,
       duration,
       extraGuests,
       bookingFee,
@@ -2115,6 +2142,12 @@ class BarzunkoApp {
     const rawRemainingBalance = Math.max(totalWithTax - depositAmount, 0);
     const remainingBalance = Math.round(rawRemainingBalance * 100) / 100;
     const remainingTax = Math.max(Math.round((remainingBalance - remainingPreTax) * 100) / 100, 0);
+    const remainingBalanceNote = remainingBalance > 0 ? 'due on arrival' : 'paid in full';
+    const paymentLabelBeforeTax = isRebooking ? 'Deposit on file' : 'Deposit (before tax)';
+    const paymentTaxLabel = `${isRebooking ? 'Deposit' : 'Deposit'} tax (${depositTaxRateLabel}%)`;
+    const paymentTotalLabel = isRebooking
+      ? 'Deposit on file (incl. tax)'
+      : 'Deposit Paid Today (incl. tax)';
 
     const extraRows = [];
 
@@ -2161,8 +2194,8 @@ class BarzunkoApp {
     const noteRows = [];
     if (isRebooking) {
       const depositText = Number.isFinite(depositAmount)
-        ? `Your original deposit of ${formatCurrency(depositAmount)} stays on file.`
-        : 'Your original deposit remains on file.';
+        ? `Your original payment of ${formatCurrency(depositAmount)} stays on file.`
+        : 'Your original payment remains on file.';
       noteRows.push(
         `<div class="summary-note">${depositText} No additional payment is required to reschedule.</div>`,
       );
@@ -2205,23 +2238,23 @@ class BarzunkoApp {
             </div>
 
             <div class="summary-row">
-                <span class="summary-label">${isRebooking ? 'Deposit on file' : 'Deposit (before tax)'}:</span>
+                <span class="summary-label">${paymentLabelBeforeTax}:</span>
                 <span class="summary-value">${formatCurrency(depositBeforeTax)}</span>
             </div>
 
             <div class="summary-row">
-                <span class="summary-label">Deposit tax (${taxRateLabel}%):</span>
+                <span class="summary-label">${paymentTaxLabel}:</span>
                 <span class="summary-value">${formatCurrency(depositTax)}</span>
             </div>
 
             <div class="summary-row">
-                <span class="summary-label">${isRebooking ? 'Deposit on file (incl. tax)' : 'Deposit (incl. tax)'}:</span>
+                <span class="summary-label">${paymentTotalLabel}:</span>
                 <span class="summary-value summary-total">${formatCurrency(depositAmount)}</span>
             </div>
 
             <div class="summary-row">
                 <span class="summary-label">Remaining Balance (incl. tax):</span>
-                <span class="summary-value">${formatCurrency(remainingBalance)} (due on arrival)</span>
+                <span class="summary-value">${formatCurrency(remainingBalance)} (${remainingBalanceNote})</span>
             </div>
 
             ${noteRows.join('')}
@@ -2253,7 +2286,7 @@ class BarzunkoApp {
     if (stepDescription) {
       stepDescription.textContent = isRebooking
         ? 'Confirm your updated reservation details'
-        : 'Secure your reservation with a one-hour deposit';
+        : 'Secure your reservation with a deposit';
     }
 
     const stepHeading = document.querySelector('#step-5 h2');
@@ -2479,6 +2512,9 @@ class BarzunkoApp {
 
     const room = this.bookingData.room;
 
+    const remainingNote =
+      Number(this.bookingData.remainingBalance) > 0 ? 'due on arrival' : 'paid in full';
+
     confirmationDetails.innerHTML = `
             <div class="summary-row">
                 <span class="summary-label">Booking ID:</span>
@@ -2510,7 +2546,7 @@ class BarzunkoApp {
             </div>
             <div class="summary-row">
                 <span class="summary-label">Remaining Balance:</span>
-                <span class="summary-value">$${this.bookingData.remainingBalance} (due on arrival)</span>
+                <span class="summary-value">$${this.bookingData.remainingBalance} (${remainingNote})</span>
             </div>
             <div style="margin-top: var(--space-20); padding: var(--space-16); background: rgba(139, 92, 246, 0.1); border-radius: var(--radius-base); border: 1px solid rgba(139, 92, 246, 0.2);">
                 <h4 style="margin: 0 0 var(--space-8) 0; color: var(--neon-purple);">Important Notes:</h4>
@@ -4515,6 +4551,21 @@ class BarzunkoApp {
     }
 
     return segments;
+  }
+
+  determineBusinessDate(dateStr, startTime) {
+    const segments = this.getActualDaySegments(dateStr);
+    const startMinutes = this.timeStringToMinutes(startTime);
+    if (!Number.isFinite(startMinutes)) return dateStr;
+    for (const segment of segments) {
+      if (segment.type === 'carryover' && startMinutes < segment.closeMinutes) {
+        return segment.businessDate;
+      }
+      if (segment.type === 'current' && startMinutes >= segment.startMinutes) {
+        return segment.businessDate;
+      }
+    }
+    return dateStr;
   }
 
   normalizeDuration(value, fallback = 1) {
