@@ -18,6 +18,19 @@ const BUSINESS_SCHEDULE = {
   6: { openTime: '13:00', closeTime: '03:00', label: 'Saturday' },
 };
 const DEFAULT_SCHEDULE_DAY = 1; // Monday fallback
+const TAX_RATE = 0.13;
+const WEEKDAY_DEPOSIT_BY_ROOM = {
+  small: 20,
+  medium: 30,
+  large: 50,
+  'extra-large': 100,
+};
+const WEEKEND_DEPOSIT_BY_ROOM = {
+  small: 30,
+  medium: 60,
+  large: 100,
+  'extra-large': 150,
+};
 const twilioAccountSid =
   (functions.config().twilio && functions.config().twilio.account_sid) ||
   process.env.TWILIO_ACCOUNT_SID ||
@@ -465,8 +478,13 @@ function sanitizeBookingSnapshot(doc) {
     paymentStatus: booking.paymentStatus || null,
     paymentIntentId: booking.paymentIntentId || null,
     totalCost: booking.totalCost ?? null,
+    totalCostWithTax: booking.totalCostWithTax ?? null,
     depositAmount: booking.depositAmount ?? null,
+    depositBeforeTax: booking.depositBeforeTax ?? null,
+    depositTax: booking.depositTax ?? null,
     remainingBalance: booking.remainingBalance ?? null,
+    remainingBalanceBeforeTax: booking.remainingBalanceBeforeTax ?? null,
+    remainingTax: booking.remainingTax ?? null,
     bookingFee: booking.bookingFee ?? null,
     extraGuestFee: booking.extraGuestFee ?? null,
     requiredPurchaseAmount: booking.requiredPurchaseAmount ?? null,
@@ -602,6 +620,32 @@ function reservedSlotsForWindow(roomId, date, startTime, endTime, schedule) {
   return hasTimeConflict(startTime, endTime, holdStart, holdEnd) ? 1 : 0;
 }
 
+function getDepositBaseAmount(roomId, dateStr) {
+  if (!roomId || !dateStr) return 0;
+  const table = isFridayOrSaturday(dateStr) ? WEEKEND_DEPOSIT_BY_ROOM : WEEKDAY_DEPOSIT_BY_ROOM;
+  return table[roomId] || 0;
+}
+
+function calculateDepositTotals(roomId, businessDate, totalCostBeforeTax, taxRate = TAX_RATE) {
+  const baseBeforeTax = getDepositBaseAmount(roomId, businessDate);
+  const safeBase = Number.isFinite(baseBeforeTax) && baseBeforeTax > 0 ? baseBeforeTax : 0;
+  const taxMultiplier = 1 + (Number.isFinite(taxRate) ? taxRate : 0);
+  const totalCost = Number.isFinite(Number(totalCostBeforeTax))
+    ? Math.max(0, Number(totalCostBeforeTax))
+    : null;
+  const depositTotal = Math.round(safeBase * 100) / 100; // deposit is charged pre-tax
+  const totalWithTax = Number.isFinite(totalCost)
+    ? Math.round(totalCost * taxMultiplier * 100) / 100
+    : null;
+  const cappedTotal =
+    depositTotal > 0 && Number.isFinite(totalWithTax)
+      ? Math.min(depositTotal, totalWithTax)
+      : depositTotal;
+  const beforeTax = cappedTotal;
+  const depositTax = 0;
+  return { beforeTax, tax: depositTax, total: cappedTotal, totalCostWithTax: totalWithTax };
+}
+
 // Email sending stub. Integrate SendGrid or Mailgun here once credentials are
 // provided. These stubs simply log the action so local development succeeds.
 async function sendBookingEmail(booking) {
@@ -703,14 +747,12 @@ async function sendFridaySaturdayReminderSms(bookingDoc) {
  * @param {string} params.date The booking date (YYYY-MM-DD).
  * @param {string} params.startTime The start time (HH:mm) in 24-hour format.
  * @param {number} params.duration The duration in hours.
- * @param {number} params.totalCost The total cost of the booking.
- * @param {number} params.depositAmount The deposit (typically 50% of total).
+ * @param {number} params.totalCost The total cost of the booking (pre-tax).
  * @param {Object} params.customerInfo Customer details (firstName, lastName, email, phone, specialRequests).
  * @returns {Promise<Object>} The newly created booking record and PaymentIntent details.
  */
 async function createBookingInternal(params) {
-  const { roomId, date, startTime, duration, totalCost, depositAmount, customerInfo, partySize } =
-    params;
+  const { roomId, date, startTime, duration, totalCost, customerInfo, partySize } = params;
 
   if (!roomId || !date || !startTime || !duration || !customerInfo) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
@@ -756,6 +798,28 @@ async function createBookingInternal(params) {
 
   const businessDate = determineBusinessDate(date, startTime);
 
+  const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
+  const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
+  const depositToCharge = depositTotals.total;
+  if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Unable to determine the required deposit for this booking.',
+    );
+  }
+  const totalCostWithTax =
+    totalCostNumber != null
+      ? Math.round(totalCostNumber * (1 + TAX_RATE) * 100) / 100
+      : null;
+  const remainingBalance =
+    totalCostWithTax != null ? Math.max(totalCostWithTax - depositToCharge, 0) : null;
+  const remainingBalanceBeforeTax =
+    totalCostNumber != null ? Math.max(totalCostNumber - depositTotals.beforeTax, 0) : null;
+  const remainingTax =
+    remainingBalance != null && remainingBalanceBeforeTax != null
+      ? Math.max(Math.round((remainingBalance - remainingBalanceBeforeTax) * 100) / 100, 0)
+      : null;
+
   // Quick availability check before creating payment intent
   const existing = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
   let overlappingCount = 0;
@@ -773,15 +837,20 @@ async function createBookingInternal(params) {
     throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
   }
 
-  // Create a PaymentIntent for the deposit
+  // Create a PaymentIntent for the required deposit (tax-inclusive)
   let paymentIntent;
   try {
     paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(depositAmount * 100),
+      amount: Math.round(depositToCharge * 100),
       currency: 'cad',
-      capture_method: 'manual',
       payment_method_types: ['card'],
-      metadata: { roomId, date, startTime, duration: dur },
+      metadata: {
+        roomId,
+        date,
+        startTime,
+        duration: dur,
+        deposit_before_tax: depositTotals.beforeTax.toString(),
+      },
     });
   } catch (err) {
     console.error('Stripe PaymentIntent creation failed', err);
@@ -795,8 +864,14 @@ async function createBookingInternal(params) {
     startTime,
     endTime,
     duration: dur,
-    totalCost,
-    depositAmount,
+    totalCost: totalCostNumber,
+    totalCostWithTax,
+    depositAmount: depositToCharge,
+    depositBeforeTax: depositTotals.beforeTax,
+    depositTax: depositTotals.tax,
+    remainingBalance,
+    remainingBalanceBeforeTax,
+    remainingTax,
     partySize: typeof partySize === 'number' ? partySize : null,
     customerInfo: normalizedCustomerInfo,
     paymentIntentId: paymentIntent.id,
@@ -952,20 +1027,19 @@ async function cancelBookingWithoutRefund(bookingId) {
 /**
  * Callable Cloud Function: createBooking
  *
- * Creates a booking with deposit and writes it to Firestore. Anyone can
+ * Creates a booking with deposit and writes it to Firestore. Deposit amounts
+ * are calculated server-side based on room type and day of week. Anyone can
  * invoke this function (authentication is optional) because all writes are
  * validated server-side.
  */
 exports.createBooking = functions.https.onCall(async (data, context) => {
-  const { roomId, date, startTime, duration, totalCost, depositAmount, customerInfo, partySize } =
-    data || {};
+  const { roomId, date, startTime, duration, totalCost, customerInfo, partySize } = data || {};
   const result = await createBookingInternal({
     roomId,
     date,
     startTime,
     duration,
     totalCost,
-    depositAmount,
     customerInfo,
     partySize,
   });
@@ -1772,51 +1846,6 @@ exports.confirmBooking = functions.https.onCall(async (data, context) => {
   return { ok: true };
 });
 
-exports.autoCaptureDailyPayments = functions.pubsub
-  .schedule('every 30 minutes')
-  .timeZone(BUSINESS_TIMEZONE)
-  .onRun(async () => {
-    const targetDate = getLatestCompletedBusinessDate(new Date());
-    if (!targetDate) {
-      console.warn('[autoCapture] Unable to determine target business date.');
-      return null;
-    }
-
-    const snap = await db
-      .collection('bookings')
-      .where('paymentStatus', '==', 'requires_capture')
-      .get();
-
-    if (snap.empty) {
-      console.log('[autoCapture] No payments awaiting capture.');
-      return null;
-    }
-
-    let reviewed = 0;
-    let captured = 0;
-    for (const doc of snap.docs) {
-      reviewed += 1;
-      const booking = doc.data();
-      const bookingDate = typeof booking.date === 'string' ? booking.date : null;
-      if (!bookingDate || bookingDate > targetDate) {
-        continue;
-      }
-      const status = (booking.status || '').toLowerCase();
-      if (status === 'cancelled' || status === 'canceled') {
-        continue;
-      }
-      const ok = await capturePaymentIntentAutomatically(doc);
-      if (ok) {
-        captured += 1;
-      }
-    }
-
-    console.log(
-      `[autoCapture] Business date ${targetDate}: reviewed ${reviewed} capturable bookings, captured ${captured}.`,
-    );
-    return null;
-  });
-
 exports.sendWeekendReminderTexts = functions.pubsub
   .schedule('every thursday 10:00')
   .timeZone(BUSINESS_TIMEZONE)
@@ -1908,43 +1937,6 @@ exports.adminCaptureBySecret = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('internal', 'Capture failed');
   }
 });
-
-async function capturePaymentIntentAutomatically(doc) {
-  if (!doc || !doc.exists) return false;
-  const booking = doc.data();
-  const intentId = booking.paymentIntentId;
-  if (!intentId) {
-    return false;
-  }
-  let intent;
-  try {
-    intent = await stripe.paymentIntents.retrieve(intentId);
-  } catch (err) {
-    console.error('[autoCapture] Unable to retrieve PaymentIntent', intentId, err.message || err);
-    return false;
-  }
-  if (intent.status !== 'requires_capture') {
-    return false;
-  }
-  try {
-    const captured = await stripe.paymentIntents.capture(intentId);
-    await doc.ref.update({
-      paymentStatus: captured.status,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    console.log('[autoCapture] Captured PaymentIntent', intentId, 'for booking', doc.id);
-    return true;
-  } catch (err) {
-    console.error(
-      '[autoCapture] Capture failed for',
-      intentId,
-      'booking',
-      doc.id,
-      err.message || err,
-    );
-    return false;
-  }
-}
 
 /**
  * HTTPS Function: getGoogleReviews
