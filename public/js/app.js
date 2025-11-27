@@ -2311,7 +2311,23 @@ class BarzunkoApp {
       if (!mountEl || !window.stripe) return;
 
       const elements = window.stripe.elements();
-      this.cardElement = elements.create('card', { hidePostalCode: true });
+      const cardStyle = {
+        base: {
+          color: '#ffffff',
+          fontSize: '16px',
+          fontFamily: 'inherit',
+          iconColor: '#ffffff',
+          '::placeholder': {
+            color: 'rgba(255, 255, 255, 0.8)',
+          },
+        },
+        invalid: {
+          color: '#ff4d4f',
+          iconColor: '#ff4d4f',
+        },
+      };
+
+      this.cardElement = elements.create('card', { hidePostalCode: true, style: cardStyle });
       this.cardElement.mount('#card-element');
 
       this.cardElement.on('change', (event) => {
