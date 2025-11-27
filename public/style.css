@@ -46,8 +46,8 @@
   /* Semantic Color Tokens (Light Mode) */
   --color-background: var(--color-cream-50);
   --color-surface: var(--color-cream-100);
-  --color-text: var(--color-slate-900);
-  --color-text-secondary: var(--color-slate-500);
+  --color-text: #FFFFFF;
+  --color-text-secondary: rgba(233, 244, 255, 0.8);
   --color-primary: var(--color-teal-500);
   --color-primary-hover: var(--color-teal-600);
   --color-primary-active: var(--color-teal-700);
@@ -164,10 +164,10 @@
     --color-bg-8: rgba(8, 145, 178, 0.15); /* Dark cyan */
     
     /* Semantic Color Tokens (Dark Mode) */
-    --color-background: var(--color-charcoal-700);
-    --color-surface: var(--color-charcoal-800);
-    --color-text: var(--color-gray-200);
-    --color-text-secondary: rgba(var(--color-gray-300-rgb), 0.7);
+    --color-background: #0b0f1a;
+    --color-surface: #101624;
+    --color-text: #FFFFFF;
+    --color-text-secondary: rgba(233, 244, 255, 0.8);
     --color-primary: var(--color-teal-300);
     --color-primary-hover: var(--color-teal-400);
     --color-primary-active: var(--color-teal-800);
@@ -305,12 +305,20 @@ html {
   color: var(--color-text);
   background-color: var(--color-background);
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
   padding: 0;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
 }
 
 *,
@@ -3266,4 +3274,128 @@ th {
   padding: var(--space-16);
   color: var(--color-text-secondary);
   text-align: center;
+}
+
+/* iOS Safari fix: lock translucent cards to solid dark and pure white text */
+@supports (-webkit-touch-callout: none) {
+  .calendar-container,
+  .time-slots,
+  .booking-summary,
+  .payment-summary {
+    background: #0f141e;
+    color: #fff;
+    backdrop-filter: none;
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .booking-summary h3,
+  .payment-summary h3 {
+    color: #fff;
+  }
+
+  .calendar-day {
+    color: #fff;
+  }
+
+  .summary-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  /* Force primary text to pure white to avoid color blending on iOS */
+  body,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  label,
+  a,
+  button {
+    color: #fff !important;
+    mix-blend-mode: normal;
+  }
+
+  .subtitle,
+  .hero-description,
+  .step-description {
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+
+  .progress-step span {
+    color: #fff !important;
+  }
+}
+
+/* iPhone 15/16 Pro Max specific palette for better contrast */
+@media (min-device-width: 428px) and (max-device-width: 432px) and (min-device-height: 928px) and (max-device-height: 938px) and (-webkit-device-pixel-ratio: 3) {
+  :root {
+    --color-background: #0b0f1a;
+    --color-surface: #101624;
+    --color-text: #FFFFFF;
+    --color-text-secondary: rgba(233, 244, 255, 0.8);
+    --color-primary: #a08aff;
+    --color-primary-hover: #b7a9ff;
+    --color-primary-active: #7f70e6;
+    --color-card-border: rgba(233, 244, 255, 0.18);
+    --color-btn-primary-text: #0b0f1a;
+  }
+
+  .calendar-container,
+  .time-slots,
+  .booking-summary,
+  .payment-summary {
+    background: #101624;
+    color: #FFFFFF;
+    backdrop-filter: none;
+    border-color: rgba(233, 244, 255, 0.18);
+  }
+
+  .calendar-day,
+  .booking-summary h3,
+  .payment-summary h3,
+  .summary-row {
+    color: #FFFFFF;
+  }
+
+  .progress-step span {
+    color: #FFFFFF !important;
+  }
+
+  .btn--primary {
+    background: var(--color-primary);
+    color: var(--color-btn-primary-text);
+  }
+}
+
+/* Global text legibility override (prevent green tint) */
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+span,
+label,
+a,
+button {
+  color: # !important;
+  mix-blend-mode: normal;
+}
+
+.subtitle,
+.hero-description,
+.step-description {
+  color: rgba(233, 244, 255, 0.85) !important;
+}
+
+/* Prevent iOS auto-zoom on form fields */
+input,
+select,
+textarea {
+  font-size: 16px !important;
 }
