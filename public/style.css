@@ -45,7 +45,7 @@
 
   /* Semantic Color Tokens (Light Mode) */
   --color-background: var(--color-cream-50);
-  --color-surface: var(--color-cream-100);
+  --color-surface: #101624;
   --color-text: #FFFFFF;
   --color-text-secondary: rgba(233, 244, 255, 0.8);
   --color-primary: var(--color-teal-500);
@@ -225,7 +225,7 @@
   
   /* Semantic Color Tokens (Dark Mode) */
   --color-background: var(--color-charcoal-700);
-  --color-surface: var(--color-charcoal-800);
+  --color-surface: #101624;
   --color-text: var(--color-gray-200);
   --color-text-secondary: rgba(var(--color-gray-300-rgb), 0.7);
   --color-primary: var(--color-teal-300);
@@ -271,7 +271,7 @@
   
   /* Semantic Color Tokens (Light Mode) */
   --color-background: var(--color-cream-50);
-  --color-surface: var(--color-cream-100);
+  --color-surface: #101624;
   --color-text: var(--color-slate-900);
   --color-text-secondary: var(--color-slate-500);
   --color-primary: var(--color-teal-500);
@@ -491,7 +491,7 @@ pre code {
   font-size: var(--font-size-md);
   line-height: 1.5;
   color: var(--color-text);
-  background-color: var(--color-surface);
+  background-color: #101624;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-base);
   transition: border-color var(--duration-fast) var(--ease-standard),
@@ -3383,7 +3383,7 @@ span,
 label,
 a,
 button {
-  color: # !important;
+  color: #ffffff !important;
   mix-blend-mode: normal;
 }
 
