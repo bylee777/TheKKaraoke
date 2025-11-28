@@ -305,20 +305,12 @@ html {
   color: var(--color-text);
   background-color: var(--color-background);
   -webkit-font-smoothing: antialiased;
-  -webkit-text-size-adjust: 100%;
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
   padding: 0;
-}
-
-input,
-select,
-textarea,
-button {
-  font-size: 16px;
 }
 
 *,
@@ -3145,7 +3137,8 @@ th {
 #admin-availability-grid,
 #staff-availability-grid {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* Admin schedule grid */
@@ -3156,7 +3149,8 @@ th {
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-md);
-  min-width: 1200px;
+  min-width: 100%;
+  table-layout: fixed;
 }
 
 .admin-schedule-table thead {
@@ -3175,10 +3169,14 @@ th {
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .admin-schedule-table .time-head {
   width: 70px;
+  left: 0;
 }
 
 .admin-schedule-table .time-cell {
@@ -3187,6 +3185,9 @@ th {
   background: rgba(255, 255, 255, 0.03);
   text-align: right;
   font-size: var(--font-size-xs);
+  position: sticky;
+  left: 0;
+  z-index: 1;
 }
 
 .admin-schedule-table tbody tr:nth-child(even) .time-cell {
@@ -3194,6 +3195,11 @@ th {
 }
 .admin-schedule-table tbody tr:nth-child(even) td:not(.time-cell) {
   background: rgba(255, 255, 255, 0.01);
+}
+
+.admin-schedule-table th,
+.admin-schedule-table td {
+  word-wrap: break-word;
 }
 
 .admin-schedule-table .room-label {
@@ -3246,6 +3252,18 @@ th {
 .slot.booked.status-pending {
   background: rgba(251, 191, 36, 0.12);
   border-left-color: rgba(251, 191, 36, 0.6);
+}
+
+@media (max-width: 1024px) {
+  .admin-schedule-table th,
+  .admin-schedule-table td {
+    font-size: var(--font-size-xs);
+    padding: var(--space-6);
+  }
+
+  .slot {
+    min-height: 40px;
+  }
 }
 
 .booking-card {
@@ -3391,11 +3409,4 @@ button {
 .hero-description,
 .step-description {
   color: rgba(233, 244, 255, 0.85) !important;
-}
-
-/* Prevent iOS auto-zoom on form fields */
-input,
-select,
-textarea {
-  font-size: 16px !important;
 }

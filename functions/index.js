@@ -2,6 +2,7 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { FieldValue } = require('firebase-admin/firestore');
 const Stripe = require('stripe');
+const nodemailer = require('nodemailer');
 const twilio = require('twilio');
 
 const MINUTES_IN_DAY = 24 * 60;
@@ -505,6 +506,17 @@ function sanitizeBookingSnapshot(doc) {
   };
 }
 
+async function findBookingRefByPaymentIntentId(intentId) {
+  if (!intentId) return null;
+  const snap = await db
+    .collection('bookings')
+    .where('paymentIntentId', '==', intentId)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  return snap.docs[0].ref;
+}
+
 async function ensureRoomAvailability(
   roomId,
   date,
@@ -567,6 +579,24 @@ if (!stripeSecretKey) {
   );
 }
 const stripe = Stripe(stripeSecretKey);
+const stripeWebhookSecret =
+  (functions.config().stripe && functions.config().stripe.webhook_secret) ||
+  process.env.STRIPE_WEBHOOK_SECRET ||
+  null;
+const gmailUser = (functions.config().gmail && functions.config().gmail.user) || process.env.GMAIL_USER || null;
+const gmailPass = (functions.config().gmail && functions.config().gmail.pass) || process.env.GMAIL_PASS || null;
+const gmailFrom =
+  (functions.config().gmail && functions.config().gmail.from) ||
+  process.env.GMAIL_FROM ||
+  gmailUser ||
+  null;
+const mailTransport =
+  gmailUser && gmailPass
+    ? nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: gmailUser, pass: gmailPass },
+      })
+    : null;
 
 function requireAdmin(context) {
   if (!context || !context.auth || context.auth.token?.isAdmin !== true) {
@@ -649,12 +679,68 @@ function calculateDepositTotals(roomId, businessDate, totalCostBeforeTax, taxRat
 // Email sending stub. Integrate SendGrid or Mailgun here once credentials are
 // provided. These stubs simply log the action so local development succeeds.
 async function sendBookingEmail(booking) {
-  console.log('sendBookingEmail stub:', booking.id);
-  return;
+  const to = normalizeEmail(booking?.customerInfo?.email);
+  if (!to || !mailTransport) {
+    console.log('sendBookingEmail stub:', booking?.id);
+    return;
+  }
+  const subject = 'Your Barzunko booking is confirmed';
+  const html = `
+    <p>Hi ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''},</p>
+    <p>Thanks for booking with Barzunko! Here are your details:</p>
+    <ul>
+      <li><strong>Booking ID:</strong> ${booking.id}</li>
+      <li><strong>Date & Time:</strong> ${booking.date} at ${booking.startTime}</li>
+      <li><strong>Room:</strong> ${booking.roomId}</li>
+      <li><strong>Duration:</strong> ${booking.duration} hour${booking.duration === 1 ? '' : 's'}</li>
+      <li><strong>Amount Paid:</strong> $${booking.depositAmount ?? booking.totalCost ?? 0}</li>
+      ${
+        booking.remainingBalance != null
+          ? `<li><strong>Remaining Balance:</strong> $${booking.remainingBalance}</li>`
+          : ''
+      }
+    </ul>
+    <p>If you need to make changes, reply to this email or call us at 416-968-0909.</p>
+    <p>See you soon!</p>
+  `;
+  try {
+    await mailTransport.sendMail({
+      to,
+      from: gmailFrom,
+      subject,
+      html,
+    });
+  } catch (err) {
+    console.error('sendBookingEmail failed', err);
+  }
 }
 async function sendCancellationEmail(booking) {
-  console.log('sendCancellationEmail stub:', booking.id);
-  return;
+  const to = normalizeEmail(booking?.customerInfo?.email);
+  if (!to || !mailTransport) {
+    console.log('sendCancellationEmail stub:', booking?.id);
+    return;
+  }
+  const subject = 'Your Barzunko booking has been cancelled';
+  const html = `
+    <p>Hi ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''},</p>
+    <p>Your booking has been cancelled.</p>
+    <ul>
+      <li><strong>Booking ID:</strong> ${booking.id}</li>
+      <li><strong>Date & Time:</strong> ${booking.date} at ${booking.startTime}</li>
+      <li><strong>Room:</strong> ${booking.roomId}</li>
+    </ul>
+    <p>If this was a mistake, reply to this email or call us at 416-968-0909.</p>
+  `;
+  try {
+    await mailTransport.sendMail({
+      to,
+      from: gmailFrom,
+      subject,
+      html,
+    });
+  } catch (err) {
+    console.error('sendCancellationEmail failed', err);
+  }
 }
 
 // Calendar integration stub. Integrate with the Google Calendar API once
@@ -1159,6 +1245,55 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   return { availability };
 });
 
+exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
+  const { roomId, date, startTime } = data || {};
+  if (!roomId || !date || !startTime) {
+    throw new functions.https.HttpsError('invalid-argument', 'roomId, date, and startTime are required');
+  }
+  const schedule = getBusinessScheduleForDate(date);
+  if (!schedule) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
+  }
+
+  ensureNotInPast(date, startTime);
+  const businessDate = determineBusinessDate(date, startTime);
+  const startMinutes = timeStringToMinutes(startTime);
+  if (!Number.isFinite(startMinutes)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid start time supplied.');
+  }
+
+  // Compute the latest possible end time based on business hours
+  let latestAllowed = schedule.closeMinutes;
+  // Fetch active bookings for the business date and find the earliest blocking booking
+  const bookings = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
+  for (const doc of bookings) {
+    const booking = doc.data();
+    const bStart = timeStringToMinutes(booking.startTime);
+    let bEnd = timeStringToMinutes(booking.endTime);
+    if (!Number.isFinite(bStart) || !Number.isFinite(bEnd)) continue;
+    if (bEnd <= bStart) {
+      bEnd += MINUTES_IN_DAY;
+    }
+    const normalizedStart = bStart < startMinutes ? bStart + MINUTES_IN_DAY : bStart;
+    const normalizedEnd = bEnd < normalizedStart ? bEnd + MINUTES_IN_DAY : bEnd;
+    // If the booking overlaps the requested start, block immediately
+    if (startMinutes >= normalizedStart && startMinutes < normalizedEnd) {
+      latestAllowed = startMinutes; // no availability at this start time
+      break;
+    }
+    // Otherwise, if the booking starts after our start, it limits the window
+    if (normalizedStart >= startMinutes) {
+      latestAllowed = Math.min(latestAllowed, normalizedStart);
+    }
+  }
+
+  const gapMinutes = Math.max(latestAllowed - startMinutes, 0);
+  const maxByScheduleHours = Math.floor(gapMinutes / 60);
+  const maxDurationHours = Math.min(3, Math.max(0, maxByScheduleHours));
+
+  return { maxDurationHours };
+});
+
 exports.adminCancelBySecret = functions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const { bookingId } = data || {};
@@ -1300,6 +1435,17 @@ exports.adminRefundBySecret = functions.https.onCall(async (data, context) => {
     paymentStatus: 'refunded',
     updatedAt: FieldValue.serverTimestamp(),
   });
+
+  await sendTelegramMessage(
+    [
+      '💸 Payment Refunded',
+      `Booking: ${bookingId}`,
+      `Date: ${booking.date} ${booking.startTime}`,
+      `Room: ${booking.roomId}`,
+      `Name: ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''}`,
+      `Amount: $${booking.depositAmount ?? booking.totalCost ?? 'n/a'}`,
+    ].join('\n'),
+  );
 
   const updated = await ref.get();
   return {
@@ -1844,6 +1990,64 @@ exports.confirmBooking = functions.https.onCall(async (data, context) => {
   });
 
   return { ok: true };
+});
+
+exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).send('Method Not Allowed');
+  }
+  if (!stripeWebhookSecret) {
+    console.error('[stripeWebhook] Missing webhook secret');
+    return res.status(500).send('Webhook not configured');
+  }
+
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.rawBody, sig, stripeWebhookSecret);
+  } catch (err) {
+    console.error('[stripeWebhook] Signature verification failed', err.message || err);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  const intent = event.data?.object;
+  if (!intent || !intent.id) {
+    return res.json({ received: true });
+  }
+
+  async function updateBookingPayment(status) {
+    const ref = await findBookingRefByPaymentIntentId(intent.id);
+    if (!ref) return;
+    const updatePayload = {
+      paymentStatus: status,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (status === 'succeeded' || status === 'processing' || status === 'requires_capture') {
+      updatePayload.status = 'confirmed';
+    }
+    await ref.update(updatePayload);
+  }
+
+  try {
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+      case 'payment_intent.processing':
+      case 'payment_intent.requires_capture':
+        await updateBookingPayment(intent.status);
+        break;
+      case 'payment_intent.payment_failed':
+      case 'charge.refunded':
+        await updateBookingPayment(intent.status || 'payment_failed');
+        break;
+      default:
+        break;
+    }
+  } catch (err) {
+    console.error('[stripeWebhook] Handler failed', event.type, intent.id, err);
+    return res.status(500).send('Webhook handler error');
+  }
+
+  return res.json({ received: true });
 });
 
 exports.sendWeekendReminderTexts = functions.pubsub
