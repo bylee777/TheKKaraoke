@@ -112,8 +112,13 @@
             <!-- Step 2: Party & Room -->
             <div class="booking-step" id="step-2">
               <div class="step-content">
-                <h2>Party Details</h2>
-                <p class="step-description">Tell us about your party and choose a room</p>
+                <h2>Choose Your Room</h2>
+                <p class="step-description">Pick a room first, then tell us about your party</p>
+                <div class="room-selection-grid" id="room-selection-grid">
+                  <!-- Room options will be populated by JavaScript -->
+                </div>
+                <h2 style="margin-top: var(--space-24);">Party Details</h2>
+                <p class="step-description">Tell us about your party</p>
                 <div class="party-form">
                   <div class="form-group">
                     <label class="form-label">Party Size</label>
@@ -152,11 +157,6 @@
                       <option value="3">3 hours (max)</option>
                     </select>
                   </div>
-                </div>
-                <h2 style="margin-top: var(--space-24);">Choose Your Room</h2>
-                <p class="step-description">Select the perfect room for your party size</p>
-                <div class="room-selection-grid" id="room-selection-grid">
-                  <!-- Room options will be populated by JavaScript -->
                 </div>
               </div>
             </div>
