@@ -846,15 +846,7 @@ class BarzunkoApp {
         return true;
       }
 
-      case 2:
-        if (!this.selectedRoom) {
-          this.showNotification('Please select a room', 'error');
-          return false;
-        }
-        this.bookingData.room = this.selectedRoom;
-        return true;
-
-      case 3: {
+      case 2: {
         const partySizeEl = document.getElementById('party-size');
         const durationEl = document.getElementById('duration');
 
@@ -876,8 +868,23 @@ class BarzunkoApp {
           return false;
         }
 
-        if (this.selectedRoom) {
-          const room = this.rooms.find((r) => r.id === this.selectedRoom.id);
+        this.bookingData.partySize = partySize;
+        this.bookingData.duration = duration;
+        this.bookingData.extraGuestAcknowledged = this.extraGuestAcknowledged;
+        return true;
+      }
+
+      case 3: {
+        if (!this.selectedRoom) {
+          this.showNotification('Please select a room', 'error');
+          return false;
+        }
+
+        this.bookingData.room = this.selectedRoom;
+
+        const room = this.rooms.find((r) => r.id === this.selectedRoom.id);
+        const partySize = this.bookingData.partySize || 1;
+        if (room) {
           if (partySize < room.minCapacity || partySize > room.maxCapacity) {
             this.showNotification(
               `Party size must be between ${room.minCapacity}-${room.maxCapacity} for ${room.name}`,
@@ -896,9 +903,6 @@ class BarzunkoApp {
           }
         }
 
-        this.bookingData.partySize = partySize;
-        this.bookingData.duration = duration;
-        this.bookingData.extraGuestAcknowledged = this.extraGuestAcknowledged;
         return true;
       }
 
