@@ -5,7 +5,7 @@ class BarzunkoApp {
   constructor() {
     this.currentPage = 'landing';
     this.currentStep = 1;
-    this.maxStep = 5;
+    this.maxStep = 4;
     this.bookingData = { duration: 1 };
     this.extraGuestAcknowledged = false;
     this.roomAvailability = null;
@@ -868,22 +868,13 @@ class BarzunkoApp {
           return false;
         }
 
-        this.bookingData.partySize = partySize;
-        this.bookingData.duration = duration;
-        this.bookingData.extraGuestAcknowledged = this.extraGuestAcknowledged;
-        return true;
-      }
-
-      case 3: {
         if (!this.selectedRoom) {
           this.showNotification('Please select a room', 'error');
           return false;
         }
-
         this.bookingData.room = this.selectedRoom;
 
         const room = this.rooms.find((r) => r.id === this.selectedRoom.id);
-        const partySize = this.bookingData.partySize || 1;
         if (room) {
           if (partySize < room.minCapacity || partySize > room.maxCapacity) {
             this.showNotification(
@@ -903,10 +894,13 @@ class BarzunkoApp {
           }
         }
 
+        this.bookingData.partySize = partySize;
+        this.bookingData.duration = duration;
+        this.bookingData.extraGuestAcknowledged = this.extraGuestAcknowledged;
         return true;
       }
 
-      case 4: {
+      case 3: {
         const customerInfo = this.collectCustomerInfo({ requireTerms: true, showErrors: true });
         if (!customerInfo) {
           return false;
@@ -916,7 +910,7 @@ class BarzunkoApp {
         return true;
       }
 
-      case 5:
+      case 4:
         return true;
     }
     return true;
@@ -2389,7 +2383,7 @@ class BarzunkoApp {
       paymentForm.style.display = isRebooking ? 'none' : '';
     }
 
-    const stepDescription = document.querySelector('#step-5 .step-description');
+    const stepDescription = document.querySelector('#step-4 .step-description');
 
     if (stepDescription) {
       stepDescription.textContent = isRebooking
@@ -2397,7 +2391,7 @@ class BarzunkoApp {
         : 'Secure your reservation with a deposit';
     }
 
-    const stepHeading = document.querySelector('#step-5 h2');
+    const stepHeading = document.querySelector('#step-4 h2');
 
     if (stepHeading) {
       stepHeading.textContent = isRebooking
