@@ -3215,14 +3215,16 @@ th {
 }
 
 .slot {
-  min-height: 48px;
+  min-height: 44px;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: var(--space-8);
+  gap: 2px;
+  padding: var(--space-6);
   border-radius: var(--radius-sm);
   transition: background var(--duration-fast);
+  font-size: var(--font-size-xs);
+  line-height: 1.2;
 }
 
 .slot.available {
@@ -3242,6 +3244,8 @@ th {
 .slot.booked {
   background: rgba(244, 63, 94, 0.12);
   border-left: 4px solid rgba(244, 63, 94, 0.6);
+  color: #e9f4ff;
+  word-break: break-word;
 }
 
 .slot.booked.status-confirmed {
@@ -3270,13 +3274,15 @@ th {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   color: var(--color-text);
+  line-height: 1.3;
 }
 
 .booking-name {
   font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-sm);
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .booking-detail {
