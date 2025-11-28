@@ -524,6 +524,7 @@ async function ensureRoomAvailability(
   endTime,
   excludeBookingId,
   transaction,
+  options = {},
 ) {
   const { inventory, label } = getRoomConfig(roomId);
   const schedule = getBusinessScheduleForDate(date);
@@ -548,7 +549,14 @@ async function ensureRoomAvailability(
     }
   });
 
-  const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
+  const reserved = reservedSlotsForWindow(
+    roomId,
+    businessDate,
+    startTime,
+    endTime,
+    schedule,
+    options,
+  );
   const effectiveInventory = Math.max(inventory - reserved, 0);
   if (overlapping >= effectiveInventory) {
     throw new functions.https.HttpsError(
@@ -639,7 +647,8 @@ function isFridayOrSaturday(dateStr) {
   }
 }
 
-function reservedSlotsForWindow(roomId, date, startTime, endTime, schedule) {
+function reservedSlotsForWindow(roomId, date, startTime, endTime, schedule, options = {}) {
+  if (options.overrideWalkInHold) return 0;
   if (!roomId || !date) return 0;
   const isTargetRoom = roomId === 'small' || roomId === 'medium';
   if (!isTargetRoom) return 0;
@@ -1186,6 +1195,7 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   const duration = Number(data?.duration);
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
+  const overrideWalkInHold = data?.overrideWalkInHold === true;
   const roomIds =
     Array.isArray(data?.roomIds) && data.roomIds.length > 0
       ? Array.from(new Set(data.roomIds.map(String)))
@@ -1234,7 +1244,14 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
         }
       });
 
-      const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
+      const reserved = reservedSlotsForWindow(
+        roomId,
+        businessDate,
+        startTime,
+        endTime,
+        schedule,
+        { overrideWalkInHold },
+      );
       const remaining = Math.max(inventory - overlapping - reserved, 0);
       return [roomId, remaining];
     }),
@@ -1368,6 +1385,7 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
       endTime,
       bookingId,
       transaction,
+      { overrideWalkInHold: true },
     );
     const updatePayload = {
       roomId: targetRoomId,

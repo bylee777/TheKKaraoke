@@ -5444,6 +5444,7 @@ class BarzunkoApp {
         duration,
         roomIds: [roomId],
         excludeBookingId: state.bookingId,
+        overrideWalkInHold: true,
       });
       if (requestId !== this.adminRescheduleRequestId) return;
 
