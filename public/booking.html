@@ -63,57 +63,32 @@
             <div class="progress-bar">
               <div class="progress-step active" data-step="1">
                 <div class="step-number">1</div>
-                <span>Date &amp; Time</span>
+                <span>Room &amp; Party</span>
               </div>
               <div class="progress-step" data-step="2">
                 <div class="step-number">2</div>
-                <span>Party &amp; Room</span>
+                <span>Duration</span>
               </div>
               <div class="progress-step" data-step="3">
                 <div class="step-number">3</div>
-                <span>Customer Info</span>
+                <span>Date &amp; Time</span>
               </div>
               <div class="progress-step" data-step="4">
                 <div class="step-number">4</div>
+                <span>Customer Info</span>
+              </div>
+              <div class="progress-step" data-step="5">
+                <div class="step-number">5</div>
                 <span>Payment</span>
               </div>
             </div>
           </div>
           <div class="booking-content">
-            <!-- Step 1: Date & Time -->
+            <!-- Step 1: Room & Party -->
             <div class="booking-step active" id="step-1">
               <div class="step-content">
-                <h2>Select Date &amp; Time</h2>
-                <p class="step-description">
-                  Choose your preferred date and time slot (minimum 6 hours in advance)
-                </p>
-                <div class="calendar-container">
-                  <div class="calendar-header">
-                    <button class="calendar-nav-btn" id="prev-month">
-                      <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <h3 id="calendar-title">August 2025</h3>
-                    <button class="calendar-nav-btn" id="next-month">
-                      <i class="fas fa-chevron-right"></i>
-                    </button>
-                  </div>
-                  <div class="calendar-grid" id="calendar-grid">
-                    <!-- Calendar will be populated by JavaScript -->
-                  </div>
-                </div>
-                <div class="time-slots" id="time-slots">
-                  <h3>Available Time Slots: Time slots shown are for the selected calendar date only—pick another date above to see different times. </h3>
-                  <div class="time-grid" id="time-grid">
-                    <!-- Time slots will be populated by JavaScript -->
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- Step 2: Party & Room -->
-            <div class="booking-step" id="step-2">
-              <div class="step-content">
                 <h2>Choose Your Room</h2>
-                <p class="step-description">Pick a room first, then tell us about your party</p>
+                <p class="step-description">Pick a room, then tell us about your party</p>
                 <div class="room-selection-grid" id="room-selection-grid">
                   <!-- Room options will be populated by JavaScript -->
                 </div>
@@ -149,19 +124,55 @@
                       </label>
                     </div>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label">Duration (hours)</label>
-                    <select id="duration" class="form-control">
-                      <option value="1" selected>1 hour</option>
-                      <option value="2">2 hours</option>
-                      <option value="3">3 hours (max)</option>
-                    </select>
+                </div>
+              </div>
+            </div>
+            <!-- Step 2: Duration -->
+            <div class="booking-step" id="step-2">
+              <div class="step-content">
+                <h2>Select Duration</h2>
+                <p class="step-description">Choose how long you'd like to book</p>
+                <div class="form-group">
+                  <label class="form-label">Duration (hours)</label>
+                  <select id="duration" class="form-control">
+                    <option value="1" selected>1 hour</option>
+                    <option value="2">2 hours</option>
+                    <option value="3">3 hours (max)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <!-- Step 3: Date & Time -->
+            <div class="booking-step" id="step-3">
+              <div class="step-content">
+                <h2>Select Date &amp; Time</h2>
+                <p class="step-description">
+                  Choose your preferred date and time slot (minimum 6 hours in advance)
+                </p>
+                <div class="calendar-container">
+                  <div class="calendar-header">
+                    <button class="calendar-nav-btn" id="prev-month">
+                      <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <h3 id="calendar-title">August 2025</h3>
+                    <button class="calendar-nav-btn" id="next-month">
+                      <i class="fas fa-chevron-right"></i>
+                    </button>
+                  </div>
+                  <div class="calendar-grid" id="calendar-grid">
+                    <!-- Calendar will be populated by JavaScript -->
+                  </div>
+                </div>
+                <div class="time-slots" id="time-slots">
+                  <h3>Available Time Slots (based on your room &amp; duration)</h3>
+                  <div class="time-grid" id="time-grid">
+                    <!-- Time slots will be populated by JavaScript -->
                   </div>
                 </div>
               </div>
             </div>
-            <!-- Step 3: Customer Info -->
-            <div class="booking-step" id="step-3">
+            <!-- Step 4: Customer Info -->
+            <div class="booking-step" id="step-4">
               <div class="step-content">
                 <h2>Contact Information</h2>
                 <p class="step-description">We'll use this info for booking confirmations</p>
@@ -258,8 +269,8 @@
                 </div>
               </div>
             </div>
-            <!-- Step 4: Payment -->
-            <div class="booking-step" id="step-4">
+            <!-- Step 5: Payment -->
+            <div class="booking-step" id="step-5">
               <div class="step-content">
                 <h2>Complete Your Booking</h2>
                 <p class="step-description">Secure your reservation with a deposit</p>
