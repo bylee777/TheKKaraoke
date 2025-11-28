@@ -5,13 +5,15 @@ class BarzunkoApp {
   constructor() {
     this.currentPage = 'landing';
     this.currentStep = 1;
-    this.maxStep = 4;
+    this.maxStep = 5;
     this.bookingData = { duration: 1 };
     this.extraGuestAcknowledged = false;
     this.roomAvailability = null;
     this.roomAvailabilityLoading = false;
     this.roomAvailabilityError = false;
     this.roomAvailabilityRequestId = 0;
+    this.availableSlotsCache = {};
+    this.timeSlotsRequestId = 0;
     this.manageLookupResults = [];
     this.activeManagedBooking = null;
     this.currentManagedEmail = '';
@@ -246,11 +248,13 @@ class BarzunkoApp {
   async ensureDurationAvailable() {
     if (
       !this.selectedRoom ||
-      !this.selectedDate ||
-      !this.selectedTime ||
       !window.firebaseFunctions ||
       !window.firebaseFunctions.httpsCallable
     ) {
+      return true;
+    }
+    if (!this.selectedDate || !this.selectedTime) {
+      // Only enforce once date/time is chosen
       return true;
     }
     try {
@@ -449,10 +453,14 @@ class BarzunkoApp {
           e.target.value,
           this.bookingData.duration || 1,
         );
+        this.selectedTime = null;
+        this.availableSlotsCache = {};
+        this.timeSlotsRequestId += 1;
         this.updateBookingSummary();
         this.updateRoomAvailability();
         this.updatePaymentSummary();
         this.updateCalendar();
+        this.updateTimeSlots();
       }
     });
 
@@ -761,8 +769,11 @@ class BarzunkoApp {
     }
 
     // Step-specific updates
-    if (step === 2) {
+    if (step === 1) {
       this.renderRoomSelection();
+    } else if (step === 3) {
+      this.updateCalendar();
+      this.updateTimeSlots();
     } else if (step === 4) {
       this.updateBookingSummary();
     } else if (step === 5) {
@@ -827,44 +838,12 @@ class BarzunkoApp {
   validateCurrentStep() {
     switch (this.currentStep) {
       case 1: {
-        if (!this.selectedDate || !this.selectedTime) {
-          this.showNotification('Please select a date and time', 'error');
-          return false;
-        }
-
-        // Check 6-hour advance rule
-        const selectedDateTime = new Date(`${this.selectedDate}T${this.selectedTime}`);
-        const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
-
-        if (selectedDateTime < sixHoursFromNow) {
-          this.showNotification('Bookings must be made at least 6 hours in advance', 'error');
-          return false;
-        }
-
-        this.bookingData.date = this.selectedDate;
-        this.bookingData.startTime = this.selectedTime;
-        return true;
-      }
-
-      case 2: {
         const partySizeEl = document.getElementById('party-size');
-        const durationEl = document.getElementById('duration');
+        if (!partySizeEl) return false;
 
-        if (!partySizeEl || !durationEl) return false;
-
-        const partySize = parseInt(partySizeEl.value, 10);
-        const duration = this.normalizeCustomerDuration(
-          durationEl.value,
-          this.bookingData.duration || 1,
-        );
-
-        if (!partySize || partySize < 1) {
+        const partySize = Number.parseInt(partySizeEl.value, 10);
+        if (!Number.isFinite(partySize) || partySize <= 0) {
           this.showNotification('Please enter a valid party size', 'error');
-          return false;
-        }
-
-        if (duration > 3) {
-          this.showNotification('Maximum booking duration is 3 hours.', 'error');
           return false;
         }
 
@@ -895,12 +874,48 @@ class BarzunkoApp {
         }
 
         this.bookingData.partySize = partySize;
-        this.bookingData.duration = duration;
         this.bookingData.extraGuestAcknowledged = this.extraGuestAcknowledged;
         return true;
       }
 
+      case 2: {
+        const durationEl = document.getElementById('duration');
+        const duration = this.normalizeCustomerDuration(
+          durationEl ? durationEl.value : this.bookingData.duration,
+          1,
+        );
+        if (!Number.isFinite(duration) || duration < 1) {
+          this.showNotification('Please select a duration', 'error');
+          return false;
+        }
+        if (duration > 3) {
+          this.showNotification('Maximum booking duration is 3 hours.', 'error');
+          return false;
+        }
+        this.bookingData.duration = duration;
+        return true;
+      }
+
       case 3: {
+        if (!this.selectedDate || !this.selectedTime) {
+          this.showNotification('Please select a date and time', 'error');
+          return false;
+        }
+
+        const selectedDateTime = new Date(`${this.selectedDate}T${this.selectedTime}`);
+        const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
+
+        if (selectedDateTime < sixHoursFromNow) {
+          this.showNotification('Bookings must be made at least 6 hours in advance', 'error');
+          return false;
+        }
+
+        this.bookingData.date = this.selectedDate;
+        this.bookingData.startTime = this.selectedTime;
+        return true;
+      }
+
+      case 4: {
         const customerInfo = this.collectCustomerInfo({ requireTerms: true, showErrors: true });
         if (!customerInfo) {
           return false;
@@ -910,7 +925,7 @@ class BarzunkoApp {
         return true;
       }
 
-      case 4:
+      case 5:
         return true;
     }
     return true;
@@ -1133,6 +1148,11 @@ class BarzunkoApp {
     }
 
     // Add days of month
+    const cacheKey = this.getAvailabilityCacheKey(
+      this.selectedRoom ? this.selectedRoom.id : null,
+      this.bookingData.duration || 1,
+    );
+
     for (let day = 1; day <= daysInMonth; day++) {
       const dayElement = document.createElement('div');
       dayElement.className = 'calendar-day';
@@ -1143,14 +1163,26 @@ class BarzunkoApp {
       if (!dayDateString) continue;
 
       // Check if day is available
-      const dayTimeSlots = this.getTimeSlotsForDate(dayDateString, this.bookingData.duration || 1);
-      // console.log(this.bookingData.duration);
-      const hasAvailableSlot = dayTimeSlots.some((slot) => {
-        const [slotHours, slotMinutes] = slot.split(':').map(Number);
-        const slotDateTime = new Date(dayDate);
-        slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
-        return slotDateTime >= sixHoursFromNow;
-      });
+      let hasAvailableSlot = false;
+      const cachedSlots =
+        cacheKey && this.availableSlotsCache[cacheKey]
+          ? this.availableSlotsCache[cacheKey][dayDateString]
+          : null;
+
+      if (Array.isArray(cachedSlots)) {
+        hasAvailableSlot = cachedSlots.length > 0;
+      } else {
+        const dayTimeSlots = this.getTimeSlotsForDate(
+          dayDateString,
+          this.bookingData.duration || 1,
+        );
+        hasAvailableSlot = dayTimeSlots.some((slot) => {
+          const [slotHours, slotMinutes] = slot.split(':').map(Number);
+          const slotDateTime = new Date(dayDate);
+          slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
+          return slotDateTime >= sixHoursFromNow;
+        });
+      }
 
       if (hasAvailableSlot) {
         dayElement.classList.add('available');
@@ -1187,19 +1219,27 @@ class BarzunkoApp {
     this.renderRoomSelection();
   }
 
-  updateTimeSlots() {
+  async updateTimeSlots() {
     const timeGrid = document.getElementById('time-grid');
     const timeSlotsContainer = document.getElementById('time-slots');
 
     if (!timeGrid || !timeSlotsContainer) return;
 
-    if (!this.selectedDate) {
-      timeSlotsContainer.style.display = 'none';
+    const durationEl = document.getElementById('duration');
+    const duration = durationEl
+      ? this.normalizeCustomerDuration(durationEl.value, this.bookingData.duration || 1)
+      : this.normalizeCustomerDuration(this.bookingData.duration, 1);
+    this.bookingData.duration = duration;
+
+    if (!this.selectedDate || !this.selectedRoom) {
+      timeSlotsContainer.style.display = 'block';
+      timeGrid.innerHTML =
+        '<div class="time-slot disabled">Select a room and duration to see availability.</div>';
       return;
     }
 
     timeSlotsContainer.style.display = 'block';
-    timeGrid.innerHTML = '';
+    timeGrid.innerHTML = '<div class="time-slot disabled">Checking availability...</div>';
 
     const selectedDateTime = this.parseDateFromYMD(this.selectedDate);
     if (!selectedDateTime) {
@@ -1208,45 +1248,123 @@ class BarzunkoApp {
     }
     const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
 
-    const slots = this.getTimeSlotsForDate(this.selectedDate, this.bookingData.duration || 1);
+    const slots = this.getTimeSlotsForDate(this.selectedDate, duration || 1);
     const weekday = selectedDateTime.getDay();
     const filteredSlots = slots.filter((time) => {
       if (weekday === 5 && time === '02:00') return false;
       if (weekday === 0 && time === '01:30') return false;
       return true;
     });
-    if (!filteredSlots.length) {
-      const empty = document.createElement('div');
-      empty.className = 'time-slot disabled';
-      empty.textContent = 'No times available';
-      timeGrid.appendChild(empty);
+    const cacheKey = this.getAvailabilityCacheKey(this.selectedRoom.id, duration);
+    const cachedSlots =
+        cacheKey && this.availableSlotsCache[cacheKey]
+          ? this.availableSlotsCache[cacheKey][this.selectedDate]
+          : null;
+    const requestId = ++this.timeSlotsRequestId;
+
+    const renderSlots = (availableSlots) => {
+      if (requestId !== this.timeSlotsRequestId) return;
+      timeGrid.innerHTML = '';
+      if (!availableSlots.length) {
+        const empty = document.createElement('div');
+        empty.className = 'time-slot disabled';
+        empty.textContent = 'No times available';
+        timeGrid.appendChild(empty);
+        return;
+      }
+
+      availableSlots.forEach((slot) => {
+        const time = typeof slot === 'object' && slot?.time ? slot.time : slot;
+        const slotDateTime = new Date(selectedDateTime.getTime());
+        const [hours, minutes] = time.split(':').map(Number);
+        slotDateTime.setHours(hours, minutes, 0, 0);
+
+        const timeSlot = document.createElement('div');
+        timeSlot.className = 'time-slot';
+        timeSlot.textContent = this.formatTime(time);
+        // Check if time slot meets minimum notice requirement
+        if (slotDateTime >= sixHoursFromNow) {
+          const isAvailable = typeof slot === 'object' ? slot.available !== false : true;
+          if (isAvailable) {
+            timeSlot.classList.add('available');
+            timeSlot.addEventListener('click', () => {
+              this.selectTime(time);
+            });
+          } else {
+            timeSlot.classList.add('disabled');
+          }
+        } else {
+          timeSlot.classList.add('disabled');
+        }
+
+        if (this.selectedTime === time) {
+          timeSlot.classList.add('selected');
+        }
+
+        timeGrid.appendChild(timeSlot);
+      });
+    };
+
+    if (Array.isArray(cachedSlots)) {
+      renderSlots(cachedSlots);
       return;
     }
 
-    filteredSlots.forEach((time) => {
-      const slotDateTime = new Date(selectedDateTime.getTime());
-      const [hours, minutes] = time.split(':').map(Number);
-      slotDateTime.setHours(hours, minutes, 0, 0);
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      renderSlots(filteredSlots);
+      return;
+    }
 
-      const timeSlot = document.createElement('div');
-      timeSlot.className = 'time-slot';
-      timeSlot.textContent = this.formatTime(time);
-      // Check if time slot meets minimum notice requirement
-      if (slotDateTime >= sixHoursFromNow) {
-        timeSlot.classList.add('available');
-        timeSlot.addEventListener('click', () => {
-          this.selectTime(time);
+    try {
+      const getAvailability = window.firebaseFunctions.httpsCallable('getRoomAvailability');
+      const getMaxDuration = window.firebaseFunctions.httpsCallable('getMaxAvailableDuration');
+      const availableSlots = [];
+      for (const time of filteredSlots) {
+        const [availabilityRes, maxDurationRes] = await Promise.all([
+          getAvailability({
+            date: this.selectedDate,
+            startTime: time,
+            duration,
+            roomIds: [this.selectedRoom.id],
+            excludeBookingId:
+              this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
+          }),
+          getMaxDuration({
+            roomId: this.selectedRoom.id,
+            date: this.selectedDate,
+            startTime: time,
+          }),
+        ]);
+        if (requestId !== this.timeSlotsRequestId) return;
+
+        const remainingRaw = Number(availabilityRes?.data?.availability?.[this.selectedRoom.id]);
+        const remaining = Number.isFinite(remainingRaw) ? remainingRaw : 0;
+        const maxHours = Number(maxDurationRes?.data?.maxDurationHours);
+        const canFitDuration = Number.isFinite(maxHours) ? maxHours >= duration : true;
+
+        availableSlots.push({
+          time,
+          available: remaining > 0 && canFitDuration,
         });
-      } else {
-        timeSlot.classList.add('disabled');
       }
 
-      if (this.selectedTime === time) {
-        timeSlot.classList.add('selected');
+      if (cacheKey) {
+        if (!this.availableSlotsCache[cacheKey]) {
+          this.availableSlotsCache[cacheKey] = {};
+        }
+        this.availableSlotsCache[cacheKey][this.selectedDate] = availableSlots;
       }
 
-      timeGrid.appendChild(timeSlot);
-    });
+      renderSlots(availableSlots);
+    } catch (error) {
+      console.warn('Failed to load slot availability', error);
+      renderSlots(
+        filteredSlots.map((t) => ({
+          time: t,
+          available: true,
+        })),
+      );
+    }
   }
 
   selectTime(time) {
@@ -1260,6 +1378,13 @@ class BarzunkoApp {
     const period = hours >= 12 ? 'PM' : 'AM';
     const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
     return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  }
+
+  getAvailabilityCacheKey(roomId, duration) {
+    if (!roomId) return null;
+    const d = Number(duration);
+    if (!Number.isFinite(d) || d <= 0) return null;
+    return `${roomId}|${d}`;
   }
 
   formatPaymentStatus(status) {
@@ -1347,26 +1472,15 @@ class BarzunkoApp {
 
       const selectedUnavailable =
         this.selectedRoom && Number(this.roomAvailability?.[this.selectedRoom.id] || 0) <= 0;
-      let shouldClearSelectedRoom = selectedUnavailable;
-      if (selectedUnavailable && this.isRebookingFlow && this.rebookContext) {
-        const orig = this.rebookContext.booking || {};
-        if (
-          this.selectedRoom.id === orig.roomId &&
-          this.selectedDate === orig.date &&
-          this.selectedTime === orig.startTime
-        ) {
-          shouldClearSelectedRoom = false;
-        }
-      }
-      if (shouldClearSelectedRoom) {
+      if (selectedUnavailable) {
         const roomName = this.selectedRoom ? this.selectedRoom.name : 'Selected room';
         this.showNotification(
-          `${roomName} is no longer available at that time. Please choose another room.`,
+          `${roomName} is not available at that time. Please choose a different time.`,
           'warning',
         );
-        this.selectedRoom = null;
-        this.bookingData.room = null;
-        this.validatePartySize();
+        this.selectedTime = null;
+        this.bookingData.startTime = null;
+        this.updateTimeSlots();
       }
     } catch (error) {
       console.error('Failed to load room availability', error);
@@ -1427,10 +1541,10 @@ class BarzunkoApp {
   getRoomAvailabilityStatus(roomId) {
     if (!this.selectedDate || !this.selectedTime) {
       return {
-        message: 'Select a date & time to check availability',
+        message: 'Select a date & time next to confirm availability',
         className: 'info',
-        selectable: false,
-        notifyMessage: 'Select a date and time first to see availability.',
+        selectable: true,
+        notifyMessage: 'You can pick a room now; availability will be confirmed after you choose date & time.',
         notifyType: 'info',
       };
     }
@@ -1709,6 +1823,7 @@ class BarzunkoApp {
     if (!roomGrid) return;
 
     roomGrid.innerHTML = '';
+    let defaultRoom = null;
 
     this.rooms.forEach((room) => {
       const status = this.getRoomAvailabilityStatus(room.id);
@@ -1755,15 +1870,62 @@ class BarzunkoApp {
       if (status.selectable && this.selectedRoom && this.selectedRoom.id === room.id) {
         roomOption.classList.add('selected');
       }
+      if (status.selectable && !this.selectedRoom && !defaultRoom) {
+        defaultRoom = room;
+        roomOption.classList.add('selected');
+      }
 
       roomGrid.appendChild(roomOption);
     });
+
+    if (!this.selectedRoom && defaultRoom) {
+      this.selectedRoom = defaultRoom;
+      this.bookingData.room = defaultRoom;
+      this.selectedTime = null;
+      this.roomAvailability = null;
+      this.roomAvailabilityLoading = false;
+      this.roomAvailabilityError = false;
+      this.availableSlotsCache = {};
+      this.timeSlotsRequestId += 1;
+      this.validatePartySize();
+      this.updateBookingSummary();
+      this.updatePaymentSummary();
+      this.updateCalendar();
+      this.updateTimeSlots();
+      // Re-render once to reflect selection styling
+      this.renderRoomSelection();
+    }
   }
 
   selectRoom(room) {
     this.selectedRoom = room;
+    this.bookingData.room = room;
+    this.selectedTime = null;
+    this.roomAvailability = null;
+    this.roomAvailabilityLoading = false;
+    this.roomAvailabilityError = false;
+    this.availableSlotsCache = {};
+    this.timeSlotsRequestId += 1;
+    // Adjust party size if it exceeds new room capacity
+    const partyInput = document.getElementById('party-size');
+    const partySize = partyInput ? parseInt(partyInput.value, 10) || 1 : this.bookingData.partySize;
+    if (room && partySize > room.maxCapacity) {
+      const clamped = room.maxCapacity;
+      if (partyInput) {
+        partyInput.value = clamped;
+      }
+      this.bookingData.partySize = clamped;
+      this.showNotification(
+        `Party size adjusted to ${clamped} to fit ${room.name}'s capacity.`,
+        'info',
+      );
+    }
     this.renderRoomSelection();
     this.validatePartySize();
+    this.updateBookingSummary();
+    this.updatePaymentSummary();
+    this.updateCalendar();
+    this.updateTimeSlots();
   }
 
   // Party Size Methods
@@ -2383,7 +2545,7 @@ class BarzunkoApp {
       paymentForm.style.display = isRebooking ? 'none' : '';
     }
 
-    const stepDescription = document.querySelector('#step-4 .step-description');
+    const stepDescription = document.querySelector('#step-5 .step-description');
 
     if (stepDescription) {
       stepDescription.textContent = isRebooking
@@ -2391,7 +2553,7 @@ class BarzunkoApp {
         : 'Secure your reservation with a deposit';
     }
 
-    const stepHeading = document.querySelector('#step-4 h2');
+    const stepHeading = document.querySelector('#step-5 h2');
 
     if (stepHeading) {
       stepHeading.textContent = isRebooking
