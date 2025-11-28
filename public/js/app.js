@@ -1285,6 +1285,7 @@ class BarzunkoApp {
       this.roomAvailabilityLoading = false;
       this.roomAvailabilityError = false;
       this.roomAvailability = response.data?.availability || {};
+      await this.clampDurationToAvailability();
 
       const selectedUnavailable =
         this.selectedRoom && Number(this.roomAvailability?.[this.selectedRoom.id] || 0) <= 0;
@@ -1320,6 +1321,49 @@ class BarzunkoApp {
     }
 
     this.renderRoomSelection();
+  }
+
+  async clampDurationToAvailability() {
+    if (
+      !this.selectedRoom ||
+      !this.selectedDate ||
+      !this.selectedTime ||
+      !window.firebaseFunctions ||
+      !window.firebaseFunctions.httpsCallable
+    ) {
+      return;
+    }
+    try {
+      const fn = window.firebaseFunctions.httpsCallable('getMaxAvailableDuration');
+      const res = await fn({
+        roomId: this.selectedRoom.id,
+        date: this.selectedDate,
+        startTime: this.selectedTime,
+      });
+      const maxHours = Number(res.data?.maxDurationHours);
+      if (!Number.isFinite(maxHours)) return;
+
+      const durationEl = document.getElementById('duration');
+      const currentDuration = durationEl
+        ? this.normalizeCustomerDuration(durationEl.value, this.bookingData.duration || 1)
+        : this.normalizeCustomerDuration(this.bookingData.duration, 1);
+
+      const clamped = Math.max(1, Math.min(currentDuration, Math.floor(maxHours)));
+      if (clamped < currentDuration) {
+        this.showNotification(
+          `Only ${clamped} hour${clamped === 1 ? '' : 's'} available for that time.`,
+          'warning',
+        );
+        if (durationEl) {
+          durationEl.value = String(clamped);
+        }
+        this.bookingData.duration = clamped;
+        this.updatePaymentSummary();
+        this.updateBookingSummary();
+      }
+    } catch (err) {
+      console.warn('clampDurationToAvailability failed', err);
+    }
   }
 
   getRoomAvailabilityStatus(roomId) {
@@ -2314,7 +2358,6 @@ class BarzunkoApp {
       const cardStyle = {
         base: {
           color: '#ffffff',
-          fontSize: '16px',
           fontFamily: 'inherit',
           iconColor: '#ffffff',
           '::placeholder': {
