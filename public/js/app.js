@@ -4216,7 +4216,9 @@ class BarzunkoApp {
             .filter(Boolean)
             .join('\n');
 
-          html += `<td rowspan="${span}"><div class="slot booked status-${status}" title="${tooltip.replace(/"/g, '&quot;')}"><div class="booking-card">`;
+          const tooltipSafe = tooltip.replace(/"/g, '&quot;');
+
+          html += `<td rowspan="${span}"><div class="slot booked status-${status}" data-tooltip="${tooltipSafe}"><div class="booking-card">`;
           html += '<div class="booking-name">' + name + '</div>';
           if (party) html += '<div class="booking-detail">' + party + '</div>';
           html +=
