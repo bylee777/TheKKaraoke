@@ -243,6 +243,61 @@ class BarzunkoApp {
     ];
   }
 
+  async ensureDurationAvailable() {
+    if (
+      !this.selectedRoom ||
+      !this.selectedDate ||
+      !this.selectedTime ||
+      !window.firebaseFunctions ||
+      !window.firebaseFunctions.httpsCallable
+    ) {
+      return true;
+    }
+    try {
+      const durationEl = document.getElementById('duration');
+      const currentDuration = durationEl
+        ? this.normalizeCustomerDuration(durationEl.value, this.bookingData.duration || 1)
+        : this.normalizeCustomerDuration(this.bookingData.duration, 1);
+
+      const fn = window.firebaseFunctions.httpsCallable('getMaxAvailableDuration');
+      const res = await fn({
+        roomId: this.selectedRoom.id,
+        date: this.selectedDate,
+        startTime: this.selectedTime,
+      });
+      const maxHours = Number(res.data?.maxDurationHours);
+      if (!Number.isFinite(maxHours)) {
+        return true;
+      }
+      if (maxHours <= 0) {
+        this.showNotification(
+          'That start time is no longer available. Please pick a different time.',
+          'warning',
+        );
+        return false;
+      }
+      if (currentDuration > maxHours) {
+        const clamped = Math.floor(maxHours);
+        const hourLabel = clamped === 1 ? 'hour' : 'hours';
+        this.showNotification(
+          `Only ${clamped} ${hourLabel} are available starting at this time.`,
+          'warning',
+        );
+        if (durationEl) {
+          durationEl.value = String(clamped);
+        }
+        this.bookingData.duration = clamped;
+        this.updatePaymentSummary();
+        this.updateBookingSummary();
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('ensureDurationAvailable failed', err);
+      return true;
+    }
+  }
+
   init() {
     this.setupEventListeners();
 
@@ -740,7 +795,7 @@ class BarzunkoApp {
     }, durationMs);
   }
 
-  nextStep() {
+  async nextStep() {
     const now = Date.now();
     if (now < this.lastNavigationTime + this.navigationCooldownMs) {
       this.showNotification('Please wait a moment before continuing.', 'warning');
@@ -748,6 +803,11 @@ class BarzunkoApp {
     }
 
     if (!this.validateCurrentStep()) {
+      return;
+    }
+
+    // Prevent advancing if the selected duration overbooks the slot
+    if (!(await this.ensureDurationAvailable())) {
       return;
     }
 
@@ -2388,6 +2448,8 @@ class BarzunkoApp {
     }
     // Validate the current step (ensures date/room/customer info are filled)
     if (!this.validateCurrentStep()) return;
+    // Ensure the requested duration fits before submitting
+    if (!(await this.ensureDurationAvailable())) return;
 
     const customerInfo = this.collectCustomerInfo({ requireTerms: true, showErrors: true });
     if (!customerInfo) {
