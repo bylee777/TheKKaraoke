@@ -1195,6 +1195,7 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   const duration = Number(data?.duration);
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
+  const allowPast = data?.allowPast === true;
   const overrideWalkInHold = data?.overrideWalkInHold === true;
   const roomIds =
     Array.isArray(data?.roomIds) && data.roomIds.length > 0
@@ -1223,7 +1224,9 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   }
 
   ensureWithinBusinessHours(date, startTime, endTime);
-  ensureNotInPast(date, startTime);
+  if (!allowPast) {
+    ensureNotInPast(date, startTime);
+  }
 
   const businessDate = determineBusinessDate(date, startTime);
 
@@ -1264,6 +1267,7 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
 
 exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
   const { roomId, date, startTime } = data || {};
+  const allowPast = data?.allowPast === true;
   if (!roomId || !date || !startTime) {
     throw new functions.https.HttpsError('invalid-argument', 'roomId, date, and startTime are required');
   }
@@ -1272,7 +1276,9 @@ exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
   }
 
-  ensureNotInPast(date, startTime);
+  if (!allowPast) {
+    ensureNotInPast(date, startTime);
+  }
   const businessDate = determineBusinessDate(date, startTime);
   const startMinutes = timeStringToMinutes(startTime);
   if (!Number.isFinite(startMinutes)) {
@@ -1373,7 +1379,9 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
   }
   const current = snap.data();
   const targetRoomId = roomId || current.roomId;
-  ensureNotInPast(newDate, newStartTime);
+  if (data?.allowPast !== true) {
+    ensureNotInPast(newDate, newStartTime);
+  }
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
   ensureWithinBusinessHours(newDate, newStartTime, endTime);
   const businessDate = determineBusinessDate(newDate, newStartTime);
