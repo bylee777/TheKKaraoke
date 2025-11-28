@@ -4205,16 +4205,20 @@ class BarzunkoApp {
           if (span > 1) {
             rowSpanTracker[colId] = span - 1;
           }
-          html += `<td rowspan="${span}"><div class="slot booked status-${status}"><div class="booking-card">`;
+          const tooltip = [
+            name ? `Name: ${name}` : '',
+            party ? `Party: ${party}` : '',
+            phone ? `Phone: ${phone}` : '',
+            depositLine || '',
+            special ? `Request: ${special}` : '',
+            `Time: ${this.formatTime(booking.startTime)} - ${this.formatTime(endTime)}`,
+          ]
+            .filter(Boolean)
+            .join('\n');
+
+          html += `<td rowspan="${span}"><div class="slot booked status-${status}" title="${tooltip.replace(/"/g, '&quot;')}"><div class="booking-card">`;
           html += '<div class="booking-name">' + name + '</div>';
           if (party) html += '<div class="booking-detail">' + party + '</div>';
-          if (phone) html += '<div class="booking-detail">' + phone + '</div>';
-          if (depositLine) {
-            html += '<div class="booking-detail">' + depositLine + '</div>';
-          }
-          if (special) {
-            html += '<div class="booking-detail booking-special">Request: ' + special + '</div>';
-          }
           html +=
             '<div class="booking-detail">' +
             this.formatTime(booking.startTime) +
