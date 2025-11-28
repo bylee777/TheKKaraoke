@@ -30,7 +30,7 @@
   const FUNCTIONS_REGION = null; // e.g., "northamerica-northeast1" (Toronto) or "us-central1"
 
   const STRIPE_PUBLISHABLE_KEY =
-    'pk_live_51KemZfB7gDWZecdIgivhhujMb6iWslsm37W4aDjUhwdUNlZPltc8IwIB05CkHDlcPPo2Wu9ZixEJdnpMlnmwPStm00TM78V9JV';
+    'pk_live_51SB0YhB738DdRDwCPJxzhTtOPdjk1bKyT3v7vQuXgSIkGPotVJo2hb4QoRarvVlk7jU1UNHXNntHBwNoevGgfXj900itdsNLES';
 
   // ===== 3) Sanity checks for SDKs loaded via HTML <script> tags =====
   if (typeof firebase === 'undefined') {
