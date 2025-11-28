@@ -5420,7 +5420,8 @@ class BarzunkoApp {
       return;
     }
 
-    if (candidateStart.getTime() < Date.now()) {
+    const isAdminContext = Boolean(this.currentAdminUser || this.currentStaffUser);
+    if (!isAdminContext && candidateStart.getTime() < Date.now()) {
       if (statusEl) statusEl.textContent = 'Selected time is in the past.';
       if (submitBtn) submitBtn.disabled = true;
       return;
@@ -5445,6 +5446,7 @@ class BarzunkoApp {
         roomIds: [roomId],
         excludeBookingId: state.bookingId,
         overrideWalkInHold: true,
+        allowPast: true,
       });
       if (requestId !== this.adminRescheduleRequestId) return;
 
@@ -5487,6 +5489,7 @@ class BarzunkoApp {
         newStartTime: state.validPayload.startTime,
         newDuration: state.validPayload.duration,
         roomId: state.roomId,
+        allowPast: true,
       };
       if (Number.isFinite(Number(state.partySize)) && Number(state.partySize) > 0) {
         reqPayload.partySize = Number(state.partySize);
