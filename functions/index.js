@@ -1271,6 +1271,7 @@ exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
   if (!roomId || !date || !startTime) {
     throw new functions.https.HttpsError('invalid-argument', 'roomId, date, and startTime are required');
   }
+  const { inventory } = getRoomConfig(roomId);
   const schedule = getBusinessScheduleForDate(date);
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
@@ -1278,6 +1279,13 @@ exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
 
   if (!allowPast) {
     ensureNotInPast(date, startTime);
+  }
+
+  // For room types with multiple inventory, overlapping bookings on one room
+  // don't block the entire type. Return the max allowed duration (3h) and
+  // rely on the availability check to enforce capacity.
+  if (Number.isFinite(inventory) && inventory > 1) {
+    return { maxDurationHours: 3 };
   }
   const businessDate = determineBusinessDate(date, startTime);
   const startMinutes = timeStringToMinutes(startTime);
