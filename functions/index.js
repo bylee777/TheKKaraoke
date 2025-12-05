@@ -2159,6 +2159,11 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
 
   const updatedSnapshot = await bookingRef.get();
   await addBookingToCalendar({ id: bookingId, ...updatedSnapshot.data() });
+  try {
+    await sendBookingEmail({ id: bookingId, ...updatedSnapshot.data() });
+  } catch (err) {
+    console.error('sendBookingEmail failed after rebook update', err);
+  }
 
   return {
     message: 'Booking updated',
@@ -2218,6 +2223,14 @@ exports.rebookBooking = functions.https.onCall(async (data, context) => {
     depositAmount: newDepositAmount || oldBooking.depositAmount,
     customerInfo: oldBooking.customerInfo,
   });
+  try {
+    const newSnap = await db.collection('bookings').doc(result.id).get();
+    if (newSnap.exists) {
+      await sendBookingEmail({ id: newSnap.id, ...newSnap.data() });
+    }
+  } catch (err) {
+    console.error('sendBookingEmail failed after admin rebook', err);
+  }
   return {
     message: 'Booking rebooked',
     newBookingId: result.id,
