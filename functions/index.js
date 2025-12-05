@@ -1144,6 +1144,218 @@ exports.createBooking = functions.https.onCall(async (data, context) => {
     message: 'Booking created',
   };
 });
+
+/**
+ * Callable: prepareBookingPayment
+ * Validates availability and creates a PaymentIntent, but does NOT create a booking document.
+ * The booking is only written after payment succeeds via finalizeBooking.
+ */
+exports.prepareBookingPayment = functions.https.onCall(async (data) => {
+  const { roomId, date, startTime, duration, totalCost, depositAmount, partySize, customerInfo } =
+    data || {};
+
+  if (!roomId || !date || !startTime || !duration || !customerInfo) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
+  }
+
+  const dur = Number(duration);
+  if (!Number.isFinite(dur) || dur <= 0) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Duration must be a positive number of hours',
+    );
+  }
+  if (dur > 3) {
+    throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
+  }
+
+  const { inventory } = getRoomConfig(roomId);
+  const noAvailabilityMessage = buildNoAvailabilityMessage(getRoomConfig(roomId).label, inventory);
+
+  // Compute end time
+  const dateObj = new Date(`${date}T${startTime}`);
+  addDurationMinutes(dateObj, dur);
+  const endTime = dateObj.toTimeString().slice(0, 5);
+
+  const schedule = getBusinessScheduleForDate(date);
+  if (!schedule) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date provided.');
+  }
+
+  ensureWithinBusinessHours(date, startTime, endTime);
+  ensureNotInPast(date, startTime);
+
+  const businessDate = determineBusinessDate(date, startTime);
+
+  const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
+  const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
+  const depositToCharge =
+    Number.isFinite(Number(depositAmount)) && Number(depositAmount) > 0
+      ? Number(depositAmount)
+      : depositTotals.total;
+  if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Unable to determine the required deposit for this booking.',
+    );
+  }
+
+  // Quick availability check
+  await ensureRoomAvailability(roomId, date, startTime, endTime, null, null);
+
+  // Create PaymentIntent only
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(depositToCharge * 100),
+      currency: 'cad',
+      payment_method_types: ['card'],
+      metadata: {
+        roomId,
+        date,
+        startTime,
+        duration: dur,
+        deposit_before_tax: depositTotals.beforeTax.toString(),
+        customer_email: normalizeEmail(customerInfo?.email) || '',
+      },
+    });
+
+    return {
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      depositAmount: depositToCharge,
+    };
+  } catch (err) {
+    console.error('prepareBookingPayment failed', err);
+    throw new functions.https.HttpsError('internal', 'Unable to start payment');
+  }
+});
+
+/**
+ * Callable: finalizeBooking
+ * After payment succeeds, this writes the booking document and sends email.
+ */
+exports.finalizeBooking = functions.https.onCall(async (data) => {
+  const {
+    paymentIntentId,
+    roomId,
+    date,
+    startTime,
+    duration,
+    totalCost,
+    depositAmount,
+    partySize,
+    customerInfo,
+  } = data || {};
+
+  if (!paymentIntentId || !roomId || !date || !startTime || !duration || !customerInfo) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
+  }
+
+  const dur = Number(duration);
+  if (!Number.isFinite(dur) || dur <= 0 || dur > 3) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid duration');
+  }
+
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const okStatuses = ['succeeded', 'requires_capture', 'processing'];
+  if (!intent || !okStatuses.includes(intent.status)) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      `Payment not completed. Status: ${intent?.status || 'unknown'}`,
+    );
+  }
+
+  const { inventory, label } = getRoomConfig(roomId);
+  const noAvailabilityMessage = buildNoAvailabilityMessage(label, inventory);
+
+  const dateObj = new Date(`${date}T${startTime}`);
+  addDurationMinutes(dateObj, dur);
+  const endTime = dateObj.toTimeString().slice(0, 5);
+
+  const schedule = getBusinessScheduleForDate(date);
+  if (!schedule) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date provided.');
+  }
+
+  ensureWithinBusinessHours(date, startTime, endTime);
+  ensureNotInPast(date, startTime);
+
+  const businessDate = determineBusinessDate(date, startTime);
+  const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
+  const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
+  const depositToCharge =
+    Number.isFinite(Number(depositAmount)) && Number(depositAmount) > 0
+      ? Number(depositAmount)
+      : depositTotals.total;
+  if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Unable to determine the required deposit for this booking.',
+    );
+  }
+
+  const bookingDoc = {
+    roomId,
+    date,
+    businessDate,
+    startTime,
+    endTime,
+    duration: dur,
+    totalCost: totalCostNumber,
+    totalCostWithTax:
+      totalCostNumber != null ? Math.round(totalCostNumber * (1 + TAX_RATE) * 100) / 100 : null,
+    depositAmount: depositToCharge,
+    depositBeforeTax: depositTotals.beforeTax,
+    depositTax: depositTotals.tax,
+    remainingBalance:
+      totalCostNumber != null ? Math.max(totalCostNumber - depositTotals.beforeTax, 0) : null,
+    remainingBalanceBeforeTax:
+      totalCostNumber != null ? Math.max(totalCostNumber - depositTotals.beforeTax, 0) : null,
+    remainingTax: null,
+    partySize: typeof partySize === 'number' ? partySize : null,
+    customerInfo: {
+      ...customerInfo,
+      email: normalizeEmail(customerInfo?.email),
+      firstName: customerInfo?.firstName ? customerInfo.firstName.trim() : '',
+      lastName: customerInfo?.lastName ? customerInfo.lastName.trim() : '',
+      phone: customerInfo?.phone ? customerInfo.phone.trim() : '',
+    },
+    paymentIntentId: intent.id,
+    paymentStatus: intent.status,
+    calendarEventId: null,
+    textSent: {
+      booking: false,
+      cancellation: false,
+      rebooking: false,
+    },
+    status: intent.status === 'succeeded' ? 'confirmed' : 'pending',
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  // Create the booking doc with availability check inside a transaction
+  let newBookingRef;
+  try {
+    await db.runTransaction(async (transaction) => {
+      await ensureRoomAvailability(roomId, date, startTime, endTime, null, transaction);
+      const docRef = db.collection('bookings').doc();
+      transaction.set(docRef, bookingDoc);
+      newBookingRef = docRef;
+    });
+  } catch (err) {
+    // If slot taken after payment, surface error
+    console.error('finalizeBooking failed after payment', err);
+    throw err;
+  }
+
+  try {
+    await sendBookingEmail({ id: newBookingRef.id, ...bookingDoc });
+  } catch (err) {
+    console.error('finalizeBooking sendBookingEmail failed', err);
+  }
+
+  return { bookingId: newBookingRef.id };
+});
 exports.lookupBooking = functions.https.onCall(async (data) => {
   const bookingRefRaw = typeof data?.bookingRef === 'string' ? data.bookingRef.trim() : '';
   const emailNormalized = normalizeEmail(data?.email);
