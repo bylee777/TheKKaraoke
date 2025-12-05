@@ -4395,11 +4395,15 @@ class BarzunkoApp {
     const baseAssignments = options.assignments || this.adminGridAssignments || {};
     const assignments = { ...availabilityMap, ...baseAssignments };
 
-    let html = '<table class="admin-schedule-table"><thead><tr><th class="time-head">Time</th>';
+    let headerHtml =
+      '<table class="admin-schedule-table admin-schedule-header"><thead><tr><th class="time-head">Time</th>';
     columns.forEach((col) => {
-      html += `<th><div class="room-label">${col.label}</div><div class="room-sub">${col.name}</div></th>`;
+      headerHtml += `<th><div class="room-label">${col.label}</div><div class="room-sub">${col.name}</div></th>`;
     });
-    html += '</tr></thead><tbody>';
+    headerHtml += '</tr></thead></table>';
+
+    let html =
+      '<div class="admin-schedule-body-scroll"><table class="admin-schedule-table admin-schedule-body"><tbody>';
 
     const rowSpanTracker = {};
     rows.forEach((row) => {
@@ -4484,8 +4488,8 @@ class BarzunkoApp {
       }
       html += '</tr>';
     });
-    html += '</tbody></table>';
-    container.innerHTML = html;
+    html += '</tbody></table></div>';
+    container.innerHTML = headerHtml + html;
   }
 
   adminBuildScheduleExportData() {
