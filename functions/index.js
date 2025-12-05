@@ -658,15 +658,8 @@ function isFridayOrSaturday(dateStr) {
 }
 
 function reservedSlotsForWindow(roomId, date, startTime, endTime, schedule, options = {}) {
-  if (options.overrideWalkInHold) return 0;
-  if (!roomId || !date) return 0;
-  const isTargetRoom = roomId === 'small' || roomId === 'medium';
-  if (!isTargetRoom) return 0;
-  if (!isFridayOrSaturday(date)) return 0;
-  // Walk-in hold window: 21:00 - 00:00
-  const holdStart = '21:00';
-  const holdEnd = '00:00';
-  return hasTimeConflict(startTime, endTime, holdStart, holdEnd) ? 1 : 0;
+  // Walk-in holds disabled
+  return 0;
 }
 
 function getDepositBaseAmount(roomId, dateStr) {
