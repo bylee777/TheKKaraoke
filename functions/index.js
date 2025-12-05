@@ -1358,6 +1358,21 @@ exports.finalizeBooking = functions.https.onCall(async (data) => {
   } catch (err) {
     console.error('finalizeBooking sendBookingEmail failed', err);
   }
+  try {
+    await sendTelegramMessage(
+      [
+        '📅 New Booking (paid)',
+        `Date: ${bookingDoc.date} ${bookingDoc.startTime}`,
+        `Room: ${bookingDoc.roomId}`,
+        `Name: ${bookingDoc.customerInfo?.firstName || ''} ${bookingDoc.customerInfo?.lastName || ''}`,
+        `Phone: ${bookingDoc.customerInfo?.phone || 'n/a'}`,
+        `Party Size: ${bookingDoc.partySize ?? 'n/a'}`,
+        `Deposit: $${bookingDoc.depositAmount ?? 0}`,
+      ].join('\n'),
+    );
+  } catch (err) {
+    console.error('finalizeBooking sendTelegram failed', err);
+  }
 
   return { bookingId: newBookingRef.id };
 });
@@ -2244,6 +2259,22 @@ exports.confirmBooking = functions.https.onCall(async (data, context) => {
   if (intent.status === 'succeeded') {
     const fresh = await ref.get();
     await sendBookingEmail({ id: ref.id, ...fresh.data() });
+    try {
+      const booking = fresh.data() || {};
+      await sendTelegramMessage(
+        [
+          '📅 Booking Confirmed (manual)',
+          `Date: ${booking.date} ${booking.startTime}`,
+          `Room: ${booking.roomId}`,
+          `Name: ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''}`,
+          `Phone: ${booking.customerInfo?.phone || 'n/a'}`,
+          `Party Size: ${booking.partySize ?? 'n/a'}`,
+          `Deposit: $${booking.depositAmount ?? 0}`,
+        ].join('\n'),
+      );
+    } catch (err) {
+      console.error('confirmBooking sendTelegram failed', err);
+    }
   }
 
   return { ok: true };
@@ -2286,6 +2317,22 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     if (status === 'succeeded') {
       const fresh = await ref.get();
       await sendBookingEmail({ id: ref.id, ...fresh.data() });
+      try {
+        const booking = fresh.data() || {};
+        await sendTelegramMessage(
+          [
+            '📅 Booking Confirmed (webhook)',
+            `Date: ${booking.date} ${booking.startTime}`,
+            `Room: ${booking.roomId}`,
+            `Name: ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''}`,
+            `Phone: ${booking.customerInfo?.phone || 'n/a'}`,
+            `Party Size: ${booking.partySize ?? 'n/a'}`,
+            `Deposit: $${booking.depositAmount ?? 0}`,
+          ].join('\n'),
+        );
+      } catch (err) {
+        console.error('[telegram] failed after webhook', err);
+      }
     }
   }
 
