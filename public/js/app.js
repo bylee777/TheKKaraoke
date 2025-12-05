@@ -2634,7 +2634,7 @@ class BarzunkoApp {
     this.showLoading('Processing your booking...');
 
     try {
-      // Build the payload for the Cloud Function
+      // Build the payload for the prepare/finalize flow
       const payload = {
         roomId: this.selectedRoom.id,
         date: this.selectedDate,
@@ -2643,16 +2643,17 @@ class BarzunkoApp {
         totalCost: this.bookingData.totalCost,
         depositAmount: this.bookingData.depositAmount,
         partySize: this.bookingData.partySize,
-        // Use "customerInfo" because the Cloud Function expects that field.
         customerInfo: this.bookingData.customer,
       };
 
-      // 1) Call your createBooking Cloud Function
-      const createBookingFn = window.firebaseFunctions.httpsCallable('createBooking');
-      const response = await createBookingFn(payload);
-      const { bookingId, clientSecret, paymentIntentClientSecret } = response.data;
-      // Use whichever key exists (clientSecret or paymentIntentClientSecret)
-      const clientSecretToUse = clientSecret || paymentIntentClientSecret;
+      // 1) Prepare payment (creates PaymentIntent only)
+      const prepareFn = window.firebaseFunctions.httpsCallable('prepareBookingPayment');
+      const prepRes = await prepareFn(payload);
+      const clientSecretToUse = prepRes.data?.clientSecret;
+      const paymentIntentId = prepRes.data?.paymentIntentId;
+      if (!clientSecretToUse || !paymentIntentId) {
+        throw new Error('Unable to start payment. Please try again.');
+      }
 
       // 2) Confirm the payment on the client using Stripe.js
       const cardholderName =
@@ -2671,11 +2672,8 @@ class BarzunkoApp {
       });
 
       if (error) {
-        // Show an error and stop
         this.hideLoading();
         this.showError(error.message || 'Payment incomplete, please retry.');
-        // Attempt to cancel pending booking so it doesn't block inventory
-        this.cancelPendingBookingSilently(bookingId, this.bookingData.customer.email);
         return;
       }
 
@@ -2683,18 +2681,16 @@ class BarzunkoApp {
       if (!paymentIntent || !okStatuses.includes(paymentIntent.status)) {
         this.hideLoading();
         this.showError('Payment incomplete, please retry.');
-        this.cancelPendingBookingSilently(bookingId, this.bookingData.customer.email);
         return;
       }
 
-      // 3) (Optional but recommended) Tell the backend to mark the booking as confirmed
-      //    This calls the confirmBooking Cloud Function defined in functions/index.js.
-      try {
-        const confirmFn = window.firebaseFunctions.httpsCallable('confirmBooking');
-        await confirmFn({ bookingId, paymentIntentId: paymentIntent.id });
-      } catch (err) {
-        console.warn('confirmBooking failed or not deployed:', err);
-      }
+      // 3) Finalize booking (creates booking doc after payment success)
+      const finalizeFn = window.firebaseFunctions.httpsCallable('finalizeBooking');
+      const finalizeRes = await finalizeFn({
+        ...payload,
+        paymentIntentId: paymentIntent.id,
+      });
+      const bookingId = finalizeRes.data?.bookingId;
 
       // 4) Update local booking data and redirect to confirmation page
       this.bookingData.id = bookingId;
