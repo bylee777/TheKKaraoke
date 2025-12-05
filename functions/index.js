@@ -1027,8 +1027,7 @@ async function createBookingInternal(params) {
     throw err;
   }
 
-  // Call stubs for email and calendar integrations. These return silently.
-  await sendBookingEmail({ id: newBookingRef.id, ...bookingDoc });
+  // Email is sent after payment succeeds (see webhook/confirmBooking)
   await addBookingToCalendar({ id: newBookingRef.id, ...bookingDoc });
   await sendBookingConfirmationSms({ id: newBookingRef.id, ...bookingDoc });
   await sendTelegramMessage(
@@ -2023,6 +2022,11 @@ exports.confirmBooking = functions.https.onCall(async (data, context) => {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
+  if (intent.status === 'succeeded') {
+    const fresh = await ref.get();
+    await sendBookingEmail({ id: ref.id, ...fresh.data() });
+  }
+
   return { ok: true };
 });
 
@@ -2060,6 +2064,10 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
       updatePayload.status = 'confirmed';
     }
     await ref.update(updatePayload);
+    if (status === 'succeeded') {
+      const fresh = await ref.get();
+      await sendBookingEmail({ id: ref.id, ...fresh.data() });
+    }
   }
 
   try {
