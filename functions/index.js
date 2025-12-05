@@ -411,6 +411,15 @@ function getRoomConfig(roomId) {
   return ROOM_CONFIG[roomId] || { inventory: 1, label: 'selected room' };
 }
 
+function mediumInventoryPenalty(roomId, partySize) {
+  const size = Number(partySize);
+  if (roomId === 'medium' && Number.isFinite(size) && size >= 8) {
+    // Reserve one medium room for smaller parties; reduce available inventory by 1
+    return 1;
+  }
+  return 0;
+}
+
 const ACTIVE_BOOKING_STATUSES = ['confirmed', 'pending'];
 const CANCEL_WINDOW_HOURS = 48;
 const MIN_ADVANCE_HOURS = 6;
@@ -557,7 +566,8 @@ async function ensureRoomAvailability(
     schedule,
     options,
   );
-  const effectiveInventory = Math.max(inventory - reserved, 0);
+  const penalty = mediumInventoryPenalty(roomId, options.partySize);
+  const effectiveInventory = Math.max(inventory - reserved - penalty, 0);
   if (overlapping >= effectiveInventory) {
     throw new functions.https.HttpsError(
       'failed-precondition',
@@ -1201,7 +1211,7 @@ exports.prepareBookingPayment = functions.https.onCall(async (data) => {
   }
 
   // Quick availability check
-  await ensureRoomAvailability(roomId, date, startTime, endTime, null, null);
+  await ensureRoomAvailability(roomId, date, startTime, endTime, null, null, { partySize });
 
   // Create PaymentIntent only
   try {
@@ -1337,7 +1347,9 @@ exports.finalizeBooking = functions.https.onCall(async (data) => {
   let newBookingRef;
   try {
     await db.runTransaction(async (transaction) => {
-      await ensureRoomAvailability(roomId, date, startTime, endTime, null, transaction);
+      await ensureRoomAvailability(roomId, date, startTime, endTime, null, transaction, {
+        partySize,
+      });
       const docRef = db.collection('bookings').doc();
       transaction.set(docRef, bookingDoc);
       newBookingRef = docRef;
@@ -1406,6 +1418,7 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   const duration = Number(data?.duration);
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
+  const partySize = data?.partySize;
   const allowPast = data?.allowPast === true;
   const overrideWalkInHold = data?.overrideWalkInHold === true;
   const roomIds =
@@ -1466,7 +1479,8 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
         schedule,
         { overrideWalkInHold },
       );
-      const remaining = Math.max(inventory - overlapping - reserved, 0);
+      const penalty = mediumInventoryPenalty(roomId, partySize);
+      const remaining = Math.max(inventory - overlapping - reserved - penalty, 0);
       return [roomId, remaining];
     }),
   );

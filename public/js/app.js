@@ -1319,6 +1319,10 @@ class BarzunkoApp {
       const getAvailability = window.firebaseFunctions.httpsCallable('getRoomAvailability');
       const getMaxDuration = window.firebaseFunctions.httpsCallable('getMaxAvailableDuration');
       const availableSlots = [];
+      const partySize =
+        this.bookingData.partySize ||
+        parseInt(document.getElementById('party-size')?.value, 10) ||
+        null;
       for (const time of filteredSlots) {
         const [availabilityRes, maxDurationRes] = await Promise.all([
           getAvailability({
@@ -1328,6 +1332,7 @@ class BarzunkoApp {
             roomIds: [this.selectedRoom.id],
             excludeBookingId:
               this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
+            partySize,
           }),
           getMaxDuration({
             roomId: this.selectedRoom.id,
@@ -5462,6 +5467,8 @@ class BarzunkoApp {
 
     try {
       const fn = window.firebaseFunctions.httpsCallable('getRoomAvailability');
+      const partySize =
+        this.adminRescheduleState?.partySize || state.partySize || this.bookingData.partySize || null;
       const response = await fn({
         date,
         startTime,
@@ -5470,6 +5477,7 @@ class BarzunkoApp {
         excludeBookingId: state.bookingId,
         overrideWalkInHold: true,
         allowPast: true,
+        partySize,
       });
       if (requestId !== this.adminRescheduleRequestId) return;
 
