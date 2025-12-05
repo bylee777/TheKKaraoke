@@ -98,7 +98,7 @@ class BarzunkoApp {
       {
         id: 'small',
         name: 'Small Room',
-        capacity: '1-4 people (max 5)',
+        capacity: '1-4 people',
         minCapacity: 1,
         maxCapacity: 5,
         includedGuests: 4,
@@ -1257,9 +1257,9 @@ class BarzunkoApp {
     });
     const cacheKey = this.getAvailabilityCacheKey(this.selectedRoom.id, duration);
     const cachedSlots =
-        cacheKey && this.availableSlotsCache[cacheKey]
-          ? this.availableSlotsCache[cacheKey][this.selectedDate]
-          : null;
+      cacheKey && this.availableSlotsCache[cacheKey]
+        ? this.availableSlotsCache[cacheKey][this.selectedDate]
+        : null;
     const requestId = ++this.timeSlotsRequestId;
 
     const renderSlots = (availableSlots) => {
@@ -1544,7 +1544,8 @@ class BarzunkoApp {
         message: 'Select a date & time next to confirm availability',
         className: 'info',
         selectable: true,
-        notifyMessage: 'You can pick a room now; availability will be confirmed after you choose date & time.',
+        notifyMessage:
+          'You can pick a room now; availability will be confirmed after you choose date & time.',
         notifyType: 'info',
       };
     }
@@ -1718,12 +1719,11 @@ class BarzunkoApp {
     this.bookingData.depositAmount = Number.isFinite(Number(booking.depositAmount))
       ? Number(booking.depositAmount)
       : null;
-    this.bookingData.remainingBalance =
-      Number.isFinite(Number(booking.remainingBalance))
-        ? Number(booking.remainingBalance)
-        : totalCostWithTax != null && this.bookingData.depositAmount != null
-          ? Math.max(totalCostWithTax - this.bookingData.depositAmount, 0)
-          : null;
+    this.bookingData.remainingBalance = Number.isFinite(Number(booking.remainingBalance))
+      ? Number(booking.remainingBalance)
+      : totalCostWithTax != null && this.bookingData.depositAmount != null
+        ? Math.max(totalCostWithTax - this.bookingData.depositAmount, 0)
+        : null;
 
     this.bookingData.customer = {
       firstName: booking.customer?.firstName || '',
@@ -2278,7 +2278,8 @@ class BarzunkoApp {
 
   getDepositBaseAmount(roomId, dateStr) {
     if (!roomId) return 0;
-    const safeDate = typeof dateStr === 'string' && dateStr ? new Date(`${dateStr}T12:00:00`) : null;
+    const safeDate =
+      typeof dateStr === 'string' && dateStr ? new Date(`${dateStr}T12:00:00`) : null;
     const day = safeDate && !Number.isNaN(safeDate.getTime()) ? safeDate.getDay() : null; // 0=Sun
     const isWeekend = day === 5 || day === 6; // Fri/Sat
     const weekdayDeposits = {
@@ -2672,7 +2673,17 @@ class BarzunkoApp {
       if (error) {
         // Show an error and stop
         this.hideLoading();
-        this.showError(error.message || 'Payment failed');
+        this.showError(error.message || 'Payment incomplete, please retry.');
+        // Attempt to cancel pending booking so it doesn't block inventory
+        this.cancelPendingBookingSilently(bookingId, this.bookingData.customer.email);
+        return;
+      }
+
+      const okStatuses = ['succeeded', 'requires_capture', 'processing'];
+      if (!paymentIntent || !okStatuses.includes(paymentIntent.status)) {
+        this.hideLoading();
+        this.showError('Payment incomplete, please retry.');
+        this.cancelPendingBookingSilently(bookingId, this.bookingData.customer.email);
         return;
       }
 
@@ -2703,6 +2714,18 @@ class BarzunkoApp {
         return;
       }
       this.showError(err.message || 'Error completing booking');
+    }
+  }
+
+  async cancelPendingBookingSilently(bookingId, email) {
+    if (!bookingId || !email || !window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      return;
+    }
+    try {
+      const cancelFn = window.firebaseFunctions.httpsCallable('cancelBookingGuest');
+      await cancelFn({ bookingId, email });
+    } catch (err) {
+      console.warn('Failed to cancel pending booking', err);
     }
   }
 
@@ -4438,9 +4461,7 @@ class BarzunkoApp {
             .filter(Boolean)
             .join('\n');
 
-          const tooltipSafe = tooltip.replace(/"/g, '&quot;');
-
-          html += `<td rowspan="${span}"><div class="slot booked status-${status}" data-tooltip="${tooltipSafe}"><div class="booking-card">`;
+          html += `<td rowspan="${span}"><div class="slot booked status-${status}"><div class="booking-card">`;
           html += '<div class="booking-name">' + name + '</div>';
           if (party) html += '<div class="booking-detail">' + party + '</div>';
           html +=
@@ -4449,6 +4470,12 @@ class BarzunkoApp {
             ' - ' +
             this.formatTime(endTime) +
             '</div>';
+          if (depositLine) html += '<div class="booking-detail">' + depositLine + '</div>';
+          if (phone) html += '<div class="booking-detail">' + phone + '</div>';
+          if (special) {
+            const trimmed = special.length > 80 ? special.slice(0, 77) + '…' : special;
+            html += '<div class="booking-detail booking-special">' + trimmed + '</div>';
+          }
           html += '</div></div></td>';
         } else {
           html += '<td><div class="slot available"><span>Available</span></div></td>';
