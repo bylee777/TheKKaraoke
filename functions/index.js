@@ -1745,6 +1745,7 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
     requiredPurchaseAmount,
     status,
     paymentStatus,
+    allowPast,
   } = data || {};
 
   // Normalize commonly provided values
@@ -1809,7 +1810,9 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
         );
       }
 
-      ensureNotInPast(nextDate, nextStart);
+      if (!allowPast) {
+        ensureNotInPast(nextDate, nextStart);
+      }
       const end = maybeComputeEnd(nextDate, nextStart, nextDuration);
       if (end) {
         ensureWithinBusinessHours(nextDate, nextStart, end);
@@ -1831,7 +1834,9 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
     );
   }
 
-  ensureNotInPast(date, startTime);
+  if (!allowPast) {
+    ensureNotInPast(date, startTime);
+  }
   const endTime = maybeComputeEnd(date, startTime, durNum);
   if (endTime) {
     ensureWithinBusinessHours(date, startTime, endTime);

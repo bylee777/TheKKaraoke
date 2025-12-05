@@ -4063,6 +4063,8 @@ class BarzunkoApp {
     if (Number.isFinite(totalCost) && totalCost >= 0) payload.totalCost = totalCost;
     if (Number.isFinite(depositAmount) && depositAmount >= 0) payload.depositAmount = depositAmount;
     if (statusSel) payload.status = statusSel;
+    // Admin override: allow past bookings
+    payload.allowPast = true;
 
     return payload;
   }
