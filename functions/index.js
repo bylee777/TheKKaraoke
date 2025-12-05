@@ -1865,6 +1865,11 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
   const ref = db.collection('bookings').doc();
   await ref.set(newDoc);
   await sendBookingConfirmationSms({ id: ref.id, ...newDoc });
+  try {
+    await sendBookingEmail({ id: ref.id, ...newDoc });
+  } catch (err) {
+    console.error('sendBookingEmail failed for manual booking', err);
+  }
   await sendTelegramMessage(
     [
       '📅 New Booking (manual)',
