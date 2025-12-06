@@ -1748,6 +1748,10 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
     allowPast,
   } = data || {};
 
+  // Admin override: default allowPast to true for admins unless explicitly false
+  const allowPastFlag =
+    allowPast === false ? false : context?.auth?.token?.isAdmin === true ? true : true;
+
   // Normalize commonly provided values
   const durNum = Number(duration);
   const normalizedCustomerInfo = customerInfo
@@ -1810,7 +1814,7 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
         );
       }
 
-      if (!allowPast) {
+      if (!allowPastFlag) {
         ensureNotInPast(nextDate, nextStart);
       }
       const end = maybeComputeEnd(nextDate, nextStart, nextDuration);
@@ -1834,7 +1838,7 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
     );
   }
 
-  if (!allowPast) {
+  if (!allowPastFlag) {
     ensureNotInPast(date, startTime);
   }
   const endTime = maybeComputeEnd(date, startTime, durNum);

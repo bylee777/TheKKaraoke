@@ -2602,7 +2602,7 @@ th {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000;
+  z-index: 12000;
   transition: all var(--duration-normal) var(--ease-standard);
 }
 

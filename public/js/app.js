@@ -4071,27 +4071,38 @@ class BarzunkoApp {
 
   async handleAdminModifierSubmit(event) {
     event.preventDefault();
+    if (this.adminModifierSubmitting) return;
+    this.adminModifierSubmitting = true;
+
     if (!window.firebaseFunctions) {
       this.showNotification('Functions unavailable. Please try again later.', 'error');
+      this.adminModifierSubmitting = false;
       return;
     }
+    const submitBtn = document.querySelector('#admin-modifier-form button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     const payload = this.collectAdminModifierPayload();
     if (!payload) {
+      if (submitBtn) submitBtn.disabled = false;
+      this.adminModifierSubmitting = false;
       return;
     }
     try {
       this.showLoading('Saving booking...');
       const fn = window.firebaseFunctions.httpsCallable('adminUpsertBySecret');
       await fn(payload);
-      this.hideLoading();
-      this.hideModal('admin-modifier-modal');
       this.resetAdminModifierForm();
       this.showNotification('Booking saved successfully.', 'success');
       this.adminFetchForSelectedDate();
     } catch (err) {
-      this.hideLoading();
       console.error('handleAdminModifierSubmit', err);
       this.showError(err.message || 'Unable to save booking.');
+    } finally {
+      this.hideLoading();
+      this.hideModal('admin-modifier-modal');
+      this.hideModal('admin-reschedule-modal');
+      if (submitBtn) submitBtn.disabled = false;
+      this.adminModifierSubmitting = false;
     }
   }
 
