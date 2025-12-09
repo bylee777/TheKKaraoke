@@ -4972,6 +4972,9 @@ class BarzunkoApp {
   getBusinessScheduleForDate(dateStr) {
     const map = this.businessHoursByDay || {};
     const fallback = map[1] || { open: '18:00', close: '02:30' };
+    if (dateStr === '2026-01-01') {
+      return null;
+    }
     let baseSchedule = fallback;
     if (dateStr) {
       const safeDate = new Date(`${dateStr}T12:00:00`);
