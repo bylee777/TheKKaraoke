@@ -135,7 +135,6 @@ class BarzunkoApp {
           'Dynamic lighting',
           'Song library 50k+',
           'Party seating',
-          'Mini fridge',
         ],
         photos: [
           'medium/KakaoTalk_Photo_2025-11-04-20-56-39 001.jpeg',
@@ -155,13 +154,7 @@ class BarzunkoApp {
         bookingFee: 0,
         extraGuestRate: 5,
         inventory: 1,
-        features: [
-          'Professional sound system',
-          'Stage lighting',
-          'Song library 50k+',
-          'VIP seating',
-          'Full bar service',
-        ],
+        features: ['Professional sound system', 'Stage lighting', 'Song library 50k+'],
         photos: ['large.jpeg'],
       },
       {
@@ -181,11 +174,9 @@ class BarzunkoApp {
         },
         inventory: 1,
         features: [
-          'Concert-grade sound',
           'Stage with spotlights',
           'Song library 50k+',
           'Premium lounge',
-          'Full bar service',
           'Dance floor',
           'Required house vodka or tequila purchase on Fri/Sat only (for under age it can be foods or drinks)',
         ],
@@ -2719,7 +2710,12 @@ class BarzunkoApp {
   }
 
   async cancelPendingBookingSilently(bookingId, email) {
-    if (!bookingId || !email || !window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+    if (
+      !bookingId ||
+      !email ||
+      !window.firebaseFunctions ||
+      !window.firebaseFunctions.httpsCallable
+    ) {
       return;
     }
     try {
@@ -5488,7 +5484,10 @@ class BarzunkoApp {
     try {
       const fn = window.firebaseFunctions.httpsCallable('getRoomAvailability');
       const partySize =
-        this.adminRescheduleState?.partySize || state.partySize || this.bookingData.partySize || null;
+        this.adminRescheduleState?.partySize ||
+        state.partySize ||
+        this.bookingData.partySize ||
+        null;
       const response = await fn({
         date,
         startTime,
