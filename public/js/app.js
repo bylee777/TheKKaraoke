@@ -122,7 +122,7 @@ class BarzunkoApp {
       {
         id: 'medium',
         name: 'Medium Room',
-        capacity: '1-8 people (max 12)',
+        capacity: '1-8 people',
         minCapacity: 1,
         maxCapacity: 12,
         includedGuests: 8,
