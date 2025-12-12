@@ -547,16 +547,18 @@ async function ensureRoomAvailability(
     transaction || null,
   );
 
-  let overlapping = 0;
-  snapshot.forEach((doc) => {
-    if (doc.id === excludeBookingId) {
-      return;
-    }
-    const booking = doc.data();
-    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
-      overlapping += 1;
-    }
-  });
+  const overlapBookings = snapshot
+    .filter((doc) => doc.id !== excludeBookingId)
+    .map((doc) => {
+      const data = doc.data();
+      const computedEnd =
+        data.endTime ||
+        (data.date && data.startTime && data.duration
+          ? computeEndTime(data.date, data.startTime, data.duration).endTime
+          : null);
+      return { startTime: data.startTime, endTime: computedEnd };
+    });
+  const maxOverlap = computeMaxOverlapDuringWindow(overlapBookings, startTime, endTime);
 
   const reserved = reservedSlotsForWindow(
     roomId,
@@ -568,7 +570,7 @@ async function ensureRoomAvailability(
   );
   const penalty = mediumInventoryPenalty(roomId, options.partySize);
   const effectiveInventory = Math.max(inventory - reserved - penalty, 0);
-  if (overlapping >= effectiveInventory) {
+  if (maxOverlap + 1 > effectiveInventory) {
     throw new functions.https.HttpsError(
       'failed-precondition',
       buildNoAvailabilityMessage(label, inventory),
@@ -643,6 +645,56 @@ function hasTimeConflict(startA, endA, startB, endB) {
     return true;
   }
   return rangeA.start < rangeB.end && rangeA.end > rangeB.start;
+}
+
+function buildRangeVariants(range) {
+  if (!range) return [];
+  return [
+    range,
+    { start: range.start + MINUTES_IN_DAY, end: range.end + MINUTES_IN_DAY },
+    { start: range.start - MINUTES_IN_DAY, end: range.end - MINUTES_IN_DAY },
+  ];
+}
+
+// Compute the maximum number of simultaneous bookings overlapping the target window.
+function computeMaxOverlapDuringWindow(bookings, windowStart, windowEnd) {
+  const windowRange = normalizeTimeRange(windowStart, windowEnd);
+  if (!windowRange) return Infinity;
+  const events = [];
+
+  bookings.forEach((booking) => {
+    const baseRange = normalizeTimeRange(booking.startTime, booking.endTime);
+    if (!baseRange) return;
+    const variants = buildRangeVariants(baseRange);
+    variants.forEach((range) => {
+      if (range.start < windowRange.end && range.end > windowRange.start) {
+        const start = Math.max(range.start, windowRange.start);
+        const end = Math.min(range.end, windowRange.end);
+        if (start < end) {
+          events.push({ time: start, delta: 1 });
+          events.push({ time: end, delta: -1 });
+        }
+      }
+    });
+  });
+
+  if (!events.length) return 0;
+
+  events.sort((a, b) => {
+    if (a.time === b.time) return a.delta - b.delta; // end (-1) before start (+1) at same minute
+    return a.time - b.time;
+  });
+
+  let active = 0;
+  let maxOverlap = 0;
+  events.forEach((event) => {
+    active += event.delta;
+    if (active > maxOverlap) {
+      maxOverlap = active;
+    }
+  });
+
+  return maxOverlap;
 }
 
 // Reserve policy: keep 1 small and 1 medium room for Fri/Sat 21:00-24:00 (walk-ins)
@@ -920,18 +972,21 @@ async function createBookingInternal(params) {
 
   // Quick availability check before creating payment intent
   const existing = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
-  let overlappingCount = 0;
-  for (const doc of existing) {
-    const booking = doc.data();
-    if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
-      overlappingCount += 1;
-    }
-  }
+  const overlapBookings = existing.map((doc) => {
+    const data = doc.data();
+    const computedEnd =
+      data.endTime ||
+      (data.date && data.startTime && data.duration
+        ? computeEndTime(data.date, data.startTime, data.duration).endTime
+        : null);
+    return { startTime: data.startTime, endTime: computedEnd };
+  });
+  const maxOverlap = computeMaxOverlapDuringWindow(overlapBookings, startTime, endTime);
 
   // Apply reserved slot policy (Fri/Sat 21:00-23:00) for small/medium rooms
   const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
   const effectiveInventory = Math.max(inventory - reserved, 0);
-  if (overlappingCount >= effectiveInventory) {
+  if (maxOverlap + 1 > effectiveInventory) {
     throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
   }
 
@@ -993,14 +1048,16 @@ async function createBookingInternal(params) {
         businessDate,
         transaction,
       );
-      let txnOverlapping = 0;
-
-      txnSnapshot.forEach((doc) => {
-        const booking = doc.data();
-        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
-          txnOverlapping += 1;
-        }
+      const txnBookings = txnSnapshot.map((doc) => {
+        const data = doc.data();
+        const computedEnd =
+          data.endTime ||
+          (data.date && data.startTime && data.duration
+            ? computeEndTime(data.date, data.startTime, data.duration).endTime
+            : null);
+        return { startTime: data.startTime, endTime: computedEnd };
       });
+      const txnMaxOverlap = computeMaxOverlapDuringWindow(txnBookings, startTime, endTime);
 
       const txnReserved = reservedSlotsForWindow(
         roomId,
@@ -1010,7 +1067,7 @@ async function createBookingInternal(params) {
         schedule,
       );
       const txnEffectiveInventory = Math.max(inventory - txnReserved, 0);
-      if (txnOverlapping >= txnEffectiveInventory) {
+      if (txnMaxOverlap + 1 > txnEffectiveInventory) {
         throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
       }
 
@@ -1467,17 +1524,18 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
       const { inventory } = getRoomConfig(roomId);
       const snapshot = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
 
-      let overlapping = 0;
-      snapshot.forEach((doc) => {
-        if (excludeBookingId && doc.id === excludeBookingId) {
-          return;
-        }
-
-        const booking = doc.data();
-        if (hasTimeConflict(startTime, endTime, booking.startTime, booking.endTime)) {
-          overlapping += 1;
-        }
-      });
+      const overlapBookings = snapshot
+        .filter((doc) => !excludeBookingId || doc.id !== excludeBookingId)
+        .map((doc) => {
+          const data = doc.data();
+          const computedEnd =
+            data.endTime ||
+            (data.date && data.startTime && data.duration
+              ? computeEndTime(data.date, data.startTime, data.duration).endTime
+              : null);
+          return { startTime: data.startTime, endTime: computedEnd };
+        });
+      const maxOverlap = computeMaxOverlapDuringWindow(overlapBookings, startTime, endTime);
 
       const reserved = reservedSlotsForWindow(
         roomId,
@@ -1488,7 +1546,8 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
         { overrideWalkInHold },
       );
       const penalty = mediumInventoryPenalty(roomId, partySize);
-      const remaining = Math.max(inventory - overlapping - reserved - penalty, 0);
+      const effectiveInventory = Math.max(inventory - reserved - penalty, 0);
+      const remaining = Math.max(effectiveInventory - maxOverlap, 0);
       return [roomId, remaining];
     }),
   );
