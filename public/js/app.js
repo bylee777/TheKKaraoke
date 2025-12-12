@@ -4187,7 +4187,15 @@ class BarzunkoApp {
     try {
       const fn = window.firebaseFunctions.httpsCallable('adminGetBookingsByDate');
       const res = await fn({ date: dateStr });
-      const bookings = res.data?.bookings || [];
+      const bookings = (res.data?.bookings || []).slice().sort((a, b) => {
+        const rank = (status) => {
+          const val = (status || '').toLowerCase();
+          return val === 'cancelled' || val === 'canceled' ? 1 : 0;
+        };
+        const statusDiff = rank(a.status) - rank(b.status);
+        if (statusDiff !== 0) return statusDiff;
+        return (a.startTime || '').localeCompare(b.startTime || '');
+      });
       this.renderAdminBookingsTable(bookings);
       this.adminFetchAvailability();
     } catch (err) {
@@ -4495,7 +4503,7 @@ class BarzunkoApp {
             .filter(Boolean)
             .join('\n');
 
-          html += `<td rowspan="${span}"><div class="slot booked status-${status}"><div class="booking-card">`;
+          html += `<td rowspan="${span}"><div class="slot booked status-${status}" data-tooltip="${tooltip.replace(/"/g, '&quot;')}"><div class="booking-card">`;
           html += '<div class="booking-name">' + name + '</div>';
           if (party) html += '<div class="booking-detail">' + party + '</div>';
           html +=
@@ -4512,13 +4520,26 @@ class BarzunkoApp {
           }
           html += '</div></div></td>';
         } else {
-          html += '<td><div class="slot available"><span>Available</span></div></td>';
+          html += '<td><div class="slot available" data-tooltip="Available"><span>Available</span></div></td>';
         }
       }
       html += '</tr>';
     });
     html += '</tbody></table></div>';
     container.innerHTML = headerHtml + html;
+
+    // Mobile: show tooltip content on tap
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+      const slots = container.querySelectorAll('.slot[data-tooltip]');
+      slots.forEach((slot) => {
+        slot.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const message = slot.getAttribute('data-tooltip') || slot.textContent || 'Details';
+          this.showNotification(message, 'info');
+        });
+      });
+    }
   }
 
   adminBuildScheduleExportData() {
@@ -4616,6 +4637,16 @@ class BarzunkoApp {
     tableBody.innerHTML = '';
     this.adminBookingsById = {};
 
+    const sortByStatusThenTime = (a, b) => {
+      const rank = (status) => {
+        const val = (status || '').toLowerCase();
+        return val === 'cancelled' || val === 'canceled' ? 1 : 0;
+      };
+      const statusDiff = rank(a.status) - rank(b.status);
+      if (statusDiff !== 0) return statusDiff;
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    };
+
     if (!Array.isArray(bookings) || bookings.length === 0) {
       this.adminGridAssignments = this.adminAssignBookingsToColumns([]);
       const row = document.createElement('tr');
@@ -4624,9 +4655,11 @@ class BarzunkoApp {
       return;
     }
 
-    this.adminEnsureColumnsFromBookings(bookings);
+    const sortedBookings = [...bookings].sort(sortByStatusThenTime);
 
-    bookings.forEach((booking) => {
+    this.adminEnsureColumnsFromBookings(sortedBookings);
+
+    sortedBookings.forEach((booking) => {
       const normalizedRoomId = this.normalizeRoomId(booking.roomId);
       booking.roomId = normalizedRoomId;
       const room = this.rooms.find((r) => r.id === normalizedRoomId);
@@ -4654,6 +4687,7 @@ class BarzunkoApp {
       const customer = booking.customerInfo || booking.customer || {};
       const customerName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
       const customerEmail = customer.email || '';
+      const customerPhone = (customer.phone || '').trim();
       const guestsDisplay = Number(booking.partySize) ? String(Number(booking.partySize)) : '-';
 
       this.adminBookingsById[booking.id] = booking;
@@ -4667,25 +4701,25 @@ class BarzunkoApp {
         paymentStatusLower === 'processing' ||
         paymentStatusLower === 'requires_capture';
       row.innerHTML = `
-        <td>
-          <div>${booking.id}</div>
+        <td data-label="Phone">
+          <div>${customerPhone || '-'}</div>
           <div class="table-hint">Click row to reschedule</div>
         </td>
-        <td>
+        <td data-label="Customer">
           <div>${customerName || '-'}</div>
           <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${customerEmail}</div>
         </td>
-        <td>${displayRoom}</td>
-        <td>
+        <td data-label="Room">${displayRoom}</td>
+        <td data-label="Time">
           <div>${startDisplay}</div>
           <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${booking.duration || 1}h</div>
         </td>
-        <td data-field="guests">${guestsDisplay}</td>
-        <td>
+        <td data-label="Guests" data-field="guests">${guestsDisplay}</td>
+        <td data-label="Status">
           <span class="status-badge status-badge--${status}">${status}</span>
           <div class="table-hint table-hint--payment${paymentStatusClass}">${paymentLabel}</div>
         </td>
-        <td>
+        <td data-label="Actions">
           <div class="table-actions">
             <button class="btn btn--table btn--primary" data-action="admin-capture" data-id="${booking.id}" ${canCapture ? '' : 'disabled'} title="Capture Payment">
               <i class="fas fa-credit-card"></i>
