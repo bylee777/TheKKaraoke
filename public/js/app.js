@@ -1239,10 +1239,12 @@ class BarzunkoApp {
     }
     const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
 
-    const slots = this.getTimeSlotsForDate(this.selectedDate, duration || 1);
+    let slots = this.getTimeSlotsForDate(this.selectedDate, duration || 1);
+    // Filter out slots that cannot fit within business hours for the chosen duration
+    slots = slots.filter((time) => this.slotFitsBusinessHours(this.selectedDate, time, duration));
     const weekday = selectedDateTime.getDay();
     const filteredSlots = slots.filter((time) => {
-      if (weekday === 5 && time === '02:00') return false;
+      if (weekday === 5 && (time === '01:00' || time === '02:00')) return false;
       if (weekday === 0 && time === '01:30') return false;
       return true;
     });
@@ -4917,6 +4919,19 @@ class BarzunkoApp {
     if (!Number.isFinite(num)) return '';
     if (Number.isInteger(num)) return String(num);
     return num.toFixed(1).replace(/\.0$/, '');
+  }
+
+  slotFitsBusinessHours(dateStr, startTime, durationHours) {
+    const segments = this.getActualDaySegments(dateStr);
+    if (!segments || !segments.length) return false;
+    const start = this.timeStringToMinutes(startTime);
+    const end = start + Number(durationHours || 0) * 60;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+    return segments.some((seg) => {
+      const segStart = seg.startMinutes || 0;
+      const segEnd = seg.closeMinutes || 0;
+      return start >= segStart && end <= segEnd;
+    });
   }
 
   formatDateDisplay(dateStr, options) {
