@@ -1248,6 +1248,13 @@ class BarzunkoApp {
       if (weekday === 0 && time === '01:30') return false;
       return true;
     });
+    const isFutureSlot = (time) => {
+      const dt = new Date(selectedDateTime.getTime());
+      const [h, m] = time.split(':').map(Number);
+      dt.setHours(h, m, 0, 0);
+      return dt >= sixHoursFromNow;
+    };
+    const futureSlots = filteredSlots.filter(isFutureSlot);
     const cacheKey = this.getAvailabilityCacheKey(this.selectedRoom.id, duration);
     const cachedSlots =
       cacheKey && this.availableSlotsCache[cacheKey]
@@ -1299,12 +1306,21 @@ class BarzunkoApp {
     };
 
     if (Array.isArray(cachedSlots)) {
-      renderSlots(cachedSlots);
+      const futureCached = cachedSlots.filter((slot) => {
+        const time = typeof slot === 'object' && slot?.time ? slot.time : slot;
+        return isFutureSlot(time);
+      });
+      renderSlots(futureCached);
       return;
     }
 
     if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
-      renderSlots(filteredSlots);
+      renderSlots(futureSlots);
+      return;
+    }
+
+    if (!futureSlots.length) {
+      renderSlots([]);
       return;
     }
 
@@ -1316,7 +1332,7 @@ class BarzunkoApp {
         this.bookingData.partySize ||
         parseInt(document.getElementById('party-size')?.value, 10) ||
         null;
-      for (const time of filteredSlots) {
+      for (const time of futureSlots) {
         try {
           const [availabilityRes, maxDurationRes] = await Promise.all([
             getAvailability({
