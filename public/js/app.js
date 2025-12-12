@@ -1315,33 +1315,40 @@ class BarzunkoApp {
         parseInt(document.getElementById('party-size')?.value, 10) ||
         null;
       for (const time of filteredSlots) {
-        const [availabilityRes, maxDurationRes] = await Promise.all([
-          getAvailability({
-            date: this.selectedDate,
-            startTime: time,
-            duration,
-            roomIds: [this.selectedRoom.id],
-            excludeBookingId:
-              this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
-            partySize,
-          }),
-          getMaxDuration({
-            roomId: this.selectedRoom.id,
-            date: this.selectedDate,
-            startTime: time,
-          }),
-        ]);
-        if (requestId !== this.timeSlotsRequestId) return;
+        try {
+          const [availabilityRes, maxDurationRes] = await Promise.all([
+            getAvailability({
+              date: this.selectedDate,
+              startTime: time,
+              duration,
+              roomIds: [this.selectedRoom.id],
+              excludeBookingId:
+                this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
+              partySize,
+            }),
+            getMaxDuration({
+              roomId: this.selectedRoom.id,
+              date: this.selectedDate,
+              startTime: time,
+            }),
+          ]);
+          if (requestId !== this.timeSlotsRequestId) return;
 
-        const remainingRaw = Number(availabilityRes?.data?.availability?.[this.selectedRoom.id]);
-        const remaining = Number.isFinite(remainingRaw) ? remainingRaw : 0;
-        const maxHours = Number(maxDurationRes?.data?.maxDurationHours);
-        const canFitDuration = Number.isFinite(maxHours) ? maxHours >= duration : true;
+          const remainingRaw = Number(availabilityRes?.data?.availability?.[this.selectedRoom.id]);
+          const remaining = Number.isFinite(remainingRaw) ? remainingRaw : 0;
+          const maxHours = Number(maxDurationRes?.data?.maxDurationHours);
+          const canFitDuration = Number.isFinite(maxHours) ? maxHours >= duration : false;
 
-        availableSlots.push({
-          time,
-          available: remaining > 0 && canFitDuration,
-        });
+          if (remaining > 0 && canFitDuration) {
+            availableSlots.push({
+              time,
+              available: true,
+            });
+          }
+        } catch (slotErr) {
+          console.warn('Skipping slot due to availability error', time, slotErr);
+          continue;
+        }
       }
 
       if (cacheKey) {
@@ -1354,12 +1361,7 @@ class BarzunkoApp {
       renderSlots(availableSlots);
     } catch (error) {
       console.warn('Failed to load slot availability', error);
-      renderSlots(
-        filteredSlots.map((t) => ({
-          time: t,
-          available: true,
-        })),
-      );
+      renderSlots([]); // show "No times available" on error instead of stale slots
     }
   }
 
