@@ -4520,7 +4520,8 @@ class BarzunkoApp {
           }
           html += '</div></div></td>';
         } else {
-          html += '<td><div class="slot available" data-tooltip="Available"><span>Available</span></div></td>';
+          html +=
+            '<td><div class="slot available" data-tooltip="Available"><span>Available</span></div></td>';
         }
       }
       html += '</tr>';
@@ -5072,9 +5073,12 @@ class BarzunkoApp {
       this.adminFormatYMD(new Date());
     const segments = this.getActualDaySegments(targetDate);
     if (!segments.length) return [];
+    const customMin = Number(options.minDurationMinutes);
+    const minMinutes =
+      Number.isFinite(customMin) && customMin > 0 ? customMin : this.minBookingDurationMinutes;
     const durationMinutes = Math.max(
-      this.minBookingDurationMinutes,
-      Math.round(Number(durationHours) * 60) || this.minBookingDurationMinutes,
+      minMinutes,
+      Math.round(Number(durationHours) * 60) || minMinutes,
     );
     const customIncrement = Number(options.incrementMinutes);
     const increment =
@@ -5197,7 +5201,10 @@ class BarzunkoApp {
         ? this.normalizeDuration(durationInput.value, state.duration || 1)
         : state.duration || 1;
 
-    const slots = this.getTimeSlotsForDate(targetDate, baseDuration);
+    const slots = this.getTimeSlotsForDate(targetDate, baseDuration, {
+      incrementMinutes: this.adminScheduleIncrementMinutes || 30,
+      minDurationMinutes: 30,
+    });
     this.applyBusinessHoursForDate(targetDate);
     selectEl.innerHTML = '';
 
@@ -5260,7 +5267,10 @@ class BarzunkoApp {
 
     const slots =
       targetDate && this.getTimeSlotsForDate
-        ? this.getTimeSlotsForDate(targetDate, durationValue, { incrementMinutes: 30 })
+        ? this.getTimeSlotsForDate(targetDate, durationValue, {
+            incrementMinutes: this.adminScheduleIncrementMinutes || 30,
+            minDurationMinutes: 30,
+          })
         : [];
 
     this.applyBusinessHoursForDate(targetDate);
