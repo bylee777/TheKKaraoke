@@ -66,6 +66,9 @@ class BarzunkoApp {
     this.currentStaffUser = null;
     this.staffDashboardInitialized = false;
     this.staffSelectedDate = null;
+    this.staffRoomTimers = {};
+    this.staffTimerData = { date: null, bookings: [] };
+    this.staffTimerInterval = null;
     this.adminAutoAdvanceTimer = null;
 
     this.currentDate = new Date();
@@ -3638,6 +3641,12 @@ class BarzunkoApp {
 
     this.staffDashboardInitialized = false;
     this.staffSelectedDate = null;
+    this.staffRoomTimers = {};
+    this.staffTimerData = { date: null, bookings: [] };
+    if (this.staffTimerInterval) {
+      clearInterval(this.staffTimerInterval);
+      this.staffTimerInterval = null;
+    }
   }
 
   staffShowDashboard() {
@@ -3654,6 +3663,7 @@ class BarzunkoApp {
     } else {
       this.staffFetchForSelectedDate();
     }
+    this.staffBindTimerClicks();
   }
 
   async staffLogin(e) {
@@ -3714,6 +3724,7 @@ class BarzunkoApp {
     const prevBtn = document.getElementById('staff-prev-day');
     const nextBtn = document.getElementById('staff-next-day');
     const todayBtn = document.getElementById('staff-today');
+    const resetTimersBtn = document.getElementById('staff-reset-timers');
     const dateInput = document.getElementById('staff-date');
 
     if (prevBtn) prevBtn.onclick = () => this.staffChangeSelectedDate(-1);
@@ -3723,6 +3734,13 @@ class BarzunkoApp {
         this.staffSelectedDate = this.adminFormatYMD(new Date());
         this.staffOnDateChanged();
       };
+    if (resetTimersBtn) {
+      resetTimersBtn.onclick = () => {
+        this.staffRoomTimers = {};
+        this.staffRenderRoomTimers();
+        this.showNotification('Room timers cleared.', 'info');
+      };
+    }
     if (dateInput) {
       dateInput.value = this.staffSelectedDate || this.adminFormatYMD(new Date());
       dateInput.onchange = () => {
@@ -3766,10 +3784,15 @@ class BarzunkoApp {
       const res = await fn({ date: dateStr });
       const bookings = res.data?.bookings || [];
       this.adminGridAssignments = this.adminAssignBookingsToColumns(bookings);
+      this.staffTimerData = { date: dateStr, bookings };
+      this.staffRenderRoomTimers();
+      this.staffStartTimerTicker();
       await this.staffFetchAvailability(times, dateStr);
     } catch (err) {
       console.error('staffFetchForSelectedDate error', err);
       this.adminGridAssignments = this.adminAssignBookingsToColumns([]);
+      this.staffTimerData = { date: dateStr, bookings: [] };
+      this.staffRenderRoomTimers();
       this.adminRenderAvailabilityGrid(times, {}, { containerId: 'staff-availability-grid' });
       this.showNotification('Unable to load bookings for that day.', 'error');
     }
@@ -3796,6 +3819,50 @@ class BarzunkoApp {
 
   loadAdminDashboard() {
     this.adminInitDashboard();
+  }
+
+  staffStartTimerTicker() {
+    if (this.staffTimerInterval) {
+      clearInterval(this.staffTimerInterval);
+    }
+    this.staffTimerInterval = setInterval(() => this.staffRenderRoomTimers(), 1000);
+  }
+
+  staffRenderRoomTimers() {
+    const container = document.getElementById('staff-room-timers');
+    if (!container) return;
+    const nowMs = Date.now();
+    const chips = (this.adminRoomColumns || []).map((col) => {
+      const key = col.id || col.roomId;
+      const timer = this.staffRoomTimers[key];
+      const running = timer && Number.isFinite(timer.startMs);
+      const elapsedMs = running ? Math.max(0, nowMs - timer.startMs) : null;
+      const minutes = elapsedMs != null ? Math.floor(elapsedMs / 60000) : null;
+      const seconds = elapsedMs != null ? Math.floor((elapsedMs % 60000) / 1000) : null;
+      const timeText =
+        elapsedMs != null ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : 'Start';
+      const label = col.label;
+      return `<button class="room-timer-btn" data-room-col="${key}"><span class="label">${label}</span><span class="time">${timeText}</span></button>`;
+    });
+    container.innerHTML = chips.join('');
+  }
+
+  staffBindTimerClicks() {
+    const container = document.getElementById('staff-room-timers');
+    if (!container) return;
+    container.onclick = (e) => {
+      const btn = e.target.closest('.room-timer-btn');
+      if (!btn) return;
+      const key = btn.getAttribute('data-room-col');
+      if (!key) return;
+      const existing = this.staffRoomTimers[key];
+      if (existing && Number.isFinite(existing.startMs)) {
+        delete this.staffRoomTimers[key]; // stop/reset
+      } else {
+        this.staffRoomTimers[key] = { startMs: Date.now() };
+      }
+      this.staffRenderRoomTimers();
+    };
   }
 
   adminInitDashboard() {

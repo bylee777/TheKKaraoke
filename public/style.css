@@ -2508,6 +2508,60 @@ th {
   }
 }
 
+.room-timers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: var(--space-12) 0;
+}
+
+.room-timer-chip {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: var(--font-size-sm);
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.room-timer-chip .label {
+  font-weight: var(--font-weight-semibold);
+}
+
+.room-timer-chip .time {
+  color: var(--color-text-secondary);
+}
+
+.room-timer-btn {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: var(--font-size-md);
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+.room-timer-btn:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
+.room-timer-btn:active {
+  transform: translateY(1px);
+}
+.room-timer-btn .label {
+  font-weight: var(--font-weight-bold);
+}
+.room-timer-btn .time {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+}
+
 /* ===== CONFIRMATION PAGE ===== */
 .confirmation-content {
   text-align: center;
