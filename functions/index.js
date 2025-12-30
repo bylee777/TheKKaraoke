@@ -603,8 +603,10 @@ const stripeWebhookSecret =
   (functions.config().stripe && functions.config().stripe.webhook_secret) ||
   process.env.STRIPE_WEBHOOK_SECRET ||
   null;
-const gmailUser = (functions.config().gmail && functions.config().gmail.user) || process.env.GMAIL_USER || null;
-const gmailPass = (functions.config().gmail && functions.config().gmail.pass) || process.env.GMAIL_PASS || null;
+const gmailUser =
+  (functions.config().gmail && functions.config().gmail.user) || process.env.GMAIL_USER || null;
+const gmailPass =
+  (functions.config().gmail && functions.config().gmail.pass) || process.env.GMAIL_PASS || null;
 const gmailFrom =
   (functions.config().gmail && functions.config().gmail.from) ||
   process.env.GMAIL_FROM ||
@@ -748,7 +750,7 @@ async function sendBookingEmail(booking) {
     console.log('sendBookingEmail stub:', booking?.id);
     return;
   }
-  const subject = 'Your Barzunko booking is confirmed';
+  const subject = 'Please Do not Reply to this email - Your Barzunko booking is confirmed';
   const html = `
     <p>Hi ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''},</p>
     <p>Thanks for booking with Barzunko! Here are your details:</p>
@@ -764,7 +766,10 @@ async function sendBookingEmail(booking) {
           : ''
       }
     </ul>
-    <p>If you need to make changes, reply to this email or call us at 416-968-0909.</p>
+    <p>Please let us know if you are running late as we do not compensate for lateness.</p>
+    <p>We do not allow outside drinks or foods. All guests must bring valid government picture ID (passport, driver license, ON photo card, or health card) for ordering alcohol.</p>
+    <p>If you need to make changes, call us at 416-968-0909.</p>
+    <p><strong>Please do not reply to this email.</strong></p>
     <p>See you soon!</p>
   `;
   try {
@@ -784,7 +789,7 @@ async function sendCancellationEmail(booking) {
     console.log('sendCancellationEmail stub:', booking?.id);
     return;
   }
-  const subject = 'Your Barzunko booking has been cancelled';
+  const subject = 'Please Do not Reply to this email - Your Barzunko booking has been cancelled';
   const html = `
     <p>Hi ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''},</p>
     <p>Your booking has been cancelled.</p>
@@ -793,7 +798,8 @@ async function sendCancellationEmail(booking) {
       <li><strong>Date & Time:</strong> ${booking.date} at ${booking.startTime}</li>
       <li><strong>Room:</strong> ${booking.roomId}</li>
     </ul>
-    <p>If this was a mistake, reply to this email or call us at 416-968-0909.</p>
+    <p>If this was a mistake, please call us at 416-968-0909 or email at Barzunko@gmail.com</p>
+    <p><strong>Please do not reply to this email.</strong></p>
   `;
   try {
     await mailTransport.sendMail({
@@ -958,9 +964,7 @@ async function createBookingInternal(params) {
     );
   }
   const totalCostWithTax =
-    totalCostNumber != null
-      ? Math.round(totalCostNumber * (1 + TAX_RATE) * 100) / 100
-      : null;
+    totalCostNumber != null ? Math.round(totalCostNumber * (1 + TAX_RATE) * 100) / 100 : null;
   const remainingBalance =
     totalCostWithTax != null ? Math.max(totalCostWithTax - depositToCharge, 0) : null;
   const remainingBalanceBeforeTax =
@@ -1537,14 +1541,9 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
         });
       const maxOverlap = computeMaxOverlapDuringWindow(overlapBookings, startTime, endTime);
 
-      const reserved = reservedSlotsForWindow(
-        roomId,
-        businessDate,
-        startTime,
-        endTime,
-        schedule,
-        { overrideWalkInHold },
-      );
+      const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule, {
+        overrideWalkInHold,
+      });
       const penalty = mediumInventoryPenalty(roomId, partySize);
       const effectiveInventory = Math.max(inventory - reserved - penalty, 0);
       const remaining = Math.max(effectiveInventory - maxOverlap, 0);
@@ -1561,7 +1560,10 @@ exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
   const { roomId, date, startTime } = data || {};
   const allowPast = data?.allowPast === true;
   if (!roomId || !date || !startTime) {
-    throw new functions.https.HttpsError('invalid-argument', 'roomId, date, and startTime are required');
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'roomId, date, and startTime are required',
+    );
   }
   const { inventory } = getRoomConfig(roomId);
   const schedule = getBusinessScheduleForDate(date);
