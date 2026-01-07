@@ -768,7 +768,8 @@ async function sendBookingEmail(booking) {
     </ul>
     <p>Please let us know if you are running late as we do not compensate for lateness.</p>
     <p>We do not allow outside drinks or foods. All guests must bring valid government picture ID (passport, driver license, ON photo card, or health card) for ordering alcohol.</p>
-    <p>If you need to make changes, call us at 416-968-0909.</p>
+    <p>If you need to make changes you can do it on our website at manage booking section with your email or Booking ID</p>
+    <p>For all other inquires call us at 416-968-0909.</p>
     <p><strong>Please do not reply to this email.</strong></p>
     <p>See you soon!</p>
   `;
