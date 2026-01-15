@@ -8,3 +8,5 @@ node_modules
 functions/node_modules
 functions/node_modules
 firebase-debug.log
+
+functions/.runtimeconfig.json

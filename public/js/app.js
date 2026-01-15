@@ -2876,7 +2876,7 @@ class BarzunkoApp {
                 <h4 style="margin: 0 0 var(--space-8) 0; color: var(--neon-purple);">Important Notes:</h4>
                 <ul style="margin: 0; padding-left: var(--space-16); color: var(--color-text-secondary);">
                     <li>Please arrive 15 minutes early for check-in</li>
-                    <li>Cancellations allowed up to 24 hours before your booking</li>
+                    <li>Cancellations allowed up to 48 hours before your booking</li>
                     <li>Confirmation email sent to ${this.bookingData.customer.email}</li>
                     <li>Questions? Call us at ${this.businessData.phone}</li>
                 </ul>
