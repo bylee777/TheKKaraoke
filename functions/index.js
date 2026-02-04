@@ -862,8 +862,8 @@ async function sendBookingConfirmationSms(bookingDoc) {
     const firstName = (customer.firstName || '').trim();
     const contactLine = 'Need anything? Call 416-968-0909.';
     const message = firstName
-      ? `Hi ${firstName}! Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`
-      : `Your Barjunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`;
+      ? `Hi ${firstName}! Your BarZunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`
+      : `Your BarZunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`;
     await sendSms(phone, message);
   }
   if (twilioNotifyNumber) {
@@ -887,8 +887,8 @@ async function sendFridaySaturdayReminderSms(bookingDoc) {
   const firstName = (customer.firstName || '').trim();
   const contactLine = 'Need anything? Call 416-968-0909.';
   const message = firstName
-    ? `Reminder: Hi ${firstName}, your BarJunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`
-    : `Reminder: Your BarJunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`;
+    ? `Reminder: Hi ${firstName}, your BarZunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`
+    : `Reminder: Your BarZunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`;
   await sendSms(phone, message);
 }
 
@@ -1559,6 +1559,8 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
 
 exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
   const { roomId, date, startTime } = data || {};
+  const excludeBookingId =
+    typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
   const allowPast = data?.allowPast === true;
   if (!roomId || !date || !startTime) {
     throw new functions.https.HttpsError(
@@ -1593,6 +1595,7 @@ exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
   // Fetch active bookings for the business date and find the earliest blocking booking
   const bookings = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
   for (const doc of bookings) {
+    if (excludeBookingId && doc.id === excludeBookingId) continue;
     const booking = doc.data();
     const bStart = timeStringToMinutes(booking.startTime);
     let bEnd = timeStringToMinutes(booking.endTime);

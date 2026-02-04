@@ -262,6 +262,8 @@ class BarzunkoApp {
         roomId: this.selectedRoom.id,
         date: this.selectedDate,
         startTime: this.selectedTime,
+        excludeBookingId:
+          this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
       });
       const maxHours = Number(res.data?.maxDurationHours);
       if (!Number.isFinite(maxHours)) {
@@ -1351,6 +1353,8 @@ class BarzunkoApp {
               roomId: this.selectedRoom.id,
               date: this.selectedDate,
               startTime: time,
+              excludeBookingId:
+                this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
             }),
           ]);
           if (requestId !== this.timeSlotsRequestId) return;
@@ -1530,6 +1534,8 @@ class BarzunkoApp {
         roomId: this.selectedRoom.id,
         date: this.selectedDate,
         startTime: this.selectedTime,
+        excludeBookingId:
+          this.isRebookingFlow && this.rebookContext ? this.rebookContext.booking.id : null,
       });
       const maxHours = Number(res.data?.maxDurationHours);
       if (!Number.isFinite(maxHours)) return;
