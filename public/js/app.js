@@ -170,18 +170,12 @@ class BarzunkoApp {
         hourlyRate: 150,
         bookingFee: 0,
         extraGuestRate: 5,
-        requiredPurchase: {
-          description:
-            'Required house vodka or tequila purchase on Fri/Sat only (for under age it can be foods or drinks)',
-          amount: 120,
-        },
         inventory: 1,
         features: [
           'Stage with spotlights',
           'Song library 50k+',
           'Premium lounge',
           'Dance floor',
-          'Required house vodka or tequila purchase on Fri/Sat only (for under age it can be foods or drinks)',
         ],
         photos: ['xlarge.jpeg'],
       },
@@ -2107,7 +2101,7 @@ class BarzunkoApp {
 
     const extraGuestFee = extraGuestRate * extraGuests * duration;
 
-    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room, this.selectedDate, time);
+    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room);
 
     const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
     const taxRate = this.taxRate || 0;
@@ -2323,14 +2317,9 @@ class BarzunkoApp {
     return table[roomId] ?? 0;
   }
 
-  getRequiredPurchaseAmount(room, dateStr, startTime) {
+  getRequiredPurchaseAmount(room) {
     if (!room || !room.requiredPurchase) return 0;
-    if (room.id !== 'extra-large') return room.requiredPurchase.amount || 0;
-    const businessDate = dateStr ? this.determineBusinessDate(dateStr, startTime) : null;
-    const safeDate = businessDate ? new Date(`${businessDate}T12:00:00`) : null;
-    const day = safeDate && !Number.isNaN(safeDate.getTime()) ? safeDate.getDay() : null; // 0=Sun
-    const isWeekend = day === 5 || day === 6;
-    return isWeekend ? room.requiredPurchase.amount || 0 : 0;
+    return room.requiredPurchase.amount || 0;
   }
 
   computeDepositAmount({ room, date, startTime, totalCostWithTax }) {
@@ -2400,7 +2389,7 @@ class BarzunkoApp {
 
     const extraGuestFee = extraGuestRate * extraGuests * duration;
 
-    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room, date, startTime);
+    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room);
 
     const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
 
