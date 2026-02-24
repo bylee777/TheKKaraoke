@@ -32,32 +32,17 @@ const WEEKEND_DEPOSIT_BY_ROOM = {
   large: 100,
   'extra-large': 150,
 };
-const twilioAccountSid =
-  (functions.config().twilio && functions.config().twilio.account_sid) ||
-  process.env.TWILIO_ACCOUNT_SID ||
-  null;
-const twilioAuthToken =
-  (functions.config().twilio && functions.config().twilio.auth_token) ||
-  process.env.TWILIO_AUTH_TOKEN ||
-  null;
-const twilioFromNumber =
-  (functions.config().twilio && functions.config().twilio.from) || process.env.TWILIO_FROM || null;
-const twilioNotifyNumber =
-  (functions.config().twilio && functions.config().twilio.notify_to) ||
-  process.env.TWILIO_NOTIFY_TO ||
-  null;
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || null;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || null;
+const twilioFromNumber = process.env.TWILIO_FROM || null;
+const twilioNotifyNumber = process.env.TWILIO_NOTIFY_TO || null;
 const hasTwilioCredentials = twilioAccountSid && twilioAuthToken && twilioFromNumber;
 const twilioClient = hasTwilioCredentials ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
-const telegramBotToken =
-  (functions.config().telegram && functions.config().telegram.bot_token) ||
-  process.env.TELEGRAM_BOT_TOKEN ||
-  null;
+const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || null;
 let telegramChatIds = [];
 try {
-  const raw =
-    (functions.config().telegram && functions.config().telegram.chat_ids) ||
-    process.env.TELEGRAM_CHAT_IDS;
+  const raw = process.env.TELEGRAM_CHAT_IDS;
   if (raw) {
     telegramChatIds = Array.isArray(raw) ? raw : JSON.parse(raw);
   }
@@ -589,29 +574,16 @@ function assertGuestOwnership(booking, email) {
   }
 }
 
-// Determine the Stripe secret key from runtime configuration. To set this
-// configuration run:
-//   firebase functions:config:set stripe.secret_key="sk_live_yourSecretHere"
-const stripeSecretKey = functions.config().stripe && functions.config().stripe.secret_key;
+// Runtime secrets are provided by Secret Manager bindings or env files.
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || null;
 if (!stripeSecretKey) {
-  throw new Error(
-    'Stripe secret key is not configured. Run `firebase functions:config:set stripe.secret_key="..."`.',
-  );
+  throw new Error('Stripe secret key is not configured. Set STRIPE_SECRET_KEY.');
 }
 const stripe = Stripe(stripeSecretKey);
-const stripeWebhookSecret =
-  (functions.config().stripe && functions.config().stripe.webhook_secret) ||
-  process.env.STRIPE_WEBHOOK_SECRET ||
-  null;
-const gmailUser =
-  (functions.config().gmail && functions.config().gmail.user) || process.env.GMAIL_USER || null;
-const gmailPass =
-  (functions.config().gmail && functions.config().gmail.pass) || process.env.GMAIL_PASS || null;
-const gmailFrom =
-  (functions.config().gmail && functions.config().gmail.from) ||
-  process.env.GMAIL_FROM ||
-  gmailUser ||
-  null;
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || null;
+const gmailUser = process.env.GMAIL_USER || null;
+const gmailPass = process.env.GMAIL_PASS || null;
+const gmailFrom = process.env.GMAIL_FROM || gmailUser || null;
 const mailTransport =
   gmailUser && gmailPass
     ? nodemailer.createTransport({
@@ -619,6 +591,18 @@ const mailTransport =
         auth: { user: gmailUser, pass: gmailPass },
       })
     : null;
+
+const SECRET_BINDINGS = [
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRET',
+  'TELEGRAM_BOT_TOKEN',
+  'TELEGRAM_CHAT_IDS',
+  'GMAIL_USER',
+  'GMAIL_PASS',
+  'GMAIL_FROM',
+  'GOOGLE_MAPS_API_KEY',
+];
+const secureFunctions = functions.runWith({ secrets: SECRET_BINDINGS });
 
 function requireAdmin(context) {
   if (!context || !context.auth || context.auth.token?.isAdmin !== true) {
@@ -1191,7 +1175,7 @@ async function cancelBookingWithoutRefund(bookingId) {
  * invoke this function (authentication is optional) because all writes are
  * validated server-side.
  */
-exports.createBooking = functions.https.onCall(async (data, context) => {
+exports.createBooking = secureFunctions.https.onCall(async (data, context) => {
   const { roomId, date, startTime, duration, totalCost, customerInfo, partySize } = data || {};
   const result = await createBookingInternal({
     roomId,
@@ -1215,7 +1199,7 @@ exports.createBooking = functions.https.onCall(async (data, context) => {
  * Validates availability and creates a PaymentIntent, but does NOT create a booking document.
  * The booking is only written after payment succeeds via finalizeBooking.
  */
-exports.prepareBookingPayment = functions.https.onCall(async (data) => {
+exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
   const { roomId, date, startTime, duration, totalCost, depositAmount, partySize, customerInfo } =
     data || {};
 
@@ -1299,7 +1283,7 @@ exports.prepareBookingPayment = functions.https.onCall(async (data) => {
  * Callable: finalizeBooking
  * After payment succeeds, this writes the booking document and sends email.
  */
-exports.finalizeBooking = functions.https.onCall(async (data) => {
+exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
   const {
     paymentIntentId,
     roomId,
@@ -1438,7 +1422,7 @@ exports.finalizeBooking = functions.https.onCall(async (data) => {
 
   return { bookingId: newBookingRef.id };
 });
-exports.lookupBooking = functions.https.onCall(async (data) => {
+exports.lookupBooking = secureFunctions.https.onCall(async (data) => {
   const bookingRefRaw = typeof data?.bookingRef === 'string' ? data.bookingRef.trim() : '';
   const emailNormalized = normalizeEmail(data?.email);
 
@@ -1483,7 +1467,7 @@ exports.lookupBooking = functions.https.onCall(async (data) => {
   return { bookings: results };
 });
 
-exports.getRoomAvailability = functions.https.onCall(async (data) => {
+exports.getRoomAvailability = secureFunctions.https.onCall(async (data) => {
   const { date, startTime } = data || {};
   const duration = Number(data?.duration);
   const excludeBookingId =
@@ -1557,7 +1541,7 @@ exports.getRoomAvailability = functions.https.onCall(async (data) => {
   return { availability };
 });
 
-exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
+exports.getMaxAvailableDuration = secureFunctions.https.onCall(async (data) => {
   const { roomId, date, startTime } = data || {};
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
@@ -1623,7 +1607,7 @@ exports.getMaxAvailableDuration = functions.https.onCall(async (data) => {
   return { maxDurationHours };
 });
 
-exports.adminCancelBySecret = functions.https.onCall(async (data, context) => {
+exports.adminCancelBySecret = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const { bookingId } = data || {};
   if (!bookingId) {
@@ -1634,7 +1618,7 @@ exports.adminCancelBySecret = functions.https.onCall(async (data, context) => {
   return { message: 'Booking cancelled', booking: sanitizeBookingSnapshot(snap) };
 });
 
-exports.adminCancelWithoutRefund = functions.https.onCall(async (data, context) => {
+exports.adminCancelWithoutRefund = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const { bookingId } = data || {};
   if (!bookingId) {
@@ -1645,7 +1629,7 @@ exports.adminCancelWithoutRefund = functions.https.onCall(async (data, context) 
   return { message: 'Booking cancelled (no refund)', booking: sanitizeBookingSnapshot(snap) };
 });
 
-exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
+exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const {
     bookingId,
@@ -1726,7 +1710,7 @@ exports.adminRebookBySecret = functions.https.onCall(async (data, context) => {
   return { message: 'Booking updated', booking: sanitizeBookingSnapshot(updated) };
 });
 
-exports.adminRefundBySecret = functions.https.onCall(async (data, context) => {
+exports.adminRefundBySecret = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const { bookingId } = data || {};
   if (!bookingId) {
@@ -1793,7 +1777,7 @@ exports.adminRefundBySecret = functions.https.onCall(async (data, context) => {
  * Admin callers (custom claim isAdmin=true) can override duration, pricing, etc.
  * Pass a bookingId to update; omit it to create.
  */
-exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
+exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const {
     bookingId,
@@ -1959,7 +1943,7 @@ exports.adminUpsertBySecret = functions.https.onCall(async (data, context) => {
   return { message: 'Booking created', booking: sanitizeBookingSnapshot(created) };
 });
 
-exports.adminGetBookingsByDate = functions.https.onCall(async (data, context) => {
+exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, context) => {
   const { date } = data || {};
   if (!date) {
     throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
@@ -1972,7 +1956,7 @@ exports.adminGetBookingsByDate = functions.https.onCall(async (data, context) =>
   return { bookings };
 });
 
-exports.adminGetAvailabilityByDate = functions.https.onCall(async (data, context) => {
+exports.adminGetAvailabilityByDate = secureFunctions.https.onCall(async (data, context) => {
   const { date, times, duration } = data || {};
   const dur = Number(duration) || 1;
   if (!date) {
@@ -2048,7 +2032,7 @@ exports.adminGetAvailabilityByDate = functions.https.onCall(async (data, context
   return { times: timeList, availability };
 });
 
-exports.cancelBookingGuest = functions.https.onCall(async (data) => {
+exports.cancelBookingGuest = secureFunctions.https.onCall(async (data) => {
   const bookingId = typeof data?.bookingId === 'string' ? data.bookingId.trim() : '';
   const email = data?.email;
 
@@ -2089,7 +2073,7 @@ exports.cancelBookingGuest = functions.https.onCall(async (data) => {
   };
 });
 
-exports.rebookBookingGuest = functions.https.onCall(async (data) => {
+exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
   const bookingId = typeof data?.bookingId === 'string' ? data.bookingId.trim() : '';
   const email = data?.email;
   const newDate = typeof data?.newDate === 'string' ? data.newDate.trim() : '';
@@ -2256,7 +2240,7 @@ exports.rebookBookingGuest = functions.https.onCall(async (data) => {
  * Only callers with the admin custom claim can cancel bookings. Cancels
  * the specified booking, issues a refund, and updates Firestore.
  */
-exports.cancelBooking = functions.https.onCall(async (data, context) => {
+exports.cancelBooking = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const { bookingId } = data;
   if (!bookingId) {
@@ -2273,7 +2257,7 @@ exports.cancelBooking = functions.https.onCall(async (data, context) => {
  * cancels the existing booking and creates a new one for the requested
  * date and time. It returns the ID of the new booking.
  */
-exports.rebookBooking = functions.https.onCall(async (data, context) => {
+exports.rebookBooking = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const { bookingId, newDate, newStartTime, newDuration, newTotalCost, newDepositAmount } = data;
   if (!bookingId || !newDate || !newStartTime || !newDuration) {
@@ -2316,7 +2300,7 @@ exports.rebookBooking = functions.https.onCall(async (data, context) => {
   };
 });
 
-exports.confirmBooking = functions.https.onCall(async (data, context) => {
+exports.confirmBooking = secureFunctions.https.onCall(async (data, context) => {
   const { bookingId, paymentIntentId } = data || {};
   if (!bookingId || !paymentIntentId) {
     throw new functions.https.HttpsError(
@@ -2372,7 +2356,7 @@ exports.confirmBooking = functions.https.onCall(async (data, context) => {
   return { ok: true };
 });
 
-exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
+exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
@@ -2450,10 +2434,14 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   return res.json({ received: true });
 });
 
-exports.sendWeekendReminderTexts = functions.pubsub
+exports.sendWeekendReminderTexts = secureFunctions.pubsub
   .schedule('every thursday 10:00')
   .timeZone(BUSINESS_TIMEZONE)
   .onRun(async () => {
+    if (!twilioClient || !twilioFromNumber) {
+      console.log('[reminder] Twilio not configured; skipping reminder job.');
+      return null;
+    }
     const { fridayDate, saturdayDate } = getUpcomingFridaySaturdayDates(new Date());
     const targets = [fridayDate, saturdayDate].filter(Boolean);
     if (!targets.length) {
@@ -2496,7 +2484,7 @@ exports.sendWeekendReminderTexts = functions.pubsub
  * Captures an authorized PaymentIntent for a booking.
  * Only callers with the admin custom claim can invoke this function.
  */
-exports.adminCaptureBySecret = functions.https.onCall(async (data, context) => {
+exports.adminCaptureBySecret = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
   const { bookingId } = data || {};
   if (!bookingId) {
@@ -2548,11 +2536,10 @@ exports.adminCaptureBySecret = functions.https.onCall(async (data, context) => {
  * Finds the Place ID for Bar Zunko & Karaoke (675 Yonge St, Toronto),
  * fetches Google reviews, and returns the three latest best reviews.
  *
- * Configure API key via one of:
- *  - Environment variable: GOOGLE_MAPS_API_KEY
- *  - Functions config: firebase functions:config:set google.api_key=YOUR_KEY
+ * Configure API key via environment variable or Secret Manager binding:
+ *  - GOOGLE_MAPS_API_KEY
  */
-exports.getGoogleReviews = functions.https.onRequest(async (req, res) => {
+exports.getGoogleReviews = secureFunctions.https.onRequest(async (req, res) => {
   try {
     res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
     res.set('Access-Control-Allow-Origin', '*');
@@ -2563,9 +2550,7 @@ exports.getGoogleReviews = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    const API_KEY =
-      process.env.GOOGLE_MAPS_API_KEY ||
-      (functions.config().google && functions.config().google.api_key);
+    const API_KEY = process.env.GOOGLE_MAPS_API_KEY;
     if (!API_KEY) {
       res.status(503).json({ error: 'Google API key not configured' });
       return;
