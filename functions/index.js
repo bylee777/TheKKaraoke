@@ -3,7 +3,6 @@ const admin = require('firebase-admin');
 const { FieldValue } = require('firebase-admin/firestore');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
-const twilio = require('twilio');
 
 const MINUTES_IN_DAY = 24 * 60;
 const BUSINESS_TIMEZONE = 'America/Toronto';
@@ -32,12 +31,6 @@ const WEEKEND_DEPOSIT_BY_ROOM = {
   large: 100,
   'extra-large': 150,
 };
-const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || null;
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || null;
-const twilioFromNumber = process.env.TWILIO_FROM || null;
-const twilioNotifyNumber = process.env.TWILIO_NOTIFY_TO || null;
-const hasTwilioCredentials = twilioAccountSid && twilioAuthToken && twilioFromNumber;
-const twilioClient = hasTwilioCredentials ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || null;
 let telegramChatIds = [];
@@ -356,22 +349,6 @@ function getLatestCompletedBusinessDate(now = new Date()) {
   return base.toISOString().slice(0, 10);
 }
 
-function getUpcomingFridaySaturdayDates(now = new Date()) {
-  const current = new Date(now.getTime());
-  const day = current.getDay();
-  const thursdayOffset = (4 - day + 7) % 7;
-  current.setDate(current.getDate() + thursdayOffset);
-  const friday = new Date(current.getTime());
-  friday.setDate(friday.getDate() + 1);
-  const saturday = new Date(current.getTime());
-  saturday.setDate(saturday.getDate() + 2);
-  return {
-    thursdayDate: current.toISOString().slice(0, 10),
-    fridayDate: friday.toISOString().slice(0, 10),
-    saturdayDate: saturday.toISOString().slice(0, 10),
-  };
-}
-
 function ensureNotInPast(date, startTime) {
   const startDate = combineDateTime(date, startTime);
   if (Number.isNaN(startDate.getTime())) {
@@ -576,10 +553,16 @@ function assertGuestOwnership(booking, email) {
 
 // Runtime secrets are provided by Secret Manager bindings or env files.
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || null;
-if (!stripeSecretKey) {
-  throw new Error('Stripe secret key is not configured. Set STRIPE_SECRET_KEY.');
+let stripeClient = null;
+function getStripe() {
+  if (!stripeSecretKey) {
+    throw new Error('Stripe secret key is not configured. Set STRIPE_SECRET_KEY.');
+  }
+  if (!stripeClient) {
+    stripeClient = Stripe(stripeSecretKey);
+  }
+  return stripeClient;
 }
-const stripe = Stripe(stripeSecretKey);
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || null;
 const gmailUser = process.env.GMAIL_USER || null;
 const gmailPass = process.env.GMAIL_PASS || null;
@@ -600,13 +583,25 @@ const SECRET_BINDINGS = [
   'GMAIL_USER',
   'GMAIL_PASS',
   'GMAIL_FROM',
-  'GOOGLE_MAPS_API_KEY',
 ];
 const secureFunctions = functions.runWith({ secrets: SECRET_BINDINGS });
 
 function requireAdmin(context) {
   if (!context || !context.auth || context.auth.token?.isAdmin !== true) {
     throw new functions.https.HttpsError('permission-denied', 'Admin privileges required');
+  }
+}
+
+function hasStaffAccess(context) {
+  return context?.auth?.token?.isAdmin === true || context?.auth?.token?.isStaff === true;
+}
+
+function requireStaffAccess(context) {
+  if (!hasStaffAccess(context)) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Admin or staff privileges required',
+    );
   }
 }
 
@@ -823,59 +818,6 @@ async function sendTelegramMessage(text) {
   );
 }
 
-async function sendSms(to, message) {
-  if (!to || !message) {
-    return;
-  }
-  if (!twilioClient) {
-    console.warn('[sms] Twilio not configured; skipping message for', to);
-    return;
-  }
-  try {
-    await twilioClient.messages.create({ to, from: twilioFromNumber, body: message });
-  } catch (err) {
-    console.error('[sms] Failed to send message', err);
-  }
-}
-
-async function sendBookingConfirmationSms(bookingDoc) {
-  if (!bookingDoc) return;
-  const customer = bookingDoc.customerInfo || {};
-  const phone = (customer.phone || '').trim();
-  if (phone) {
-    const firstName = (customer.firstName || '').trim();
-    const contactLine = 'Need anything? Call 416-968-0909.';
-    const message = firstName
-      ? `Hi ${firstName}! Your BarZunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`
-      : `Your BarZunko booking is locked in for ${bookingDoc.date} at ${bookingDoc.startTime}. See you soon! ${contactLine}`;
-    await sendSms(phone, message);
-  }
-  if (twilioNotifyNumber) {
-    const displayName =
-      [customer.firstName, customer.lastName].filter(Boolean).join(' ') ||
-      customer.email ||
-      bookingDoc.id;
-    const summary =
-      `New booking ${bookingDoc.id || ''} (${displayName}) on ${bookingDoc.date} ${bookingDoc.startTime} in ${bookingDoc.roomId}`.trim();
-    await sendSms(twilioNotifyNumber, summary);
-  }
-}
-
-async function sendFridaySaturdayReminderSms(bookingDoc) {
-  if (!bookingDoc || !isFridayOrSaturday(bookingDoc.date)) {
-    return;
-  }
-  const customer = bookingDoc.customerInfo || {};
-  const phone = (customer.phone || '').trim();
-  if (!phone) return;
-  const firstName = (customer.firstName || '').trim();
-  const contactLine = 'Need anything? Call 416-968-0909.';
-  const message = firstName
-    ? `Reminder: Hi ${firstName}, your BarZunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`
-    : `Reminder: Your BarZunko booking is coming up on ${bookingDoc.date} at ${bookingDoc.startTime}. ${contactLine}`;
-  await sendSms(phone, message);
-}
-
 /**
  * Internal helper to create a booking. Performs double-booking checks,
  * creates a Stripe PaymentIntent for the deposit, writes the booking to
@@ -982,7 +924,7 @@ async function createBookingInternal(params) {
   // Create a PaymentIntent for the required deposit (tax-inclusive)
   let paymentIntent;
   try {
-    paymentIntent = await stripe.paymentIntents.create({
+    paymentIntent = await getStripe().paymentIntents.create({
       amount: Math.round(depositToCharge * 100),
       currency: 'cad',
       payment_method_types: ['card'],
@@ -1067,7 +1009,7 @@ async function createBookingInternal(params) {
   } catch (err) {
     if (paymentIntent) {
       try {
-        await stripe.paymentIntents.cancel(paymentIntent.id);
+        await getStripe().paymentIntents.cancel(paymentIntent.id);
       } catch (cancelErr) {
         console.error('Failed to cancel PaymentIntent after availability conflict', cancelErr);
       }
@@ -1078,7 +1020,6 @@ async function createBookingInternal(params) {
 
   // Email is sent after payment succeeds (see webhook/confirmBooking)
   await addBookingToCalendar({ id: newBookingRef.id, ...bookingDoc });
-  await sendBookingConfirmationSms({ id: newBookingRef.id, ...bookingDoc });
   await sendTelegramMessage(
     [
       '📅 New Booking',
@@ -1109,12 +1050,12 @@ async function cancelBookingInternal(bookingId) {
   // Handle payment reversal through Stripe if a payment intent exists
   if (booking.paymentIntentId) {
     try {
-      const intent = await stripe.paymentIntents.retrieve(booking.paymentIntentId);
+      const intent = await getStripe().paymentIntents.retrieve(booking.paymentIntentId);
       if (intent.status === 'requires_capture') {
         // Authorization only, cancel to release hold
-        await stripe.paymentIntents.cancel(intent.id);
+        await getStripe().paymentIntents.cancel(intent.id);
       } else if (intent.status === 'succeeded' || intent.charges?.data?.length) {
-        await stripe.refunds.create({ payment_intent: intent.id });
+        await getStripe().refunds.create({ payment_intent: intent.id });
       }
     } catch (err) {
       console.error('Stripe reversal failed', err);
@@ -1200,8 +1141,7 @@ exports.createBooking = secureFunctions.https.onCall(async (data, context) => {
  * The booking is only written after payment succeeds via finalizeBooking.
  */
 exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
-  const { roomId, date, startTime, duration, totalCost, depositAmount, partySize, customerInfo } =
-    data || {};
+  const { roomId, date, startTime, duration, totalCost, partySize, customerInfo } = data || {};
 
   if (!roomId || !date || !startTime || !duration || !customerInfo) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
@@ -1238,10 +1178,7 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
 
   const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
   const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
-  const depositToCharge =
-    Number.isFinite(Number(depositAmount)) && Number(depositAmount) > 0
-      ? Number(depositAmount)
-      : depositTotals.total;
+  const depositToCharge = depositTotals.total;
   if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
     throw new functions.https.HttpsError(
       'failed-precondition',
@@ -1254,7 +1191,7 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
 
   // Create PaymentIntent only
   try {
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await getStripe().paymentIntents.create({
       amount: Math.round(depositToCharge * 100),
       currency: 'cad',
       payment_method_types: ['card'],
@@ -1291,7 +1228,6 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
     startTime,
     duration,
     totalCost,
-    depositAmount,
     partySize,
     customerInfo,
   } = data || {};
@@ -1305,8 +1241,8 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid duration');
   }
 
-  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
-  const okStatuses = ['succeeded', 'requires_capture', 'processing'];
+  const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+  const okStatuses = ['succeeded', 'requires_capture'];
   if (!intent || !okStatuses.includes(intent.status)) {
     throw new functions.https.HttpsError(
       'failed-precondition',
@@ -1332,14 +1268,49 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
   const businessDate = determineBusinessDate(date, startTime);
   const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
   const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
-  const depositToCharge =
-    Number.isFinite(Number(depositAmount)) && Number(depositAmount) > 0
-      ? Number(depositAmount)
-      : depositTotals.total;
+  const depositToCharge = depositTotals.total;
   if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
     throw new functions.https.HttpsError(
       'failed-precondition',
       'Unable to determine the required deposit for this booking.',
+    );
+  }
+  const expectedAmount = Math.round(depositToCharge * 100);
+  const expectedCurrency = 'cad';
+  const expectedMetadata = {
+    roomId: String(roomId),
+    date: String(date),
+    startTime: String(startTime),
+    duration: String(dur),
+    customerEmail: normalizeEmail(customerInfo?.email),
+  };
+
+  if ((intent.currency || '').toLowerCase() !== expectedCurrency) {
+    throw new functions.https.HttpsError('failed-precondition', 'Payment currency mismatch.');
+  }
+  if (intent.amount !== expectedAmount) {
+    throw new functions.https.HttpsError('failed-precondition', 'Payment amount mismatch.');
+  }
+  const intentMetadata = intent.metadata || {};
+  const intentCustomerEmail = normalizeEmail(intentMetadata.customer_email);
+  if (
+    String(intentMetadata.roomId || '') !== expectedMetadata.roomId ||
+    String(intentMetadata.date || '') !== expectedMetadata.date ||
+    String(intentMetadata.startTime || '') !== expectedMetadata.startTime ||
+    String(intentMetadata.duration || '') !== expectedMetadata.duration ||
+    intentCustomerEmail !== expectedMetadata.customerEmail
+  ) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Payment details do not match the requested booking.',
+    );
+  }
+
+  const existingRef = await findBookingRefByPaymentIntentId(intent.id);
+  if (existingRef) {
+    throw new functions.https.HttpsError(
+      'already-exists',
+      'Payment has already been used for another booking.',
     );
   }
 
@@ -1728,7 +1699,7 @@ exports.adminRefundBySecret = secureFunctions.https.onCall(async (data, context)
   }
   let intent;
   try {
-    intent = await stripe.paymentIntents.retrieve(intentId);
+    intent = await getStripe().paymentIntents.retrieve(intentId);
   } catch (err) {
     console.error('[adminRefund] Retrieve PaymentIntent failed', err);
     throw new functions.https.HttpsError('internal', 'Unable to retrieve payment');
@@ -1736,11 +1707,11 @@ exports.adminRefundBySecret = secureFunctions.https.onCall(async (data, context)
 
   try {
     if (intent.status === 'requires_capture') {
-      await stripe.paymentIntents.cancel(intentId);
+      await getStripe().paymentIntents.cancel(intentId);
     } else if (intent.status === 'canceled') {
       // already canceled, nothing to do
     } else {
-      await stripe.refunds.create({ payment_intent: intentId });
+      await getStripe().refunds.create({ payment_intent: intentId });
     }
   } catch (err) {
     console.error('[adminRefund] Refund failed', err);
@@ -1922,7 +1893,6 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
 
   const ref = db.collection('bookings').doc();
   await ref.set(newDoc);
-  await sendBookingConfirmationSms({ id: ref.id, ...newDoc });
   try {
     await sendBookingEmail({ id: ref.id, ...newDoc });
   } catch (err) {
@@ -1944,6 +1914,7 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
 });
 
 exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, context) => {
+  requireStaffAccess(context);
   const { date } = data || {};
   if (!date) {
     throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
@@ -1957,6 +1928,7 @@ exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, conte
 });
 
 exports.adminGetAvailabilityByDate = secureFunctions.https.onCall(async (data, context) => {
+  requireStaffAccess(context);
   const { date, times, duration } = data || {};
   const dur = Number(duration) || 1;
   if (!date) {
@@ -2301,6 +2273,7 @@ exports.rebookBooking = secureFunctions.https.onCall(async (data, context) => {
 });
 
 exports.confirmBooking = secureFunctions.https.onCall(async (data, context) => {
+  requireAdmin(context);
   const { bookingId, paymentIntentId } = data || {};
   if (!bookingId || !paymentIntentId) {
     throw new functions.https.HttpsError(
@@ -2315,9 +2288,9 @@ exports.confirmBooking = secureFunctions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('not-found', 'Booking not found');
   }
 
-  // Verify the PaymentIntent is actually paid (or capturable/processing)
-  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
-  const okStatuses = ['succeeded', 'requires_capture', 'processing'];
+  // Verify the PaymentIntent is actually paid (or capturable)
+  const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
+  const okStatuses = ['succeeded', 'requires_capture'];
   if (!okStatuses.includes(intent.status)) {
     throw new functions.https.HttpsError(
       'failed-precondition',
@@ -2368,7 +2341,7 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
   try {
-    event = stripe.webhooks.constructEvent(req.rawBody, sig, stripeWebhookSecret);
+    event = getStripe().webhooks.constructEvent(req.rawBody, sig, stripeWebhookSecret);
   } catch (err) {
     console.error('[stripeWebhook] Signature verification failed', err.message || err);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -2386,7 +2359,7 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
       paymentStatus: status,
       updatedAt: FieldValue.serverTimestamp(),
     };
-    if (status === 'succeeded' || status === 'processing' || status === 'requires_capture') {
+    if (status === 'succeeded' || status === 'requires_capture') {
       updatePayload.status = 'confirmed';
     }
     await ref.update(updatePayload);
@@ -2434,50 +2407,6 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
   return res.json({ received: true });
 });
 
-exports.sendWeekendReminderTexts = secureFunctions.pubsub
-  .schedule('every thursday 10:00')
-  .timeZone(BUSINESS_TIMEZONE)
-  .onRun(async () => {
-    if (!twilioClient || !twilioFromNumber) {
-      console.log('[reminder] Twilio not configured; skipping reminder job.');
-      return null;
-    }
-    const { fridayDate, saturdayDate } = getUpcomingFridaySaturdayDates(new Date());
-    const targets = [fridayDate, saturdayDate].filter(Boolean);
-    if (!targets.length) {
-      console.warn('[reminder] No target dates for weekend reminders.');
-      return null;
-    }
-
-    const snap = await db
-      .collection('bookings')
-      .where('date', 'in', targets)
-      .where('status', 'in', ACTIVE_BOOKING_STATUSES)
-      .get();
-
-    if (snap.empty) {
-      console.log('[reminder] No bookings found for upcoming weekend.');
-      return null;
-    }
-
-    let notified = 0;
-    await Promise.all(
-      snap.docs.map(async (doc) => {
-        try {
-          await sendFridaySaturdayReminderSms({ id: doc.id, ...doc.data() });
-          notified += 1;
-        } catch (err) {
-          console.error('[reminder] Failed to send reminder for booking', doc.id, err);
-        }
-      }),
-    );
-
-    console.log(
-      `[reminder] Sent reminders for ${notified} bookings on ${fridayDate} and ${saturdayDate}.`,
-    );
-    return null;
-  });
-
 /**
  * Callable: adminCaptureBySecret
  *
@@ -2504,7 +2433,7 @@ exports.adminCaptureBySecret = secureFunctions.https.onCall(async (data, context
 
   let intent;
   try {
-    intent = await stripe.paymentIntents.retrieve(intentId);
+    intent = await getStripe().paymentIntents.retrieve(intentId);
   } catch (err) {
     console.error('Retrieve PaymentIntent failed', err);
     throw new functions.https.HttpsError('internal', 'Unable to retrieve payment');
@@ -2518,7 +2447,7 @@ exports.adminCaptureBySecret = secureFunctions.https.onCall(async (data, context
   }
 
   try {
-    const captured = await stripe.paymentIntents.capture(intentId);
+    const captured = await getStripe().paymentIntents.capture(intentId);
     await ref.update({
       paymentStatus: captured.status,
       updatedAt: FieldValue.serverTimestamp(),
@@ -2527,85 +2456,5 @@ exports.adminCaptureBySecret = secureFunctions.https.onCall(async (data, context
   } catch (err) {
     console.error('Capture PaymentIntent failed', err);
     throw new functions.https.HttpsError('internal', 'Capture failed');
-  }
-});
-
-/**
- * HTTPS Function: getGoogleReviews
- *
- * Finds the Place ID for Bar Zunko & Karaoke (675 Yonge St, Toronto),
- * fetches Google reviews, and returns the three latest best reviews.
- *
- * Configure API key via environment variable or Secret Manager binding:
- *  - GOOGLE_MAPS_API_KEY
- */
-exports.getGoogleReviews = secureFunctions.https.onRequest(async (req, res) => {
-  try {
-    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-
-    const API_KEY = process.env.GOOGLE_MAPS_API_KEY;
-    if (!API_KEY) {
-      res.status(503).json({ error: 'Google API key not configured' });
-      return;
-    }
-
-    const placeQuery = 'BAR ZUNKO & KARAOKE, 675 Yonge St, Toronto, ON M4Y 2B2';
-    const findUrl = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(
-      placeQuery,
-    )}&inputtype=textquery&fields=place_id&key=${API_KEY}`;
-
-    const findResp = await fetch(findUrl);
-    const findData = await findResp.json();
-    const placeId = findData?.candidates?.[0]?.place_id;
-    if (!placeId) {
-      res.status(404).json({ error: 'Place not found' });
-      return;
-    }
-
-    const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,user_ratings_total,rating,reviews,url&reviews_no_translations=true&reviews_sort=newest&key=${API_KEY}`;
-    const detailsResp = await fetch(detailsUrl);
-    const details = await detailsResp.json();
-    const reviews = Array.isArray(details?.result?.reviews) ? details.result.reviews : [];
-
-    // Prioritize 5-star reviews by recency, fall back to 4-star if needed.
-    const fiveStar = reviews
-      .filter((r) => Number(r?.rating) === 5)
-      .sort((a, b) => (b?.time || 0) - (a?.time || 0));
-    let selected = fiveStar.slice(0, 3);
-    if (selected.length < 3) {
-      const fourStar = reviews
-        .filter((r) => Number(r?.rating) === 4)
-        .sort((a, b) => (b?.time || 0) - (a?.time || 0));
-      selected = [...selected, ...fourStar].slice(0, 3);
-    }
-
-    // Shape response for the UI
-    const shaped = selected.map((r) => ({
-      author: r?.author_name || 'Google User',
-      rating: Number(r?.rating) || 0,
-      text: r?.text || '',
-      time: r?.time ? new Date(r.time * 1000).toISOString() : null,
-      relativeTime: r?.relative_time_description || null,
-      profilePhotoUrl: r?.profile_photo_url || null,
-    }));
-
-    res.json({
-      placeId,
-      name: details?.result?.name || 'BAR ZUNKO & KARAOKE',
-      totalRatings: details?.result?.user_ratings_total || 0,
-      rating: details?.result?.rating || null,
-      url: details?.result?.url || null,
-      reviews: shaped,
-    });
-  } catch (err) {
-    console.error('getGoogleReviews error', err);
-    res.status(500).json({ error: 'Failed to fetch reviews' });
   }
 });

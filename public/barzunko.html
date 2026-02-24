@@ -323,48 +323,5 @@
       window.app.currentPage = 'landing';
       window.app.init();
     </script>
-    <script>
-      // Replace testimonials with latest Google reviews
-      (function () {
-        async function loadGoogleReviews() {
-          try {
-            const resp = await fetch('/getGoogleReviews');
-            if (!resp.ok) return;
-            const data = await resp.json();
-            if (!data || !Array.isArray(data.reviews) || data.reviews.length === 0) return;
-
-            const carousel = document.getElementById('testimonials-carousel');
-            if (!carousel) return;
-            carousel.innerHTML = '';
-
-            const makeStars = (rating) => {
-              const r = Math.round(Number(rating) || 0);
-              return Array.from({ length: r })
-                .map(() => '<i class="fas fa-star star"></i>')
-                .join('');
-            };
-
-            data.reviews.slice(0, 3).forEach((rev) => {
-              const card = document.createElement('div');
-              card.className = 'testimonial-card';
-              card.innerHTML = `
-                <div class="testimonial-rating">${makeStars(rev.rating)}</div>
-                <p class="testimonial-text">"${(rev.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')}"</p>
-                <div class="testimonial-author">- ${rev.author || 'Google User'}</div>
-              `;
-              carousel.appendChild(card);
-            });
-          } catch (e) {
-            console.warn('Failed to load Google reviews', e);
-          }
-        }
-
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', loadGoogleReviews);
-        } else {
-          loadGoogleReviews();
-        }
-      })();
-    </script>
   </body>
 </html>
