@@ -5,166 +5,344 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>The K Karaoke</title>
     <link rel="icon" type="image/x-icon" href="image/logo.ico" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Bricolage+Grotesque:wght@500;600;700;800&amp;display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
-        color-scheme: dark;
-        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background-color: #0e0e11;
+        --bg-main: #0b0807;
+        --bg-soft: #17110e;
+        --card: rgba(33, 24, 19, 0.86);
+        --card-strong: rgba(45, 33, 27, 0.94);
+        --border: rgba(237, 191, 102, 0.27);
+        --border-strong: rgba(237, 191, 102, 0.56);
+        --text: #f4ede3;
+        --muted: #cdb9a1;
+        --accent: #edbf66;
+        --accent-warm: #d47649;
+        --shadow: 0 24px 46px rgba(0, 0, 0, 0.45);
       }
 
       * {
         box-sizing: border-box;
       }
 
+      html,
       body {
         margin: 0;
-        min-height: 100vh;
-        background: linear-gradient(180deg, #151515 0%, #0e0e11 80%);
-        color: #f4f4f5;
+        min-height: 100%;
       }
 
-      .page {
-        width: 100%;
-        min-height: 100vh;
-        background: transparent;
+      body {
+        font-family: "Plus Jakarta Sans", "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(920px 560px at -15% -5%, rgba(237, 191, 102, 0.24), transparent 60%),
+          radial-gradient(900px 560px at 110% 12%, rgba(212, 118, 73, 0.2), transparent 54%),
+          linear-gradient(160deg, #090706 0%, #120e0c 45%, #0f0b0a 100%);
+        overflow-x: hidden;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: -1;
+        background-image:
+          radial-gradient(rgba(255, 255, 255, 0.05) 0.9px, transparent 0.9px),
+          radial-gradient(rgba(255, 255, 255, 0.03) 0.8px, transparent 0.8px);
+        background-size: 4px 4px, 8px 8px;
+        background-position: 0 0, 2px 2px;
+        opacity: 0.25;
+      }
+
+      .landing {
+        width: min(94%, 1200px);
+        margin: 0 auto;
+        padding: 2rem 0 2.4rem;
+      }
+
+      .landing__top {
         display: flex;
-        flex-direction: column;
-      }
-
-      .hero {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: 3rem;
-        padding: 3rem 1.5rem 2rem;
-      }
-
-      .hero__logo {
-        padding-top: 1.25rem;
-        text-align: center;
-      }
-
-      .hero__logo img {
-        width: 6rem;
-      }
-
-      .hero__grid {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 3rem;
-        padding: 0 2rem;
-      }
-
-      .hero__column {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+        justify-content: space-between;
         gap: 1rem;
       }
 
-      .hero__circle {
-        width: 16rem;
-        height: 16rem;
-        border-radius: 999px;
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+      .landing__logo-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.8rem;
       }
 
-      .hero__circle img {
+      .landing__logo {
+        width: 3.4rem;
+        height: 3.4rem;
+        object-fit: contain;
+      }
+
+      .landing__brand {
+        margin: 0;
+        font-family: "Bricolage Grotesque", "Avenir Next", sans-serif;
+        font-size: 0.92rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+      }
+
+      .landing__tag {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .landing__hero {
+        margin: 2.7rem 0 2rem;
+      }
+
+      .landing__eyebrow {
+        margin: 0;
+        color: var(--accent);
+        font-size: 0.74rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .landing__title {
+        margin: 0.8rem 0 0;
+        font-family: "Bricolage Grotesque", "Avenir Next", sans-serif;
+        font-size: clamp(2rem, 7vw, 4.8rem);
+        line-height: 0.95;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+      }
+
+      .landing__title span {
+        display: block;
+      }
+
+      .landing__title span:last-child {
+        background: linear-gradient(106deg, #f7d899, #dd8758 58%, #a85032);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .landing__sub {
+        margin: 1rem 0 0;
+        color: var(--muted);
+        max-width: 56ch;
+        line-height: 1.7;
+        font-size: 1rem;
+      }
+
+      .locations {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .location {
+        position: relative;
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: linear-gradient(160deg, var(--card), rgba(20, 15, 12, 0.94));
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        transform: translateY(16px);
+        opacity: 0;
+        animation: reveal 0.7s ease forwards;
+      }
+
+      .location:nth-child(2) {
+        animation-delay: 0.12s;
+      }
+
+      .location::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(142deg, rgba(237, 191, 102, 0.16), rgba(212, 118, 73, 0.08));
+        opacity: 0;
+        transition: opacity 0.22s ease;
+        pointer-events: none;
+      }
+
+      .location:hover::before {
+        opacity: 1;
+      }
+
+      .location__media {
+        position: relative;
+        aspect-ratio: 4 / 3;
+        border-bottom: 1px solid rgba(237, 191, 102, 0.18);
+      }
+
+      .location__media img {
         width: 100%;
         height: 100%;
         object-fit: cover;
         display: block;
       }
 
-      .hero__link {
+      .location__badge {
+        position: absolute;
+        left: 1rem;
+        bottom: 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: 1px solid var(--border-strong);
+        background: rgba(18, 13, 11, 0.86);
+        border-radius: 999px;
+        padding: 0.34rem 0.74rem;
+        font-size: 0.64rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .location__body {
+        padding: 1.1rem;
+      }
+
+      .location__name {
+        margin: 0;
+        font-family: "Bricolage Grotesque", "Avenir Next", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 1.24rem;
+      }
+
+      .location__address {
+        margin: 0.5rem 0 1rem;
+        color: var(--muted);
+        font-size: 0.93rem;
+      }
+
+      .location__cta {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0.65rem 1.5rem;
+        width: 100%;
         border-radius: 999px;
-        font-size: 0.82rem;
-        letter-spacing: 0.03em;
+        border: 1px solid rgba(250, 220, 161, 0.48);
+        background: linear-gradient(128deg, var(--accent), var(--accent-warm));
+        color: #20160f;
         text-decoration: none;
-        color: #fff;
-        transition: opacity 0.15s ease, transform 0.15s ease;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 0.76rem;
+        padding: 0.78rem 1rem;
+        transition: transform 0.2s ease, filter 0.2s ease;
       }
 
-      .hero__link:hover {
-        opacity: 0.85;
+      .location__cta:hover {
         transform: translateY(-1px);
+        filter: brightness(1.06);
       }
 
-      .hero__link--christie {
-        background-color: #1d4ed8;
+      .landing__foot {
+        margin-top: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.8rem;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
-      .hero__link--barjunko {
-        background-color: #22c55e;
+      @keyframes reveal {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
-      .hero__footer {
-        text-align: center;
-        font-size: 0.65rem;
-        letter-spacing: 0.2em;
-        padding-bottom: 0.75rem;
-      }
-
-      @media (min-width: 640px) {
-        .hero__logo img {
-          width: 8rem;
+      @media (max-width: 900px) {
+        .landing__top {
+          align-items: flex-start;
+          flex-direction: column;
         }
 
-        .hero__grid {
-          flex-direction: row;
+        .landing__hero {
+          margin-top: 2rem;
         }
 
-        .hero__circle {
-          width: 18rem;
-          height: 18rem;
+        .locations {
+          grid-template-columns: 1fr;
         }
 
-        .hero__link {
-          font-size: 0.9rem;
-          padding: 0.8rem 2.25rem;
+        .landing__foot {
+          flex-direction: column;
+          align-items: flex-start;
         }
       }
     </style>
   </head>
   <body>
-    <div class="page">
-      <section class="hero" aria-label="The K Karaoke locations">
-        <div class="hero__logo">
-          <img src="image/k-karaoke-logo.png" alt="K Karaoke Logo" />
+    <main class="landing">
+      <header class="landing__top">
+        <div class="landing__logo-wrap">
+          <img class="landing__logo" src="image/k-karaoke-logo.png" alt="K Karaoke Logo" />
+          <p class="landing__brand">The K Karaoke</p>
         </div>
+        <p class="landing__tag">Toronto Locations</p>
+      </header>
 
-        <div class="hero__grid">
-          <div class="hero__column">
-            <div class="hero__circle" style="background-color: #2e1e12">
-              <img src="image/TheKkaraoke_cover.png" alt="The K Karaoke" />
-            </div>
-            <a class="hero__link hero__link--christie" href="https://wearethekkaraoke.as.me/schedule/6914a657">
-              &larr; Christie: 699 Bloor St. West
-            </a>
-          </div>
-
-          <div class="hero__column">
-            <div class="hero__circle" style="background-color: #0f2233">
-              <img src="image/barjunkocover.png" alt="Bar Junko" />
-            </div>
-            <a class="hero__link hero__link--barjunko" href="barzunko.html">
-              Bloor/Yonge: 675 Yonge St &rarr;
-            </a>
-          </div>
-        </div>
-
-        <div class="hero__footer">&copy; 2025 The K Karaoke</div>
+      <section class="landing__hero">
+        <p class="landing__eyebrow">Choose your venue</p>
+        <h1 class="landing__title">
+          <span>Sing where</span>
+          <span>the night starts</span>
+        </h1>
+        <p class="landing__sub">
+          Pick your location to start booking. Both venues run through the same booking engine,
+          but each has its own vibe, room lineup, and crowd.
+        </p>
       </section>
-    </div>
+
+      <section class="locations" aria-label="K Karaoke locations">
+        <article class="location">
+          <div class="location__media">
+            <img src="image/TheKkaraoke_cover.png" alt="The K Karaoke Christie location" />
+            <span class="location__badge">Christie</span>
+          </div>
+          <div class="location__body">
+            <h2 class="location__name">The K Karaoke</h2>
+            <p class="location__address">699 Bloor St West, Toronto</p>
+            <a class="location__cta" href="https://wearethekkaraoke.as.me/schedule/6914a657">
+              Book Christie Room
+            </a>
+          </div>
+        </article>
+
+        <article class="location">
+          <div class="location__media">
+            <img src="image/barjunkocover.png" alt="Barzunko Bloor and Yonge location" />
+            <span class="location__badge">Bloor / Yonge</span>
+          </div>
+          <div class="location__body">
+            <h2 class="location__name">Barzunko</h2>
+            <p class="location__address">675 Yonge St, Toronto</p>
+            <a class="location__cta" href="barzunko.html">Enter Barzunko Booking</a>
+          </div>
+        </article>
+      </section>
+
+      <footer class="landing__foot">
+        <span>&copy; 2026 The K Karaoke</span>
+        <span>Same-day reservations: 416-968-0909</span>
+      </footer>
+    </main>
   </body>
 </html>

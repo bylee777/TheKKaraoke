@@ -70,6 +70,15 @@ class BarzunkoApp {
     this.staffTimerData = { date: null, bookings: [] };
     this.staffTimerInterval = null;
     this.adminAutoAdvanceTimer = null;
+    this.scheduleViewModes = {
+      admin: 'reservations',
+      staff: 'reservations',
+    };
+    this.scheduleGridDensity = {
+      admin: 'booked',
+      staff: 'booked',
+    };
+    this.scheduleRenderCache = {};
 
     this.currentDate = new Date();
     this.adminSelectedDate = null;
@@ -321,8 +330,22 @@ class BarzunkoApp {
     // This allows us to bootstrap individual HTML pages (landing, booking, manage, admin, confirmation)
     // by setting app.currentPage before calling init().
     this.showPage(this.currentPage);
+    this.syncNavbarOffset();
+    window.requestAnimationFrame(() => this.syncNavbarOffset());
+    window.setTimeout(() => this.syncNavbarOffset(), 220);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => this.syncNavbarOffset()).catch(() => {});
+    }
     this.applicationInitialized = true;
     this.domReadyHandlerAttached = false;
+  }
+
+  syncNavbarOffset() {
+    const navbar = document.querySelector('.navbar');
+    if (!navbar || !document.documentElement) return;
+    const navbarHeight = Math.ceil(navbar.getBoundingClientRect().height);
+    if (!Number.isFinite(navbarHeight) || navbarHeight <= 0) return;
+    document.documentElement.style.setProperty('--navbar-offset', `${navbarHeight}px`);
   }
 
   setupEventListeners() {
@@ -330,6 +353,17 @@ class BarzunkoApp {
       return;
     }
     this.listenersBound = true;
+
+    let navbarOffsetSyncTimer = null;
+    const scheduleNavbarOffsetSync = () => {
+      window.clearTimeout(navbarOffsetSyncTimer);
+      navbarOffsetSyncTimer = window.setTimeout(() => this.syncNavbarOffset(), 80);
+    };
+    window.addEventListener('resize', scheduleNavbarOffsetSync);
+    window.addEventListener('orientationchange', () => {
+      window.setTimeout(() => this.syncNavbarOffset(), 160);
+    });
+    window.addEventListener('load', () => this.syncNavbarOffset());
 
     // Navigation - Use event delegation
     document.addEventListener('click', (e) => {
@@ -387,9 +421,22 @@ class BarzunkoApp {
         this.openAdminModifierModal();
       }
 
-      if (e.target.closest('#admin-export-schedule')) {
+      const scheduleViewBtn = e.target.closest('[data-schedule-context][data-schedule-view]');
+      if (scheduleViewBtn) {
         e.preventDefault();
-        this.adminExportSchedule();
+        this.setScheduleViewMode(
+          scheduleViewBtn.getAttribute('data-schedule-context'),
+          scheduleViewBtn.getAttribute('data-schedule-view'),
+        );
+      }
+
+      const gridDensityBtn = e.target.closest('[data-grid-context][data-grid-density]');
+      if (gridDensityBtn) {
+        e.preventDefault();
+        this.setScheduleGridDensity(
+          gridDensityBtn.getAttribute('data-grid-context'),
+          gridDensityBtn.getAttribute('data-grid-density'),
+        );
       }
 
       if (e.target.closest('#staff-logout')) {
@@ -892,6 +939,14 @@ class BarzunkoApp {
           return false;
         }
 
+        if (!this.isCustomerOnlineBookableDate(this.selectedDate)) {
+          this.showNotification(
+            `Online booking starts from tomorrow. For same-day availability, please call ${this.businessData.phone}.`,
+            'error',
+          );
+          return false;
+        }
+
         const selectedDateTime = new Date(`${this.selectedDate}T${this.selectedTime}`);
         const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
 
@@ -912,6 +967,7 @@ class BarzunkoApp {
         }
         this.bookingData.customer = customerInfo;
         this.bookingData.termsAccepted = true;
+        this.bookingData.marketingOptIn = Boolean(customerInfo.marketingOptIn);
         return true;
       }
 
@@ -962,6 +1018,8 @@ class BarzunkoApp {
     const email = emailEl.value.trim();
     const phoneRaw = phoneEl.value.trim();
     const specialRequests = specialRequestsEl?.value.trim() || '';
+    const marketingConsentEl = document.getElementById('marketing-consent-checkbox');
+    const marketingOptIn = Boolean(marketingConsentEl?.checked);
 
     if (!firstName || !lastName || !email || !phoneRaw) {
       if (showErrors) {
@@ -1016,6 +1074,7 @@ class BarzunkoApp {
       email,
       phone: phoneRaw.trim(),
       specialRequests,
+      marketingOptIn,
       termsAccepted: true,
     };
   }
@@ -1112,16 +1171,20 @@ class BarzunkoApp {
     // Clear calendar
     calendarGrid.innerHTML = '';
 
-    // Add day headers
+    // Add day headers (force compact labels on touch devices to avoid mobile overflow)
+    const isCompactCalendar =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      (window.matchMedia('(max-width: 900px)').matches ||
+        window.matchMedia('(pointer: coarse) and (max-width: 1024px)').matches);
     const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    dayHeaders.forEach((day) => {
+    const shortDayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    calendarGrid.classList.toggle('calendar-grid--compact', isCompactCalendar);
+    dayHeaders.forEach((day, index) => {
       const dayHeader = document.createElement('div');
       dayHeader.className = 'calendar-day-header';
       dayHeader.textContent = day;
-      dayHeader.style.fontWeight = 'bold';
-      dayHeader.style.color = 'var(--color-text-secondary)';
-      dayHeader.style.fontSize = 'var(--font-size-sm)';
-      dayHeader.style.padding = 'var(--space-8)';
+      dayHeader.setAttribute('data-short', shortDayHeaders[index]);
       calendarGrid.appendChild(dayHeader);
     });
 
@@ -1129,6 +1192,7 @@ class BarzunkoApp {
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    const todayDateString = this.getTodayDateString();
 
     // Add empty cells for days before month starts
     for (let i = 0; i < firstDay; i++) {
@@ -1152,26 +1216,39 @@ class BarzunkoApp {
       const dayDateString = this.formatDateToYMD(dayDate);
       if (!dayDateString) continue;
 
+      const isPastOrToday = dayDateString <= todayDateString;
+      const isSameDay = dayDateString === todayDateString;
+
       // Check if day is available
       let hasAvailableSlot = false;
-      const cachedSlots =
-        cacheKey && this.availableSlotsCache[cacheKey]
-          ? this.availableSlotsCache[cacheKey][dayDateString]
-          : null;
+      if (!isPastOrToday) {
+        const cachedSlots =
+          cacheKey && this.availableSlotsCache[cacheKey]
+            ? this.availableSlotsCache[cacheKey][dayDateString]
+            : null;
 
-      if (Array.isArray(cachedSlots)) {
-        hasAvailableSlot = cachedSlots.length > 0;
-      } else {
-        const dayTimeSlots = this.getTimeSlotsForDate(
-          dayDateString,
-          this.bookingData.duration || 1,
-        );
-        hasAvailableSlot = dayTimeSlots.some((slot) => {
-          const [slotHours, slotMinutes] = slot.split(':').map(Number);
-          const slotDateTime = new Date(dayDate);
-          slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
-          return slotDateTime >= sixHoursFromNow;
-        });
+        if (Array.isArray(cachedSlots)) {
+          hasAvailableSlot = cachedSlots.some((slot) => {
+            const time = typeof slot === 'object' && slot?.time ? slot.time : slot;
+            if (!time) return false;
+            const [slotHours, slotMinutes] = String(time).split(':').map(Number);
+            const slotDateTime = new Date(dayDate);
+            slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
+            const isAvailable = typeof slot === 'object' ? slot.available !== false : true;
+            return isAvailable && slotDateTime >= sixHoursFromNow;
+          });
+        } else {
+          const dayTimeSlots = this.getTimeSlotsForDate(
+            dayDateString,
+            this.bookingData.duration || 1,
+          );
+          hasAvailableSlot = dayTimeSlots.some((slot) => {
+            const [slotHours, slotMinutes] = slot.split(':').map(Number);
+            const slotDateTime = new Date(dayDate);
+            slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
+            return slotDateTime >= sixHoursFromNow;
+          });
+        }
       }
 
       if (hasAvailableSlot) {
@@ -1181,6 +1258,10 @@ class BarzunkoApp {
         });
       } else {
         dayElement.classList.add('disabled');
+        if (isSameDay) {
+          dayElement.classList.add('same-day-locked');
+          dayElement.title = 'Online same-day booking is unavailable. Please call us for availability.';
+        }
       }
 
       if (this.selectedDate === dayDateString) {
@@ -1190,13 +1271,31 @@ class BarzunkoApp {
       calendarGrid.appendChild(dayElement);
     }
 
-    // Update time slots if date is selected
-    if (this.selectedDate) {
+    const hadSelectedDate = Boolean(this.selectedDate);
+    if (this.selectedDate && !this.isCustomerOnlineBookableDate(this.selectedDate)) {
+      this.selectedDate = null;
+      this.selectedTime = null;
+    }
+
+    // Update time slots if date is selected (or if we just cleared one)
+    if (this.selectedDate || hadSelectedDate) {
       this.updateTimeSlots();
     }
   }
 
   selectDate(dateString) {
+    if (!this.isCustomerOnlineBookableDate(dateString)) {
+      this.selectedDate = null;
+      this.selectedTime = null;
+      this.updateCalendar();
+      this.updateTimeSlots();
+      this.showNotification(
+        `Online booking starts from tomorrow. Same-day availability is by phone at ${this.businessData.phone}.`,
+        'warning',
+      );
+      return;
+    }
+
     this.selectedDate = dateString;
     this.applyBusinessHoursForDate(dateString);
     this.selectedTime = null;
@@ -1225,6 +1324,12 @@ class BarzunkoApp {
       timeSlotsContainer.style.display = 'block';
       timeGrid.innerHTML =
         '<div class="time-slot disabled">Select a room and duration to see availability.</div>';
+      return;
+    }
+
+    if (!this.isCustomerOnlineBookableDate(this.selectedDate)) {
+      timeSlotsContainer.style.display = 'block';
+      this.renderSameDayBookingNotice(timeGrid);
       return;
     }
 
@@ -1816,8 +1921,10 @@ class BarzunkoApp {
     if (phoneEl) phoneEl.value = customer.phone || '';
 
     const termsCheckbox = document.getElementById('terms-checkbox');
+    const marketingConsentEl = document.getElementById('marketing-consent-checkbox');
 
     if (termsCheckbox) termsCheckbox.checked = true;
+    if (marketingConsentEl) marketingConsentEl.checked = Boolean(customer.marketingOptIn);
   }
 
   isUpcomingBooking(booking) {
@@ -1848,11 +1955,34 @@ class BarzunkoApp {
       const status = this.getRoomAvailabilityStatus(room.id);
       const roomOption = document.createElement('div');
       roomOption.className = 'room-option';
+      roomOption.setAttribute('role', 'button');
 
       if (!status.selectable) {
         roomOption.classList.add('room-option--unavailable');
         roomOption.setAttribute('aria-disabled', 'true');
+        roomOption.setAttribute('tabindex', '-1');
+      } else {
+        roomOption.setAttribute('tabindex', '0');
       }
+
+      let isSelectedOption = false;
+      if (status.selectable && this.selectedRoom && this.selectedRoom.id === room.id) {
+        isSelectedOption = true;
+      }
+      if (status.selectable && !this.selectedRoom && !defaultRoom) {
+        defaultRoom = room;
+        isSelectedOption = true;
+      }
+
+      if (isSelectedOption) {
+        roomOption.classList.add('selected');
+      }
+      roomOption.setAttribute('aria-pressed', isSelectedOption ? 'true' : 'false');
+
+      const availabilityClass = isSelectedOption ? 'selected' : status.className || 'info';
+      const availabilityMessage = isSelectedOption
+        ? '<i class="fas fa-circle-check"></i> Selected room. Continue below.'
+        : status.message;
 
       roomOption.innerHTML = `
                 <div class="room-option-header">
@@ -1869,8 +1999,8 @@ class BarzunkoApp {
                       .map((feature) => `<li>${feature}</li>`)
                       .join('')}
                 </ul>
-                <div class="room-availability room-availability--${status.className || 'info'}">
-                    ${status.message}
+                <div class="room-availability room-availability--${availabilityClass}">
+                    ${availabilityMessage}
                 </div>
             `;
 
@@ -1886,16 +2016,20 @@ class BarzunkoApp {
         this.selectRoom(room);
       });
 
-      if (status.selectable && this.selectedRoom && this.selectedRoom.id === room.id) {
-        roomOption.classList.add('selected');
-      }
-      if (status.selectable && !this.selectedRoom && !defaultRoom) {
-        defaultRoom = room;
-        roomOption.classList.add('selected');
-      }
+      roomOption.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          roomOption.click();
+        }
+      });
 
       roomGrid.appendChild(roomOption);
     });
+
+    roomGrid.classList.toggle(
+      'room-selection-grid--has-selection',
+      Boolean(this.selectedRoom || defaultRoom),
+    );
 
     if (!this.selectedRoom && defaultRoom) {
       this.selectedRoom = defaultRoom;
@@ -2633,6 +2767,7 @@ class BarzunkoApp {
     }
     this.bookingData.customer = customerInfo;
     this.bookingData.termsAccepted = true;
+    this.bookingData.marketingOptIn = Boolean(customerInfo.marketingOptIn);
 
     if (this.isRebookingFlow) {
       this.lastSubmitTime = now;
@@ -2927,6 +3062,11 @@ class BarzunkoApp {
     const bookingRef = referenceInput ? referenceInput.value.trim() : '';
     const email = emailInput.value.trim();
 
+    if (!bookingRef) {
+      this.showNotification('Please enter your booking reference (Booking ID).', 'error');
+      return;
+    }
+
     if (!email) {
       this.showNotification('Please enter the email you used when booking.', 'error');
       return;
@@ -2950,13 +3090,6 @@ class BarzunkoApp {
         this.activeManagedBooking = null;
         this.renderBookingSearchResults([]);
         this.showNotification('No upcoming bookings found for that email/reference.', 'warning');
-        return;
-      }
-
-      if (!bookingRef && upcomingBookings.length > 1) {
-        this.activeManagedBooking = null;
-        this.renderBookingSearchResults(upcomingBookings);
-        this.showNotification('We found multiple bookings. Select one below to manage it.', 'info');
         return;
       }
 
@@ -3794,21 +3927,41 @@ class BarzunkoApp {
   }
 
   async staffFetchAvailability(timesArg, dateOverride) {
-    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
-      return;
-    }
     const dateStr = dateOverride || this.staffSelectedDate || this.adminFormatYMD(new Date());
     const times = timesArg || this.getTimeSlotsForDate(dateStr);
+    const viewMode = this.getScheduleViewMode('staff');
+    if (viewMode !== 'grid') {
+      this.adminRenderAvailabilityGrid(times, {}, {
+        containerId: 'staff-availability-grid',
+        context: 'staff',
+        viewMode: 'reservations',
+      });
+      return;
+    }
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      this.adminRenderAvailabilityGrid(times, {}, {
+        containerId: 'staff-availability-grid',
+        context: 'staff',
+        viewMode: 'grid',
+      });
+      return;
+    }
     try {
       const fn = window.firebaseFunctions.httpsCallable('adminGetAvailabilityByDate');
       const res = await fn({ date: dateStr, times, duration: 1 });
       const grid = res.data || {};
       this.adminRenderAvailabilityGrid(grid.times || times, grid.availability || {}, {
         containerId: 'staff-availability-grid',
+        context: 'staff',
+        viewMode: 'grid',
       });
     } catch (err) {
       console.error('staffFetchAvailability error', err);
-      this.adminRenderAvailabilityGrid(times, {}, { containerId: 'staff-availability-grid' });
+      this.adminRenderAvailabilityGrid(times, {}, {
+        containerId: 'staff-availability-grid',
+        context: 'staff',
+        viewMode: 'grid',
+      });
     }
   }
 
@@ -4241,9 +4394,11 @@ class BarzunkoApp {
     this.adminResetRescheduleState();
     const tableBody = document.getElementById('bookings-table-body');
     const dateStr = this.adminSelectedDate || this.adminFormatYMD(new Date());
+    const times = this.getTimeSlotsForDate(dateStr);
     this.applyBusinessHoursForDate(dateStr);
     if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
       if (tableBody) tableBody.innerHTML = '<tr><td colspan="6">Functions not available</td></tr>';
+      this.adminRenderAvailabilityGrid(times, {}, { containerId: 'admin-availability-grid', context: 'admin' });
       return;
     }
     try {
@@ -4259,25 +4414,62 @@ class BarzunkoApp {
         return (a.startTime || '').localeCompare(b.startTime || '');
       });
       this.renderAdminBookingsTable(bookings);
-      this.adminFetchAvailability();
+      if (this.getScheduleViewMode('admin') === 'grid') {
+        this.adminFetchAvailability(times, dateStr);
+      } else {
+        this.adminRenderAvailabilityGrid(times, {}, {
+          containerId: 'admin-availability-grid',
+          context: 'admin',
+          viewMode: 'reservations',
+        });
+      }
     } catch (err) {
       console.error('adminFetchForSelectedDate error', err);
+      this.adminGridAssignments = this.adminAssignBookingsToColumns([]);
+      this.adminRenderAvailabilityGrid(times, {}, {
+        containerId: 'admin-availability-grid',
+        context: 'admin',
+      });
       this.showNotification('Unable to load bookings for selected day', 'error');
     }
   }
-  async adminFetchAvailability() {
-    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) return;
-    const dateStr = this.adminSelectedDate || this.adminFormatYMD(new Date());
-    const times = this.getTimeSlotsForDate(dateStr);
+  async adminFetchAvailability(timesArg, dateOverride) {
+    const dateStr = dateOverride || this.adminSelectedDate || this.adminFormatYMD(new Date());
+    const times = timesArg || this.getTimeSlotsForDate(dateStr);
+    const viewMode = this.getScheduleViewMode('admin');
     this.applyBusinessHoursForDate(dateStr);
+    if (viewMode !== 'grid') {
+      this.adminRenderAvailabilityGrid(times, {}, {
+        containerId: 'admin-availability-grid',
+        context: 'admin',
+        viewMode: 'reservations',
+      });
+      return;
+    }
+    if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
+      this.adminRenderAvailabilityGrid(times, {}, {
+        containerId: 'admin-availability-grid',
+        context: 'admin',
+        viewMode: 'grid',
+      });
+      return;
+    }
     try {
       const fn = window.firebaseFunctions.httpsCallable('adminGetAvailabilityByDate');
       const res = await fn({ date: dateStr, times, duration: 1 });
       const grid = res.data || {};
-      this.adminRenderAvailabilityGrid(grid.times || times, grid.availability || {});
+      this.adminRenderAvailabilityGrid(grid.times || times, grid.availability || {}, {
+        containerId: 'admin-availability-grid',
+        context: 'admin',
+        viewMode: 'grid',
+      });
     } catch (err) {
       console.error('adminFetchAvailability error', err);
-      this.adminRenderAvailabilityGrid(times, {});
+      this.adminRenderAvailabilityGrid(times, {}, {
+        containerId: 'admin-availability-grid',
+        context: 'admin',
+        viewMode: 'grid',
+      });
     }
   }
 
@@ -4479,8 +4671,214 @@ class BarzunkoApp {
     );
   }
 
+  getScheduleViewMode(context) {
+    const key = context === 'staff' ? 'staff' : 'admin';
+    const mode = this.scheduleViewModes?.[key];
+    return mode === 'grid' ? 'grid' : 'reservations';
+  }
+
+  getScheduleGridDensity(context) {
+    const key = context === 'staff' ? 'staff' : 'admin';
+    const density = this.scheduleGridDensity?.[key];
+    return density === 'full' ? 'full' : 'booked';
+  }
+
+  setScheduleViewMode(context, mode) {
+    const key = context === 'staff' ? 'staff' : 'admin';
+    const nextMode = mode === 'grid' ? 'grid' : 'reservations';
+    if (!this.scheduleViewModes) {
+      this.scheduleViewModes = { admin: 'reservations', staff: 'reservations' };
+    }
+    this.scheduleViewModes[key] = nextMode;
+    this.updateScheduleViewToggleState(key, nextMode);
+    this.updateScheduleControlVisibility(key);
+    const hadCache = !!this.scheduleRenderCache?.[
+      key === 'staff' ? 'staff-availability-grid' : 'admin-availability-grid'
+    ];
+    this.rerenderScheduleFromCache(key);
+    if (!hadCache) {
+      if (key === 'staff') {
+        this.staffFetchAvailability();
+      } else {
+        this.adminFetchAvailability();
+      }
+    }
+  }
+
+  setScheduleGridDensity(context, density) {
+    const key = context === 'staff' ? 'staff' : 'admin';
+    const nextDensity = density === 'full' ? 'full' : 'booked';
+    if (!this.scheduleGridDensity) {
+      this.scheduleGridDensity = { admin: 'booked', staff: 'booked' };
+    }
+    this.scheduleGridDensity[key] = nextDensity;
+    this.updateScheduleGridDensityToggleState(key, nextDensity);
+    const hadCache = !!this.scheduleRenderCache?.[
+      key === 'staff' ? 'staff-availability-grid' : 'admin-availability-grid'
+    ];
+    this.rerenderScheduleFromCache(key);
+    if (!hadCache) {
+      if (key === 'staff') {
+        this.staffFetchAvailability();
+      } else {
+        this.adminFetchAvailability();
+      }
+    }
+  }
+
+  updateScheduleViewToggleState(context, mode) {
+    const selector = `[data-schedule-context="${context}"][data-schedule-view]`;
+    document.querySelectorAll(selector).forEach((btn) => {
+      const isActive = btn.getAttribute('data-schedule-view') === mode;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  updateScheduleGridDensityToggleState(context, density) {
+    const selector = `[data-grid-context="${context}"][data-grid-density]`;
+    document.querySelectorAll(selector).forEach((btn) => {
+      const isActive = btn.getAttribute('data-grid-density') === density;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  updateScheduleControlVisibility(context) {
+    const isGrid = this.getScheduleViewMode(context) === 'grid';
+    const selector = `.grid-density-toggle[data-grid-context="${context}"]`;
+    document.querySelectorAll(selector).forEach((group) => {
+      group.classList.toggle('hidden', !isGrid);
+    });
+  }
+
+  rerenderScheduleFromCache(context) {
+    const containerId = context === 'staff' ? 'staff-availability-grid' : 'admin-availability-grid';
+    const cache = this.scheduleRenderCache?.[containerId];
+    if (!cache) return;
+    this.adminRenderAvailabilityGrid(cache.times, cache.availability, {
+      ...cache.options,
+      containerId,
+      context,
+      viewMode: this.getScheduleViewMode(context),
+    });
+  }
+
+  adminBuildReservationBoard(columns, assignments, context) {
+    const dateStr =
+      context === 'staff'
+        ? this.staffSelectedDate || this.adminFormatYMD(new Date())
+        : this.adminSelectedDate || this.adminFormatYMD(new Date());
+    const escapeHtml = (value) =>
+      String(value == null ? '' : value).replace(/[&<>"']/g, (char) => {
+        const entities = {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        };
+        return entities[char] || char;
+      });
+    const dateLabel = this.formatDateDisplay(dateStr, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+
+    let totalBookings = 0;
+    const roomCards = columns
+      .map((col) => {
+        const entries = Array.isArray(assignments[col.id]) ? assignments[col.id] : [];
+        const bookingEntries = entries
+          .filter((entry) => entry && entry.booking)
+          .slice()
+          .sort((a, b) => Number(a.startMinutes || 0) - Number(b.startMinutes || 0));
+
+        totalBookings += bookingEntries.length;
+
+        const cardItems = bookingEntries
+          .map((entry) => {
+            const booking = entry.booking || {};
+            const customer = booking.customer || booking.customerInfo || {};
+            const name = [customer.firstName, customer.lastName]
+              .map((part) => String(part || '').trim())
+              .filter(Boolean)
+              .join(' ') ||
+              customer.email ||
+              booking.id ||
+              'Booking';
+            const party = Number(booking.partySize) ? `${Number(booking.partySize)} ppl` : '';
+            const phone = customer.phone || '';
+            const start = booking.startTime || this.minutesToTimeString(entry.startMinutes || 0);
+            const end =
+              booking.endTime ||
+              this.adminComputeEndTime(start, Number(booking.duration) || 1) ||
+              this.minutesToTimeString(entry.endMinutes || 0);
+            const rawStatus = String(booking.status || 'pending').toLowerCase();
+            const statusSlug = rawStatus === 'canceled' ? 'cancelled' : rawStatus;
+            const statusLabel = statusSlug.charAt(0).toUpperCase() + statusSlug.slice(1);
+            const bookingId = booking.id ? String(booking.id) : '';
+            const canModify = context === 'admin' && Boolean(bookingId);
+            const special =
+              booking.customer?.specialRequests || booking.customerInfo?.specialRequests || '';
+            const specialTrimmed = special.length > 100 ? `${special.slice(0, 97)}...` : special;
+
+            let meta = `${this.formatTime(start)} - ${this.formatTime(end)}`;
+            if (party) meta += ` | ${party}`;
+            if (phone) meta += ` | ${phone}`;
+
+            return `
+              <article
+                class="reservation-item reservation-item--${escapeHtml(statusSlug)}${canModify ? ' reservation-item--interactive' : ''}"
+                ${canModify ? `data-booking-id="${escapeHtml(bookingId)}" tabindex="0" role="button"` : ''}
+              >
+                <div class="reservation-item__top">
+                  <span class="reservation-item__name">${escapeHtml(name)}</span>
+                  <span class="reservation-item__status">${escapeHtml(statusLabel)}</span>
+                </div>
+                <div class="reservation-item__meta">${escapeHtml(meta)}</div>
+                ${specialTrimmed ? `<div class="reservation-item__note">${escapeHtml(specialTrimmed)}</div>` : ''}
+              </article>
+            `;
+          })
+          .join('');
+
+        const roomCountLabel = `${bookingEntries.length} booking${bookingEntries.length === 1 ? '' : 's'}`;
+        const bodyHtml =
+          cardItems ||
+          '<div class="reservation-item reservation-item--empty"><span>No reservations</span></div>';
+
+        return `
+          <section class="reservation-room">
+            <div class="reservation-room__header">
+              <div class="reservation-room__title-wrap">
+                <div class="reservation-room__label">${escapeHtml(col.label)}</div>
+                <h3 class="reservation-room__title">${escapeHtml(col.name)}</h3>
+              </div>
+              <div class="reservation-room__count">${escapeHtml(roomCountLabel)}</div>
+            </div>
+            <div class="reservation-room__list">${bodyHtml}</div>
+          </section>
+        `;
+      })
+      .join('');
+
+    const summaryText = `${dateLabel} | ${totalBookings} reservation${totalBookings === 1 ? '' : 's'}`;
+
+    return `
+      <div class="reservation-board">
+        <div class="reservation-board__summary">${escapeHtml(summaryText)}</div>
+        <div class="reservation-board__grid">${roomCards}</div>
+      </div>
+    `;
+  }
+
   adminRenderAvailabilityGrid(times, availability, options = {}) {
     const containerId = options.containerId || 'admin-availability-grid';
+    const context =
+      options.context || (containerId === 'staff-availability-grid' ? 'staff' : 'admin');
+    const viewMode = options.viewMode || this.getScheduleViewMode(context);
     const container = document.getElementById(containerId);
     if (!container) return;
     const columns = options.columns || this.adminRoomColumns || [];
@@ -4489,10 +4887,81 @@ class BarzunkoApp {
       return;
     }
 
-    const rows = this.adminBuildGridTimes(times);
     const availabilityMap = availability && typeof availability === 'object' ? availability : {};
     const baseAssignments = options.assignments || this.adminGridAssignments || {};
     const assignments = { ...availabilityMap, ...baseAssignments };
+    this.scheduleRenderCache[containerId] = {
+      times,
+      availability,
+      options: {
+        ...options,
+        containerId,
+        context,
+        columns,
+        assignments: baseAssignments,
+      },
+    };
+    this.updateScheduleViewToggleState(context, viewMode);
+    this.updateScheduleControlVisibility(context);
+    const gridDensity = options.gridDensity || this.getScheduleGridDensity(context);
+    this.updateScheduleGridDensityToggleState(context, gridDensity);
+
+    if (viewMode === 'reservations') {
+      container.innerHTML = this.adminBuildReservationBoard(columns, assignments, context);
+      if (context === 'admin' && !container.dataset.reservationTapBound) {
+        container.addEventListener('click', (event) => {
+          const card = event.target.closest('.reservation-item--interactive[data-booking-id]');
+          if (!card || !container.contains(card)) return;
+          const bookingId = card.getAttribute('data-booking-id');
+          if (!bookingId) return;
+          this.adminOpenModifyModal(bookingId);
+        });
+
+        container.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          const card = event.target.closest('.reservation-item--interactive[data-booking-id]');
+          if (!card || !container.contains(card)) return;
+          const bookingId = card.getAttribute('data-booking-id');
+          if (!bookingId) return;
+          event.preventDefault();
+          this.adminOpenModifyModal(bookingId);
+        });
+
+        container.dataset.reservationTapBound = '1';
+      }
+      return;
+    }
+
+    const rows = this.adminBuildGridTimes(times);
+    const bookingEntries = columns.flatMap((col) =>
+      (assignments[col.id] || []).filter((entry) => entry && entry.booking),
+    );
+    let rowsToRender = rows;
+    if (gridDensity === 'booked') {
+      if (!bookingEntries.length) {
+        container.innerHTML =
+          '<div class="grid-empty-state">No reservations for this date. Switch to Full Grid to view all available slots.</div>';
+        return;
+      }
+      const paddingMinutes = this.adminScheduleIncrementMinutes || 30;
+      rowsToRender = rows.filter((row) =>
+        bookingEntries.some(
+          (entry) =>
+            row.startMinutes < Number(entry.endMinutes || 0) + paddingMinutes &&
+            row.endMinutes > Number(entry.startMinutes || 0) - paddingMinutes,
+        ),
+      );
+      if (!rowsToRender.length) {
+        rowsToRender = rows;
+      }
+    }
+
+    const columnStates = {};
+    columns.forEach((col) => {
+      const entries = Array.isArray(assignments[col.id]) ? assignments[col.id].slice() : [];
+      entries.sort((a, b) => Number(a.startMinutes || 0) - Number(b.startMinutes || 0));
+      columnStates[col.id] = { entries, index: 0 };
+    });
 
     let headerHtml =
       '<table class="admin-schedule-table admin-schedule-header"><thead><tr><th class="time-head">Time</th>';
@@ -4505,7 +4974,7 @@ class BarzunkoApp {
       '<div class="admin-schedule-body-scroll"><table class="admin-schedule-table admin-schedule-body"><tbody>';
 
     const rowSpanTracker = {};
-    rows.forEach((row) => {
+    rowsToRender.forEach((row) => {
       html += `<tr><td class="time-cell">${row.label}</td>`;
       for (let i = 0; i < columns.length; i += 1) {
         const col = columns[i];
@@ -4515,12 +4984,19 @@ class BarzunkoApp {
           continue;
         }
 
-        const columnEntries = assignments[colId] || [];
-        const bookingEntry = this.adminFindBookingForSlot(
-          columnEntries,
-          row.startMinutes,
-          row.endMinutes,
-        );
+        const colState = columnStates[colId] || { entries: [], index: 0 };
+        while (
+          colState.index < colState.entries.length &&
+          Number(colState.entries[colState.index]?.endMinutes || 0) <= row.startMinutes
+        ) {
+          colState.index += 1;
+        }
+        const candidate =
+          colState.index < colState.entries.length ? colState.entries[colState.index] : null;
+        const bookingEntry =
+          candidate && row.startMinutes < candidate.endMinutes && row.endMinutes > candidate.startMinutes
+            ? candidate
+            : null;
         if (bookingEntry) {
           const startIsRowStart =
             Math.round(row.startMinutes) === Math.round(bookingEntry.startMinutes);
@@ -4582,8 +5058,7 @@ class BarzunkoApp {
           }
           html += '</div></div></td>';
         } else {
-          html +=
-            '<td><div class="slot available" data-tooltip="Available"><span>Available</span></div></td>';
+          html += '<td><div class="slot available" data-tooltip="Available"><span class="sr-only">Available</span></div></td>';
         }
       }
       html += '</tr>';
@@ -4591,17 +5066,21 @@ class BarzunkoApp {
     html += '</tbody></table></div>';
     container.innerHTML = headerHtml + html;
 
-    // Mobile: show tooltip content on tap
-    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
-      const slots = container.querySelectorAll('.slot[data-tooltip]');
-      slots.forEach((slot) => {
-        slot.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const message = slot.getAttribute('data-tooltip') || slot.textContent || 'Details';
-          this.showNotification(message, 'info');
-        });
+    // Mobile: show tooltip content on tap (single delegated listener)
+    if (
+      window.matchMedia &&
+      window.matchMedia('(max-width: 768px)').matches &&
+      !container.dataset.slotTapBound
+    ) {
+      container.addEventListener('click', (e) => {
+        const slot = e.target.closest('.slot[data-tooltip]');
+        if (!slot || !container.contains(slot)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const message = slot.getAttribute('data-tooltip') || slot.textContent || 'Details';
+        this.showNotification(message, 'info');
       });
+      container.dataset.slotTapBound = '1';
     }
   }
 
@@ -4961,6 +5440,48 @@ class BarzunkoApp {
     const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
     const dd = String(dateObj.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
+  }
+
+  getTodayDateString() {
+    return this.formatDateToYMD(new Date());
+  }
+
+  isCustomerOnlineBookableDate(dateStr) {
+    if (!dateStr) return false;
+    const today = this.getTodayDateString();
+    if (!today) return false;
+    return dateStr > today;
+  }
+
+  renderSameDayBookingNotice(container) {
+    if (!container) return;
+    container.innerHTML = '';
+
+    const note = document.createElement('div');
+    note.className = 'booking-availability-note';
+
+    const title = document.createElement('h4');
+    title.className = 'booking-availability-note__title';
+    title.textContent = 'Same-day online booking is unavailable';
+
+    const body = document.createElement('p');
+    body.className = 'booking-availability-note__body';
+    body.textContent =
+      'We may still have rooms open today. Please call us directly and our team can check live availability for you.';
+
+    note.appendChild(title);
+    note.appendChild(body);
+
+    const phone = (this.businessData?.phone || '').trim();
+    if (phone) {
+      const link = document.createElement('a');
+      link.className = 'booking-availability-note__phone';
+      link.href = `tel:${phone.replace(/[^+\d]/g, '')}`;
+      link.textContent = phone;
+      note.appendChild(link);
+    }
+
+    container.appendChild(note);
   }
 
   shiftDate(dateStr, days) {

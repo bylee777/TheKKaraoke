@@ -9,9 +9,9 @@
       name="description"
       content="Book premium karaoke rooms at BarZunko Toronto. State-of-the-art sound systems, neon lighting, and unforgettable nights await!"
     />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=20260225-12" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Bricolage+Grotesque:wght@500;600;700;800&amp;display=swap"
       rel="stylesheet"
     />
     <link
@@ -24,6 +24,15 @@
     <nav class="navbar">
       <div class="nav-container">
         <div class="nav-brand">
+          <a
+            class="location-switch"
+            href="https://wearethekkaraoke.as.me/schedule/6914a657"
+            aria-label="Switch to Christie location"
+            title="Switch to Christie location"
+          >
+            <i class="fas fa-location-arrow"></i>
+            <span>Christie</span>
+          </a>
           <img src="logo.png" alt="Barjunko logo" class="brand-logo" width="120" height="120" />
           <span class="brand-text">BarZunko</span>
         </div>
@@ -42,6 +51,11 @@
       </div>
       <div class="mobile-menu">
         <ul class="mobile-nav-list">
+          <li>
+            <a href="https://wearethekkaraoke.as.me/schedule/6914a657">
+              Christie Location
+            </a>
+          </li>
           <li><a href="barzunko.html">Home</a></li>
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
@@ -77,8 +91,7 @@
               perfect karaoke night at Toronto's most electrifying venue.
             </p>
             <div class="hero-buttons">
-              <a href="booking.html" class="btn btn--primary btn-
-              -lg glow-btn">
+              <a href="booking.html" class="btn btn--primary btn--lg glow-btn">
                 <i class="fas fa-microphone"></i>
                 Book Now
               </a>
@@ -112,6 +125,54 @@
           <i class="fas fa-microphone-alt floating-icon"></i>
           <i class="fas fa-headphones floating-icon"></i>
           <i class="fas fa-guitar floating-icon"></i>
+        </div>
+      </section>
+
+      <!-- Barzunko Specials -->
+      <section class="specials-highlight" id="specials">
+        <div class="container">
+          <div class="specials-header">
+            <p class="specials-kicker">Yonge &amp; Bloor Location Only</p>
+            <h2 class="section-title">This Week's <span class="neon-text">Specials</span></h2>
+            <p class="specials-subtitle">
+              Sunday to Thursday promotions available only at Barzunko (675 Yonge St Basement).
+            </p>
+          </div>
+          <div class="specials-grid">
+            <article class="special-card special-card--karaoke">
+              <div class="special-card__poster special-poster--karaoke" aria-label="All You Can Karaoke special poster"></div>
+              <div class="special-card__content">
+                <div class="special-card__pill">Sunday-Thursday</div>
+                <h3>All You Can Karaoke</h3>
+                <p class="special-card__price">$19.99 <span>per person</span></p>
+                <p class="special-card__meta">
+                  Small room min 2 people. Medium room min 5 people. 20$ minimum order per person. Till 1:30 AM.
+                </p>
+              </div>
+            </article>
+
+            <article class="special-card special-card--asahi">
+              <div class="special-card__poster special-poster--asahi" aria-label="Asahi draft special poster"></div>
+              <div class="special-card__content">
+                <div class="special-card__pill">Sunday-Thursday</div>
+                <h3>Asahi Draft</h3>
+                <p class="special-card__price">$4.99 <span>limited time</span></p>
+                <p class="special-card__meta">
+                  Available during promo nights at Barzunko Yonge &amp; Bloor.
+                </p>
+              </div>
+            </article>
+          </div>
+          <div class="specials-footer">
+            <a href="booking.html" class="btn btn--primary">
+              <i class="fas fa-calendar-check"></i>
+              Book Barzunko Now
+            </a>
+            <a href="tel:+14169680909" class="btn btn--outline">
+              <i class="fas fa-phone"></i>
+              Call (416) 968-0909
+            </a>
+          </div>
         </div>
       </section>
 
@@ -312,7 +373,7 @@
     <script src="https://js.stripe.com/v3/"></script>
 
     <script src="js/firebase-init.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=20260225-12"></script>
     <script>
       // Global: force hourly time slots across the app
       if (window.app) {

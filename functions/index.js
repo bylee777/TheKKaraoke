@@ -467,6 +467,7 @@ function sanitizeBookingSnapshot(doc) {
       email: booking.customerInfo?.email || '',
       phone: booking.customerInfo?.phone || '',
       specialRequests: booking.customerInfo?.specialRequests || '',
+      marketingOptIn: booking.customerInfo?.marketingOptIn === true,
     },
     canCancel,
     canRebook,
@@ -474,6 +475,42 @@ function sanitizeBookingSnapshot(doc) {
     startDateTime: startDate.toISOString(),
     createdAt: booking.createdAt?.toDate ? booking.createdAt.toDate().toISOString() : null,
     updatedAt: booking.updatedAt?.toDate ? booking.updatedAt.toDate().toISOString() : null,
+  };
+}
+
+function sanitizeGuestBookingSnapshot(doc) {
+  const full = sanitizeBookingSnapshot(doc);
+  if (!full) {
+    return null;
+  }
+  return {
+    id: full.id,
+    roomId: full.roomId,
+    roomName: full.roomName,
+    date: full.date,
+    businessDate: full.businessDate,
+    startTime: full.startTime,
+    endTime: full.endTime,
+    duration: full.duration,
+    status: full.status,
+    paymentStatus: full.paymentStatus,
+    totalCost: full.totalCost,
+    totalCostWithTax: full.totalCostWithTax,
+    depositAmount: full.depositAmount,
+    remainingBalance: full.remainingBalance,
+    partySize: full.partySize,
+    customer: {
+      firstName: full.customer?.firstName || '',
+      lastName: full.customer?.lastName || '',
+      email: full.customer?.email || '',
+      marketingOptIn: full.customer?.marketingOptIn === true,
+    },
+    canCancel: full.canCancel,
+    canRebook: full.canRebook,
+    cancelableUntil: full.cancelableUntil,
+    startDateTime: full.startDateTime,
+    createdAt: full.createdAt,
+    updatedAt: full.updatedAt,
   };
 }
 
@@ -864,6 +901,7 @@ async function createBookingInternal(params) {
     lastName: customerInfo?.lastName ? customerInfo.lastName.trim() : customerInfo?.lastName || '',
     email: normalizeEmail(customerInfo?.email),
     phone: customerInfo?.phone ? customerInfo.phone.trim() : customerInfo?.phone || '',
+    marketingOptIn: customerInfo?.marketingOptIn === true,
   };
 
   // Compute the end time based on start time and duration
@@ -1111,12 +1149,11 @@ async function cancelBookingWithoutRefund(bookingId) {
 /**
  * Callable Cloud Function: createBooking
  *
- * Creates a booking with deposit and writes it to Firestore. Deposit amounts
- * are calculated server-side based on room type and day of week. Anyone can
- * invoke this function (authentication is optional) because all writes are
- * validated server-side.
+ * Admin-only booking creation path. This writes a pending booking and creates
+ * a PaymentIntent in one call.
  */
 exports.createBooking = secureFunctions.https.onCall(async (data, context) => {
+  requireAdmin(context);
   const { roomId, date, startTime, duration, totalCost, customerInfo, partySize } = data || {};
   const result = await createBookingInternal({
     roomId,
@@ -1339,6 +1376,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
       firstName: customerInfo?.firstName ? customerInfo.firstName.trim() : '',
       lastName: customerInfo?.lastName ? customerInfo.lastName.trim() : '',
       phone: customerInfo?.phone ? customerInfo.phone.trim() : '',
+      marketingOptIn: customerInfo?.marketingOptIn === true,
     },
     paymentIntentId: intent.id,
     paymentStatus: intent.status,
@@ -1397,54 +1435,34 @@ exports.lookupBooking = secureFunctions.https.onCall(async (data) => {
   const bookingRefRaw = typeof data?.bookingRef === 'string' ? data.bookingRef.trim() : '';
   const emailNormalized = normalizeEmail(data?.email);
 
-  if (!emailNormalized) {
+  if (!bookingRefRaw || !emailNormalized) {
     throw new functions.https.HttpsError(
       'invalid-argument',
-      'Email is required to look up a booking.',
+      'bookingRef and email are required to look up a booking.',
     );
   }
 
-  const results = [];
-  const refLower = bookingRefRaw.toLowerCase();
-
-  const emailQuerySnapshot = await db
-    .collection('bookings')
-    .where('customerInfo.email', '==', emailNormalized)
-    .get();
-
-  emailQuerySnapshot.forEach((doc) => {
-    if (refLower && doc.id.toLowerCase() !== refLower) {
-      return;
-    }
-    const sanitized = sanitizeBookingSnapshot(doc);
-    if (sanitized) {
-      results.push(sanitized);
-    }
-  });
-
-  if (results.length === 0 && refLower) {
-    const doc = await db.collection('bookings').doc(bookingRefRaw).get();
-    if (doc.exists) {
-      const booking = doc.data();
-      if (normalizeEmail(booking.customerInfo?.email) === emailNormalized) {
-        const sanitized = sanitizeBookingSnapshot(doc);
-        if (sanitized) {
-          results.push(sanitized);
-        }
-      }
-    }
+  const doc = await db.collection('bookings').doc(bookingRefRaw).get();
+  if (!doc.exists) {
+    return { bookings: [] };
   }
 
-  return { bookings: results };
+  const booking = doc.data();
+  if (normalizeEmail(booking.customerInfo?.email) !== emailNormalized) {
+    return { bookings: [] };
+  }
+
+  const sanitized = sanitizeGuestBookingSnapshot(doc);
+  return { bookings: sanitized ? [sanitized] : [] };
 });
 
-exports.getRoomAvailability = secureFunctions.https.onCall(async (data) => {
+exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context) => {
   const { date, startTime } = data || {};
   const duration = Number(data?.duration);
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
   const partySize = data?.partySize;
-  const allowPast = data?.allowPast === true;
+  const allowPast = data?.allowPast === true && hasStaffAccess(context);
   const overrideWalkInHold = data?.overrideWalkInHold === true;
   const roomIds =
     Array.isArray(data?.roomIds) && data.roomIds.length > 0
@@ -1512,11 +1530,11 @@ exports.getRoomAvailability = secureFunctions.https.onCall(async (data) => {
   return { availability };
 });
 
-exports.getMaxAvailableDuration = secureFunctions.https.onCall(async (data) => {
+exports.getMaxAvailableDuration = secureFunctions.https.onCall(async (data, context) => {
   const { roomId, date, startTime } = data || {};
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
-  const allowPast = data?.allowPast === true;
+  const allowPast = data?.allowPast === true && hasStaffAccess(context);
   if (!roomId || !date || !startTime) {
     throw new functions.https.HttpsError(
       'invalid-argument',
@@ -1781,6 +1799,9 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
         lastName: customerInfo?.lastName ? String(customerInfo.lastName).trim() : '',
         email: normalizeEmail(customerInfo?.email),
         phone: customerInfo?.phone ? String(customerInfo.phone).trim() : '',
+        ...(Object.prototype.hasOwnProperty.call(customerInfo, 'marketingOptIn')
+          ? { marketingOptIn: customerInfo?.marketingOptIn === true }
+          : {}),
       }
     : undefined;
 
@@ -2041,7 +2062,7 @@ exports.cancelBookingGuest = secureFunctions.https.onCall(async (data) => {
 
   return {
     message: 'Booking cancelled',
-    booking: sanitizeBookingSnapshot(updatedSnapshot),
+    booking: sanitizeGuestBookingSnapshot(updatedSnapshot),
   };
 });
 
@@ -2054,12 +2075,6 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
   const requestedRoomId = typeof data?.roomId === 'string' ? data.roomId.trim() : '';
   const requestedPartySize = Number(data?.partySize);
   const customerInfo = data?.customerInfo || null;
-  const totalCost = Number(data?.totalCost);
-  const depositAmountOverride = Number(data?.depositAmount);
-  const remainingBalance = Number(data?.remainingBalance);
-  const extraGuestFee = Number(data?.extraGuestFee);
-  const bookingFee = Number(data?.bookingFee);
-  const requiredPurchaseAmount = Number(data?.requiredPurchaseAmount);
 
   if (
     !bookingId ||
@@ -2103,7 +2118,6 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
     );
   }
 
-  const newStart = combineDateTime(newDate, newStartTime);
   ensureNotInPast(newDate, newStartTime);
 
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
@@ -2123,6 +2137,9 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
           : booking.customerInfo?.lastName || '',
         email: normalizeEmail(customerInfo?.email) || normalizeEmail(booking.customerInfo?.email),
         phone: customerInfo?.phone ? customerInfo.phone.trim() : booking.customerInfo?.phone || '',
+        marketingOptIn: Object.prototype.hasOwnProperty.call(customerInfo, 'marketingOptIn')
+          ? customerInfo?.marketingOptIn === true
+          : booking.customerInfo?.marketingOptIn === true,
       }
     : booking.customerInfo;
 
@@ -2165,30 +2182,6 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
       updatedAt: FieldValue.serverTimestamp(),
     };
 
-    if (Number.isFinite(totalCost)) {
-      updatePayload.totalCost = totalCost;
-    }
-
-    if (Number.isFinite(depositAmountOverride)) {
-      updatePayload.depositAmount = depositAmountOverride;
-    }
-
-    if (Number.isFinite(remainingBalance)) {
-      updatePayload.remainingBalance = remainingBalance;
-    }
-
-    if (Number.isFinite(extraGuestFee)) {
-      updatePayload.extraGuestFee = extraGuestFee;
-    }
-
-    if (Number.isFinite(bookingFee)) {
-      updatePayload.bookingFee = bookingFee;
-    }
-
-    if (Number.isFinite(requiredPurchaseAmount)) {
-      updatePayload.requiredPurchaseAmount = requiredPurchaseAmount;
-    }
-
     transaction.update(bookingRef, updatePayload);
   });
 
@@ -2202,7 +2195,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
 
   return {
     message: 'Booking updated',
-    booking: sanitizeBookingSnapshot(updatedSnapshot),
+    booking: sanitizeGuestBookingSnapshot(updatedSnapshot),
   };
 });
 
@@ -2351,6 +2344,28 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
   if (!intent || !intent.id) {
     return res.json({ received: true });
   }
+  const eventId = typeof event.id === 'string' ? event.id : '';
+  if (!eventId) {
+    return res.status(400).send('Webhook missing event id');
+  }
+  const eventRef = db.collection('stripeWebhookEvents').doc(eventId);
+  try {
+    await eventRef.create({
+      status: 'processing',
+      type: event.type || null,
+      intentId: intent.id,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    const alreadyExists =
+      err?.code === 6 || err?.code === '6' || err?.code === 'already-exists';
+    if (alreadyExists) {
+      return res.json({ received: true });
+    }
+    console.error('[stripeWebhook] Failed to acquire event lock', eventId, err);
+    return res.status(500).send('Webhook lock error');
+  }
 
   async function updateBookingPayment(status) {
     const ref = await findBookingRefByPaymentIntentId(intent.id);
@@ -2399,7 +2414,20 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
       default:
         break;
     }
+    await eventRef.set(
+      {
+        status: 'processed',
+        processedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
   } catch (err) {
+    try {
+      await eventRef.delete();
+    } catch (unlockErr) {
+      console.error('[stripeWebhook] Failed to release event lock', eventId, unlockErr);
+    }
     console.error('[stripeWebhook] Handler failed', event.type, intent.id, err);
     return res.status(500).send('Webhook handler error');
   }

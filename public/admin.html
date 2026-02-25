@@ -6,9 +6,9 @@
     <title>Admin Dashboard | Barzunko</title>
     <link rel="icon" type="image/x-icon" href="image/logo.ico" />
     <meta name="description" content="Secure login and booking management for Barzunko staff." />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=20260225-12" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Bricolage+Grotesque:wght@500;600;700;800&amp;display=swap"
       rel="stylesheet"
     />
     <link
@@ -21,6 +21,15 @@
     <nav class="navbar">
       <div class="nav-container">
         <div class="nav-brand">
+          <a
+            class="location-switch"
+            href="https://wearethekkaraoke.as.me/schedule/6914a657"
+            aria-label="Switch to Christie location"
+            title="Switch to Christie location"
+          >
+            <i class="fas fa-location-arrow"></i>
+            <span>Christie</span>
+          </a>
           <i class="fas fa-microphone brand-icon"></i>
           <span class="brand-text">Barzunko</span>
         </div>
@@ -39,6 +48,11 @@
       </div>
       <div class="mobile-menu">
         <ul class="mobile-nav-list">
+          <li>
+            <a href="https://wearethekkaraoke.as.me/schedule/6914a657">
+              Christie Location
+            </a>
+          </li>
           <li><a href="barzunko.html">Home</a></li>
           <li><a href="booking.html">Book Now</a></li>
           <li><a href="manage.html">Manage Booking</a></li>
@@ -132,13 +146,50 @@
             </div>
             <div class="dashboard-content">
               <div class="availability-table">
-                <div class="availability-table__header">
+                <div class="availability-table__header availability-table__header--stacked">
                   <h2>Daily Schedule</h2>
                   <div class="availability-table__actions">
-                    <button class="btn btn--outline" id="admin-export-schedule">
-                      <i class="fas fa-file-export"></i>
-                      Export CSV
-                    </button>
+                    <div class="schedule-view-toggle" role="group" aria-label="Schedule view">
+                      <button
+                        type="button"
+                        class="btn btn--outline btn--sm is-active"
+                        data-schedule-context="admin"
+                        data-schedule-view="reservations"
+                      >
+                        Reservations
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn--outline btn--sm"
+                        data-schedule-context="admin"
+                        data-schedule-view="grid"
+                      >
+                        Grid
+                      </button>
+                    </div>
+                    <div
+                      class="grid-density-toggle hidden"
+                      data-grid-context="admin"
+                      role="group"
+                      aria-label="Grid density"
+                    >
+                      <button
+                        type="button"
+                        class="btn btn--outline btn--sm is-active"
+                        data-grid-context="admin"
+                        data-grid-density="booked"
+                      >
+                        Focus Booked
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn--outline btn--sm"
+                        data-grid-context="admin"
+                        data-grid-density="full"
+                      >
+                        Full Grid
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div class="admin-availability-wrapper">
@@ -147,13 +198,27 @@
               </div>
               <div class="bookings-table">
                 <h2>Recent Bookings</h2>
-                <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
-  <button class="btn btn--outline" id="admin-prev-day" title="Previous day"><i class="fas fa-chevron-left"></i></button>
-  <input type="date" id="admin-date" class="form-control" style="width:150px" />
-  <button class="btn btn--outline" id="admin-next-day" title="Next day"><i class="fas fa-chevron-right"></i></button>
-  <button class="btn btn--secondary" id="admin-today">Today</button>
-</div>
-<div class="table-container">
+                <div class="bookings-date-toolbar">
+                  <button
+                    class="btn btn--outline bookings-date-toolbar__nav"
+                    id="admin-prev-day"
+                    title="Previous day"
+                  >
+                    <i class="fas fa-chevron-left"></i>
+                  </button>
+                  <input type="date" id="admin-date" class="form-control bookings-date-toolbar__date" />
+                  <button
+                    class="btn btn--outline bookings-date-toolbar__nav"
+                    id="admin-next-day"
+                    title="Next day"
+                  >
+                    <i class="fas fa-chevron-right"></i>
+                  </button>
+                  <button class="btn btn--secondary bookings-date-toolbar__today" id="admin-today">
+                    Today
+                  </button>
+                </div>
+                <div class="table-container">
                   <table id="bookings-table">
                     <thead>
                       <tr>
@@ -393,7 +458,7 @@
     <script src="js/firebase-init.js?v=2"></script>
 
     <!-- Your app code (must come AFTER the SDKs + initializer) -->
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=20260225-12"></script>
     <script>
       window.app.currentPage = 'admin';
       window.app.init();
