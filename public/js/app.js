@@ -1,6 +1,8 @@
 ﻿// Barzunko Karaoke Booking Application
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_ALLOWED_CHARS = /^[0-9+\-().\s]+$/;
+const CUSTOMER_MIN_ADVANCE_HOURS = 4;
+const HOURS_TO_MS = 60 * 60 * 1000;
 class BarzunkoApp {
   constructor() {
     this.currentPage = 'landing';
@@ -939,19 +941,18 @@ class BarzunkoApp {
           return false;
         }
 
-        if (!this.isCustomerOnlineBookableDate(this.selectedDate)) {
+        const selectedDateTime = new Date(`${this.selectedDate}T${this.selectedTime}`);
+        const bookingCutoff = this.getCustomerAdvanceBookingCutoff();
+
+        if (
+          !this.isCustomerOnlineBookableDate(this.selectedDate) ||
+          Number.isNaN(selectedDateTime.getTime()) ||
+          selectedDateTime < bookingCutoff
+        ) {
           this.showNotification(
-            `Online booking starts from tomorrow. For same-day availability, please call ${this.businessData.phone}.`,
+            `Bookings must be made at least ${this.getCustomerAdvanceNoticeText()} in advance.`,
             'error',
           );
-          return false;
-        }
-
-        const selectedDateTime = new Date(`${this.selectedDate}T${this.selectedTime}`);
-        const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
-
-        if (selectedDateTime < sixHoursFromNow) {
-          this.showNotification('Bookings must be made at least 6 hours in advance', 'error');
           return false;
         }
 
@@ -1191,7 +1192,7 @@ class BarzunkoApp {
     // Get first day of month and number of days
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    const bookingCutoff = this.getCustomerAdvanceBookingCutoff();
     const todayDateString = this.getTodayDateString();
 
     // Add empty cells for days before month starts
@@ -1216,12 +1217,12 @@ class BarzunkoApp {
       const dayDateString = this.formatDateToYMD(dayDate);
       if (!dayDateString) continue;
 
-      const isPastOrToday = dayDateString <= todayDateString;
+      const isPastDate = dayDateString < todayDateString;
       const isSameDay = dayDateString === todayDateString;
 
       // Check if day is available
       let hasAvailableSlot = false;
-      if (!isPastOrToday) {
+      if (!isPastDate) {
         const cachedSlots =
           cacheKey && this.availableSlotsCache[cacheKey]
             ? this.availableSlotsCache[cacheKey][dayDateString]
@@ -1235,7 +1236,7 @@ class BarzunkoApp {
             const slotDateTime = new Date(dayDate);
             slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
             const isAvailable = typeof slot === 'object' ? slot.available !== false : true;
-            return isAvailable && slotDateTime >= sixHoursFromNow;
+            return isAvailable && slotDateTime >= bookingCutoff;
           });
         } else {
           const dayTimeSlots = this.getTimeSlotsForDate(
@@ -1246,7 +1247,7 @@ class BarzunkoApp {
             const [slotHours, slotMinutes] = slot.split(':').map(Number);
             const slotDateTime = new Date(dayDate);
             slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
-            return slotDateTime >= sixHoursFromNow;
+            return slotDateTime >= bookingCutoff;
           });
         }
       }
@@ -1260,7 +1261,7 @@ class BarzunkoApp {
         dayElement.classList.add('disabled');
         if (isSameDay) {
           dayElement.classList.add('same-day-locked');
-          dayElement.title = 'Online same-day booking is unavailable. Please call us for availability.';
+          dayElement.title = `Online bookings require at least ${this.getCustomerAdvanceNoticeText()} notice.`;
         }
       }
 
@@ -1290,7 +1291,7 @@ class BarzunkoApp {
       this.updateCalendar();
       this.updateTimeSlots();
       this.showNotification(
-        `Online booking starts from tomorrow. Same-day availability is by phone at ${this.businessData.phone}.`,
+        `Please choose a start time at least ${this.getCustomerAdvanceNoticeText()} from now.`,
         'warning',
       );
       return;
@@ -1329,7 +1330,7 @@ class BarzunkoApp {
 
     if (!this.isCustomerOnlineBookableDate(this.selectedDate)) {
       timeSlotsContainer.style.display = 'block';
-      this.renderSameDayBookingNotice(timeGrid);
+      this.renderAdvanceBookingNotice(timeGrid);
       return;
     }
 
@@ -1341,7 +1342,7 @@ class BarzunkoApp {
       console.warn('[booking] Unable to parse selected date', this.selectedDate);
       return;
     }
-    const sixHoursFromNow = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    const bookingCutoff = this.getCustomerAdvanceBookingCutoff();
 
     let slots = this.getTimeSlotsForDate(this.selectedDate, duration || 1);
     // Filter out slots that cannot fit within business hours for the chosen duration
@@ -1356,7 +1357,7 @@ class BarzunkoApp {
       const dt = new Date(selectedDateTime.getTime());
       const [h, m] = time.split(':').map(Number);
       dt.setHours(h, m, 0, 0);
-      return dt >= sixHoursFromNow;
+      return dt >= bookingCutoff;
     };
     const futureSlots = filteredSlots.filter(isFutureSlot);
     const cacheKey = this.getAvailabilityCacheKey(this.selectedRoom.id, duration);
@@ -1387,7 +1388,7 @@ class BarzunkoApp {
         timeSlot.className = 'time-slot';
         timeSlot.textContent = this.formatTime(time);
         // Check if time slot meets minimum notice requirement
-        if (slotDateTime >= sixHoursFromNow) {
+        if (slotDateTime >= bookingCutoff) {
           const isAvailable = typeof slot === 'object' ? slot.available !== false : true;
           if (isAvailable) {
             timeSlot.classList.add('available');
@@ -5446,14 +5447,22 @@ class BarzunkoApp {
     return this.formatDateToYMD(new Date());
   }
 
+  getCustomerAdvanceBookingCutoff() {
+    return new Date(Date.now() + CUSTOMER_MIN_ADVANCE_HOURS * HOURS_TO_MS);
+  }
+
+  getCustomerAdvanceNoticeText() {
+    return `${CUSTOMER_MIN_ADVANCE_HOURS} hours`;
+  }
+
   isCustomerOnlineBookableDate(dateStr) {
     if (!dateStr) return false;
     const today = this.getTodayDateString();
     if (!today) return false;
-    return dateStr > today;
+    return dateStr >= today;
   }
 
-  renderSameDayBookingNotice(container) {
+  renderAdvanceBookingNotice(container) {
     if (!container) return;
     container.innerHTML = '';
 
@@ -5462,12 +5471,12 @@ class BarzunkoApp {
 
     const title = document.createElement('h4');
     title.className = 'booking-availability-note__title';
-    title.textContent = 'Same-day online booking is unavailable';
+    title.textContent = `Online bookings require ${this.getCustomerAdvanceNoticeText()} notice`;
 
     const body = document.createElement('p');
     body.className = 'booking-availability-note__body';
     body.textContent =
-      'We may still have rooms open today. Please call us directly and our team can check live availability for you.';
+      `Please choose a start time at least ${this.getCustomerAdvanceNoticeText()} away, or call us directly and our team can check sooner availability.`;
 
     note.appendChild(title);
     note.appendChild(body);

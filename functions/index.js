@@ -384,9 +384,22 @@ function mediumInventoryPenalty(roomId, partySize) {
 
 const ACTIVE_BOOKING_STATUSES = ['confirmed', 'pending'];
 const CANCEL_WINDOW_HOURS = 48;
-const MIN_ADVANCE_HOURS = 6;
+const MIN_ADVANCE_HOURS = 4;
 
 const HOURS_TO_MS = 60 * 60 * 1000;
+
+function ensureMinimumAdvanceNotice(date, startTime, hours = MIN_ADVANCE_HOURS) {
+  const startDate = combineDateTime(date, startTime);
+  if (Number.isNaN(startDate.getTime())) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid date or time provided.');
+  }
+  if (startDate.getTime() - Date.now() < hours * HOURS_TO_MS) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      `Bookings must be made at least ${hours} hours in advance.`,
+    );
+  }
+}
 
 function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -1210,6 +1223,7 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
 
   ensureWithinBusinessHours(date, startTime, endTime);
   ensureNotInPast(date, startTime);
+  ensureMinimumAdvanceNotice(date, startTime);
 
   const businessDate = determineBusinessDate(date, startTime);
 
@@ -1301,6 +1315,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
 
   ensureWithinBusinessHours(date, startTime, endTime);
   ensureNotInPast(date, startTime);
+  ensureMinimumAdvanceNotice(date, startTime);
 
   const businessDate = determineBusinessDate(date, startTime);
   const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
@@ -1493,6 +1508,7 @@ exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context)
   ensureWithinBusinessHours(date, startTime, endTime);
   if (!allowPast) {
     ensureNotInPast(date, startTime);
+    ensureMinimumAdvanceNotice(date, startTime);
   }
 
   const businessDate = determineBusinessDate(date, startTime);
@@ -1549,6 +1565,7 @@ exports.getMaxAvailableDuration = secureFunctions.https.onCall(async (data, cont
 
   if (!allowPast) {
     ensureNotInPast(date, startTime);
+    ensureMinimumAdvanceNotice(date, startTime);
   }
 
   // For room types with multiple inventory, overlapping bookings on one room
@@ -2119,6 +2136,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
   }
 
   ensureNotInPast(newDate, newStartTime);
+  ensureMinimumAdvanceNotice(newDate, newStartTime);
 
   const { endTime } = computeEndTime(newDate, newStartTime, duration);
   ensureWithinBusinessHours(newDate, newStartTime, endTime);
