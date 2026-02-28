@@ -384,7 +384,7 @@ function mediumInventoryPenalty(roomId, partySize) {
 
 const ACTIVE_BOOKING_STATUSES = ['confirmed', 'pending'];
 const CANCEL_WINDOW_HOURS = 48;
-const MIN_ADVANCE_HOURS = 4;
+const MIN_ADVANCE_HOURS = 3;
 
 const HOURS_TO_MS = 60 * 60 * 1000;
 

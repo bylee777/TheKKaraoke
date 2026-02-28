@@ -1,7 +1,7 @@
 ﻿// Barzunko Karaoke Booking Application
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_ALLOWED_CHARS = /^[0-9+\-().\s]+$/;
-const CUSTOMER_MIN_ADVANCE_HOURS = 4;
+const CUSTOMER_MIN_ADVANCE_HOURS = 3;
 const HOURS_TO_MS = 60 * 60 * 1000;
 class BarzunkoApp {
   constructor() {
