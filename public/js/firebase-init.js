@@ -54,6 +54,30 @@
     console.error('[firebase-init] Failed to initialize Firebase app:', err);
   }
 
+  // ===== App Check (reCAPTCHA v3) =====
+  // Protects Cloud Functions from bots and unauthorized clients.
+  //
+  // SETUP REQUIRED (one-time, ~5 minutes):
+  //   1. Go to console.developers.google.com/apis/credentials and create a
+  //      reCAPTCHA v3 site key for your domain (thek-karaoke.web.app).
+  //   2. Replace 'REPLACE_WITH_YOUR_RECAPTCHA_V3_SITE_KEY' below with that key.
+  //   3. In Firebase Console → App Check, register your web app and click Enforce
+  //      under Cloud Functions. That's it — no backend code changes needed.
+  //
+  const RECAPTCHA_SITE_KEY = '6LfdKoIsAAAAAJviyXzyFgnu7-zeRiIMFkQRveN3';
+  const isEmulator = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (!isEmulator) {
+    try {
+      const appCheck = firebase.appCheck();
+      appCheck.activate(
+        new firebase.appCheck.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+        true, // auto-refresh tokens
+      );
+    } catch (err) {
+      console.warn('[firebase-init] App Check initialization failed:', err);
+    }
+  }
+
   let functions = null;
   try {
     functions = FUNCTIONS_REGION

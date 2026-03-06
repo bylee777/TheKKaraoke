@@ -1,7 +1,14 @@
 ﻿// Barzunko Karaoke Booking Application
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => {
+    const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return entities[char] || char;
+  });
+}
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_ALLOWED_CHARS = /^[0-9+\-().\s]+$/;
-const CUSTOMER_MIN_ADVANCE_HOURS = 3;
+const CUSTOMER_MIN_ADVANCE_HOURS = 4;
 const HOURS_TO_MS = 60 * 60 * 1000;
 class BarzunkoApp {
   constructor() {
@@ -2973,15 +2980,15 @@ class BarzunkoApp {
     confirmationDetails.innerHTML = `
             <div class="summary-row">
                 <span class="summary-label">Booking ID:</span>
-                <span class="summary-value">${this.bookingData.id}</span>
+                <span class="summary-value">${escapeHtml(this.bookingData.id)}</span>
             </div>
             <div class="summary-row">
                 <span class="summary-label">Customer:</span>
-                <span class="summary-value">${this.bookingData.customer.firstName} ${this.bookingData.customer.lastName}</span>
+                <span class="summary-value">${escapeHtml(this.bookingData.customer.firstName)} ${escapeHtml(this.bookingData.customer.lastName)}</span>
             </div>
             <div class="summary-row">
                 <span class="summary-label">Email:</span>
-                <span class="summary-value">${this.bookingData.customer.email}</span>
+                <span class="summary-value">${escapeHtml(this.bookingData.customer.email)}</span>
             </div>
             <div class="summary-row">
                 <span class="summary-label">Date & Time:</span>
@@ -2989,7 +2996,7 @@ class BarzunkoApp {
             </div>
             <div class="summary-row">
                 <span class="summary-label">Room:</span>
-                <span class="summary-value">${room.name} (${this.bookingData.partySize} people)</span>
+                <span class="summary-value">${escapeHtml(room.name)} (${escapeHtml(this.bookingData.partySize)} people)</span>
             </div>
             <div class="summary-row">
                 <span class="summary-label">Duration:</span>
@@ -2997,19 +3004,19 @@ class BarzunkoApp {
             </div>
             <div class="summary-row">
                 <span class="summary-label">Deposit Paid:</span>
-                <span class="summary-value summary-total">$${this.bookingData.depositAmount}</span>
+                <span class="summary-value summary-total">$${escapeHtml(this.bookingData.depositAmount)}</span>
             </div>
             <div class="summary-row">
                 <span class="summary-label">Remaining Balance:</span>
-                <span class="summary-value">$${this.bookingData.remainingBalance} (${remainingNote})</span>
+                <span class="summary-value">$${escapeHtml(this.bookingData.remainingBalance)} (${remainingNote})</span>
             </div>
             <div style="margin-top: var(--space-20); padding: var(--space-16); background: rgba(139, 92, 246, 0.1); border-radius: var(--radius-base); border: 1px solid rgba(139, 92, 246, 0.2);">
                 <h4 style="margin: 0 0 var(--space-8) 0; color: var(--neon-purple);">Important Notes:</h4>
                 <ul style="margin: 0; padding-left: var(--space-16); color: var(--color-text-secondary);">
                     <li>Please arrive 15 minutes early for check-in</li>
                     <li>Cancellations allowed up to 48 hours before your booking</li>
-                    <li>Confirmation email sent to ${this.bookingData.customer.email}</li>
-                    <li>Questions? Call us at ${this.businessData.phone}</li>
+                    <li>Confirmation email sent to ${escapeHtml(this.bookingData.customer.email)}</li>
+                    <li>Questions? Call us at ${escapeHtml(this.businessData.phone)}</li>
                 </ul>
             </div>
         `;
@@ -3184,13 +3191,13 @@ class BarzunkoApp {
       .map(
         (booking) => `
 
-            <div class="booking-card booking-card--selectable" data-booking-id="${booking.id}">
+            <div class="booking-card booking-card--selectable" data-booking-id="${escapeHtml(booking.id)}">
 
                 <div class="summary-row">
 
                     <span class="summary-label">Booking ID:</span>
 
-                    <span class="summary-value">${booking.id}</span>
+                    <span class="summary-value">${escapeHtml(booking.id)}</span>
 
                 </div>
 
@@ -3206,7 +3213,7 @@ class BarzunkoApp {
 
                     <span class="summary-label">Room:</span>
 
-                    <span class="summary-value">${booking.roomName}</span>
+                    <span class="summary-value">${escapeHtml(booking.roomName)}</span>
 
                 </div>
 
@@ -3214,7 +3221,7 @@ class BarzunkoApp {
 
                     <span class="summary-label">Status:</span>
 
-                    <span class="summary-value">${booking.status ? booking.status.charAt(0).toUpperCase() + booking.status.slice(1) : 'Unknown'}</span>
+                    <span class="summary-value">${booking.status ? escapeHtml(booking.status.charAt(0).toUpperCase() + booking.status.slice(1)) : 'Unknown'}</span>
 
                 </div>
 
@@ -3297,7 +3304,7 @@ class BarzunkoApp {
 
                 <span class="summary-label">Booking ID:</span>
 
-                <span class="summary-value">${booking.id}</span>
+                <span class="summary-value">${escapeHtml(booking.id)}</span>
 
             </div>
 
@@ -3305,7 +3312,7 @@ class BarzunkoApp {
 
                 <span class="summary-label">Status:</span>
 
-                <span class="summary-value status-badge status-badge--${statusSlug}">${statusLabel}</span>
+                <span class="summary-value status-badge status-badge--${escapeHtml(statusSlug)}">${escapeHtml(statusLabel)}</span>
 
             </div>
 
@@ -3313,7 +3320,7 @@ class BarzunkoApp {
 
                 <span class="summary-label">Name:</span>
 
-                <span class="summary-value">${booking.customer.firstName} ${booking.customer.lastName}</span>
+                <span class="summary-value">${escapeHtml(booking.customer.firstName)} ${escapeHtml(booking.customer.lastName)}</span>
 
             </div>
 
@@ -3321,7 +3328,7 @@ class BarzunkoApp {
 
                 <span class="summary-label">Email:</span>
 
-                <span class="summary-value">${booking.customer.email}</span>
+                <span class="summary-value">${escapeHtml(booking.customer.email)}</span>
 
             </div>
 
@@ -3329,7 +3336,7 @@ class BarzunkoApp {
 
                 <span class="summary-label">Room:</span>
 
-                <span class="summary-value">${booking.roomName}</span>
+                <span class="summary-value">${escapeHtml(booking.roomName)}</span>
 
             </div>
 
@@ -3361,7 +3368,7 @@ class BarzunkoApp {
               booking.customer?.specialRequests
                 ? `<div class="summary-row summary-row--note">
                       <span class="summary-label">Special Inquiry:</span>
-                      <span class="summary-value">${booking.customer.specialRequests}</span>
+                      <span class="summary-value">${escapeHtml(booking.customer.specialRequests)}</span>
                    </div>`
                 : ''
             }
@@ -5042,20 +5049,20 @@ class BarzunkoApp {
             .filter(Boolean)
             .join('\n');
 
-          html += `<td rowspan="${span}"><div class="slot booked status-${status}" data-tooltip="${tooltip.replace(/"/g, '&quot;')}"><div class="booking-card">`;
-          html += '<div class="booking-name">' + name + '</div>';
-          if (party) html += '<div class="booking-detail">' + party + '</div>';
+          html += `<td rowspan="${span}"><div class="slot booked status-${escapeHtml(status)}" data-tooltip="${escapeHtml(tooltip)}"><div class="booking-card">`;
+          html += '<div class="booking-name">' + escapeHtml(name) + '</div>';
+          if (party) html += '<div class="booking-detail">' + escapeHtml(party) + '</div>';
           html +=
             '<div class="booking-detail">' +
             this.formatTime(booking.startTime) +
             ' - ' +
             this.formatTime(endTime) +
             '</div>';
-          if (depositLine) html += '<div class="booking-detail">' + depositLine + '</div>';
-          if (phone) html += '<div class="booking-detail">' + phone + '</div>';
+          if (depositLine) html += '<div class="booking-detail">' + escapeHtml(depositLine) + '</div>';
+          if (phone) html += '<div class="booking-detail">' + escapeHtml(phone) + '</div>';
           if (special) {
             const trimmed = special.length > 80 ? special.slice(0, 77) + '…' : special;
-            html += '<div class="booking-detail booking-special">' + trimmed + '</div>';
+            html += '<div class="booking-detail booking-special">' + escapeHtml(trimmed) + '</div>';
           }
           html += '</div></div></td>';
         } else {
@@ -5245,32 +5252,32 @@ class BarzunkoApp {
         paymentStatusLower === 'requires_capture';
       row.innerHTML = `
         <td data-label="Phone">
-          <div>${customerPhone || '-'}</div>
+          <div>${escapeHtml(customerPhone) || '-'}</div>
           <div class="table-hint">Click row to reschedule</div>
         </td>
         <td data-label="Customer">
-          <div>${customerName || '-'}</div>
-          <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${customerEmail}</div>
+          <div>${escapeHtml(customerName) || '-'}</div>
+          <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${escapeHtml(customerEmail)}</div>
         </td>
-        <td data-label="Room">${displayRoom}</td>
+        <td data-label="Room">${escapeHtml(displayRoom)}</td>
         <td data-label="Time">
-          <div>${startDisplay}</div>
-          <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${booking.duration || 1}h</div>
+          <div>${escapeHtml(startDisplay)}</div>
+          <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">${escapeHtml(booking.duration || 1)}h</div>
         </td>
-        <td data-label="Guests" data-field="guests">${guestsDisplay}</td>
+        <td data-label="Guests" data-field="guests">${escapeHtml(guestsDisplay)}</td>
         <td data-label="Status">
-          <span class="status-badge status-badge--${status}">${status}</span>
-          <div class="table-hint table-hint--payment${paymentStatusClass}">${paymentLabel}</div>
+          <span class="status-badge status-badge--${escapeHtml(status)}">${escapeHtml(status)}</span>
+          <div class="table-hint table-hint--payment${paymentStatusClass}">${escapeHtml(paymentLabel)}</div>
         </td>
         <td data-label="Actions">
           <div class="table-actions">
-            <button class="btn btn--table btn--primary" data-action="admin-capture" data-id="${booking.id}" ${canCapture ? '' : 'disabled'} title="Capture Payment">
+            <button class="btn btn--table btn--primary" data-action="admin-capture" data-id="${escapeHtml(booking.id)}" ${canCapture ? '' : 'disabled'} title="Capture Payment">
               <i class="fas fa-credit-card"></i>
             </button>
-            <button class="btn btn--table btn--outline" data-action="admin-cancel-nr" data-id="${booking.id}" ${canCancel ? '' : 'disabled'} title="Cancel (No Refund)">
+            <button class="btn btn--table btn--outline" data-action="admin-cancel-nr" data-id="${escapeHtml(booking.id)}" ${canCancel ? '' : 'disabled'} title="Cancel (No Refund)">
               <i class="fas fa-ban"></i>
             </button>
-            <button class="btn btn--table btn--danger" data-action="admin-refund" data-id="${booking.id}" ${canRefund ? '' : 'disabled'} title="Refund Payment">
+            <button class="btn btn--table btn--danger" data-action="admin-refund" data-id="${escapeHtml(booking.id)}" ${canRefund ? '' : 'disabled'} title="Refund Payment">
               <i class="fas fa-undo-alt"></i>
             </button>
           </div>

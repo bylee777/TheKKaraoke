@@ -157,6 +157,7 @@
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -196,8 +197,14 @@
               if (details) {
                 const row = document.createElement('div');
                 row.className = 'summary-row';
-                row.innerHTML = '<span class="summary-label">Phone:</span>' +
-                                `<span class="summary-value">${phone}</span>`;
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'summary-label';
+                labelSpan.textContent = 'Phone:';
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'summary-value';
+                valueSpan.textContent = phone;
+                row.appendChild(labelSpan);
+                row.appendChild(valueSpan);
                 const emailRow = Array.from(details.querySelectorAll('.summary-row'))
                   .find(el => (el.textContent || '').trim().startsWith('Email:'));
                 if (emailRow && emailRow.nextSibling) {
