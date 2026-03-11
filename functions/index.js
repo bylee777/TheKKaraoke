@@ -32,6 +32,23 @@ const WEEKEND_DEPOSIT_BY_ROOM = {
   'extra-large': 150,
 };
 
+// Must stay in sync with the room config in public/js/app.js
+const ROOM_PRICING = {
+  small: { hourlyRate: 30, includedGuests: 4, extraGuestRate: 5 },
+  medium: { hourlyRate: 60, includedGuests: 8, extraGuestRate: 5 },
+  large: { hourlyRate: 100, includedGuests: 15, extraGuestRate: 5 },
+  'extra-large': { hourlyRate: 150, includedGuests: 25, extraGuestRate: 5 },
+};
+
+function calculateTotalCost(roomId, duration, partySize) {
+  const pricing = ROOM_PRICING[roomId];
+  if (!pricing) return null;
+  const dur = Number(duration);
+  const size = Math.max(1, Number(partySize) || 1);
+  const extraGuests = Math.max(0, size - pricing.includedGuests);
+  return pricing.hourlyRate * dur + pricing.extraGuestRate * extraGuests * dur;
+}
+
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || null;
 let telegramChatIds = [];
 try {
@@ -405,8 +422,50 @@ function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
 
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const MAX_PARTY_SIZE = 30;
+const MAX_NAME_LENGTH = 50;
+const MAX_SPECIAL_REQUESTS_LENGTH = 500;
+
+function validateCustomerInfo(customerInfo) {
+  const firstName = typeof customerInfo?.firstName === 'string' ? customerInfo.firstName.trim() : '';
+  const lastName = typeof customerInfo?.lastName === 'string' ? customerInfo.lastName.trim() : '';
+  const specialRequests = typeof customerInfo?.specialRequests === 'string' ? customerInfo.specialRequests.trim() : '';
+  if (firstName.length > MAX_NAME_LENGTH || lastName.length > MAX_NAME_LENGTH) {
+    throw new functions.https.HttpsError('invalid-argument', 'Name fields must be 50 characters or fewer');
+  }
+  if (specialRequests.length > MAX_SPECIAL_REQUESTS_LENGTH) {
+    throw new functions.https.HttpsError('invalid-argument', 'Special requests must be 500 characters or fewer');
+  }
+}
+
 function combineDateTime(date, time) {
-  return new Date(`${date}T${time}`);
+  // Interpret date+time as wall-clock time in BUSINESS_TIMEZONE (not UTC).
+  // Firebase Functions run in UTC, so a bare "2026-03-10T14:00" would be
+  // parsed as 14:00 UTC — wrong for Toronto (UTC-5). Use the offset trick:
+  // 1. Parse as UTC to get an approximate reference point.
+  const timeStr = time.length === 5 ? `${time}:00` : time;
+  const candidateUtc = new Date(`${date}T${timeStr}Z`);
+  // 2. Find what wall-clock time that UTC moment corresponds to in our timezone.
+  const localParts = getZonedDateParts(candidateUtc);
+  // 3. Shift by the difference so the result matches the intended wall-clock time.
+  const localMinutes = Number(localParts.hour) * 60 + Number(localParts.minute);
+  const [th, tm] = time.split(':').map(Number);
+  const targetMinutes = th * 60 + tm;
+  let diffMs = (targetMinutes - localMinutes) * 60 * 1000;
+  // If the correction overshoots backward by more than 12 hours, the UTC candidate
+  // landed on the previous calendar day in local time (e.g. "00:00" UTC midnight
+  // maps to 8 PM the night before in Toronto). Add 24 hours to land on the right day.
+  if (diffMs < -12 * 60 * 60 * 1000) diffMs += 24 * 60 * 60 * 1000;
+  return new Date(candidateUtc.getTime() + diffMs);
 }
 
 function addDurationMinutes(dateObj, durationHours) {
@@ -780,8 +839,10 @@ async function sendBookingEmail(booking) {
     return;
   }
   const subject = 'Please Do not Reply to this email - Your Barzunko booking is confirmed';
+  const firstName = escapeHtml(booking.customerInfo?.firstName || '');
+  const lastName = escapeHtml(booking.customerInfo?.lastName || '');
   const html = `
-    <p>Hi ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''},</p>
+    <p>Hi ${firstName} ${lastName},</p>
     <p>Thanks for booking with Barzunko! Here are your details:</p>
     <ul>
       <li><strong>Booking ID:</strong> ${booking.id}</li>
@@ -820,8 +881,10 @@ async function sendCancellationEmail(booking) {
     return;
   }
   const subject = 'Please Do not Reply to this email - Your Barzunko booking has been cancelled';
+  const firstName = escapeHtml(booking.customerInfo?.firstName || '');
+  const lastName = escapeHtml(booking.customerInfo?.lastName || '');
   const html = `
-    <p>Hi ${booking.customerInfo?.firstName || ''} ${booking.customerInfo?.lastName || ''},</p>
+    <p>Hi ${firstName} ${lastName},</p>
     <p>Your booking has been cancelled.</p>
     <ul>
       <li><strong>Booking ID:</strong> ${booking.id}</li>
@@ -1191,7 +1254,7 @@ exports.createBooking = secureFunctions.https.onCall(async (data, context) => {
  * The booking is only written after payment succeeds via finalizeBooking.
  */
 exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
-  const { roomId, date, startTime, duration, totalCost, partySize, customerInfo } = data || {};
+  const { roomId, date, startTime, duration, partySize, customerInfo } = data || {};
 
   if (!roomId || !date || !startTime || !duration || !customerInfo) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
@@ -1207,6 +1270,12 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
   if (dur > 3) {
     throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
   }
+
+  const partySizeNum = Number(partySize);
+  if (Number.isFinite(partySizeNum) && partySizeNum > MAX_PARTY_SIZE) {
+    throw new functions.https.HttpsError('invalid-argument', `Party size cannot exceed ${MAX_PARTY_SIZE}`);
+  }
+  validateCustomerInfo(customerInfo);
 
   const { inventory } = getRoomConfig(roomId);
   const noAvailabilityMessage = buildNoAvailabilityMessage(getRoomConfig(roomId).label, inventory);
@@ -1227,7 +1296,7 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
 
   const businessDate = determineBusinessDate(date, startTime);
 
-  const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
+  const totalCostNumber = calculateTotalCost(roomId, dur, partySize);
   const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
   const depositToCharge = depositTotals.total;
   if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
@@ -1278,7 +1347,6 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
     date,
     startTime,
     duration,
-    totalCost,
     partySize,
     customerInfo,
   } = data || {};
@@ -1291,6 +1359,12 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
   if (!Number.isFinite(dur) || dur <= 0 || dur > 3) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid duration');
   }
+
+  const partySizeNum = Number(partySize);
+  if (Number.isFinite(partySizeNum) && partySizeNum > MAX_PARTY_SIZE) {
+    throw new functions.https.HttpsError('invalid-argument', `Party size cannot exceed ${MAX_PARTY_SIZE}`);
+  }
+  validateCustomerInfo(customerInfo);
 
   const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
   const okStatuses = ['succeeded', 'requires_capture'];
@@ -1318,7 +1392,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
   ensureMinimumAdvanceNotice(date, startTime);
 
   const businessDate = determineBusinessDate(date, startTime);
-  const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
+  const totalCostNumber = calculateTotalCost(roomId, dur, partySize);
   const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
   const depositToCharge = depositTotals.total;
   if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
@@ -1957,11 +2031,23 @@ exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, conte
   if (!date) {
     throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
   }
-  const snapshot = await db.collection('bookings').where('date', '==', date).get();
-  const bookings = snapshot.docs
+  // Query by both 'date' (calendar date) and 'businessDate' to capture early-morning
+  // carryover bookings whose calendar date is the next day but belong to this business day.
+  const [byDate, byBusinessDate] = await Promise.all([
+    db.collection('bookings').where('date', '==', date).get(),
+    db.collection('bookings').where('businessDate', '==', date).get(),
+  ]);
+  const docs = new Map();
+  byDate.forEach((doc) => docs.set(doc.id, doc));
+  byBusinessDate.forEach((doc) => docs.set(doc.id, doc));
+  const bookings = Array.from(docs.values())
     .map((doc) => sanitizeBookingSnapshot(doc))
     .filter(Boolean)
-    .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    .sort((a, b) => {
+      const aKey = `${a.date || ''} ${a.startTime || ''}`;
+      const bKey = `${b.date || ''} ${b.startTime || ''}`;
+      return aKey.localeCompare(bKey);
+    });
   return { bookings };
 });
 
@@ -2051,28 +2137,33 @@ exports.cancelBookingGuest = secureFunctions.https.onCall(async (data) => {
   }
 
   const bookingRef = db.collection('bookings').doc(bookingId);
-  const bookingSnap = await bookingRef.get();
-  if (!bookingSnap.exists) {
-    throw new functions.https.HttpsError('not-found', 'Booking not found.');
-  }
 
-  const booking = bookingSnap.data();
-  assertGuestOwnership(booking, email);
-
-  if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Only active bookings can be cancelled.',
-    );
-  }
-
-  const startDate = combineDateTime(booking.date, booking.startTime);
-  if (startDate.getTime() - Date.now() < CANCEL_WINDOW_HOURS * HOURS_TO_MS) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      `Cancellations require at least ${CANCEL_WINDOW_HOURS} hours notice. Please contact the venue directly.`,
-    );
-  }
+  // Use a transaction to atomically verify ownership/status and claim the
+  // cancellation, preventing a race condition where two concurrent requests
+  // both pass the status check and trigger a double refund.
+  await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(bookingRef);
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Booking not found.');
+    }
+    const booking = snap.data();
+    assertGuestOwnership(booking, email);
+    if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Only active bookings can be cancelled.',
+      );
+    }
+    const startDate = combineDateTime(booking.date, booking.startTime);
+    if (startDate.getTime() - Date.now() < CANCEL_WINDOW_HOURS * HOURS_TO_MS) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Cancellations require at least ${CANCEL_WINDOW_HOURS} hours notice. Please contact the venue directly.`,
+      );
+    }
+    // Mark as cancelling so no concurrent request can claim this booking
+    transaction.update(bookingRef, { status: 'cancelling' });
+  });
 
   await cancelBookingInternal(bookingId);
   const updatedSnapshot = await bookingRef.get();

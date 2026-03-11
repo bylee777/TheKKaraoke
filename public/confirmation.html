@@ -178,7 +178,7 @@
 
         let bookingData = null;
         try {
-          bookingData = JSON.parse(localStorage.getItem('barzunkoBooking') || 'null');
+          bookingData = JSON.parse(sessionStorage.getItem('barzunkoBooking') || 'null');
         } catch (err) {
           bookingData = null;
         }

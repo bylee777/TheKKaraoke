@@ -677,15 +677,15 @@ class BarzunkoApp {
         ${galleryMarkup}
         <div class="room-content">
           <div class="room-header">
-            <h3 class="room-title">${room.name}</h3>
-            <div class="room-price">$${room.hourlyRate}/hr</div>
+            <h3 class="room-title">${escapeHtml(room.name)}</h3>
+            <div class="room-price">$${escapeHtml(room.hourlyRate)}/hr</div>
           </div>
           <div class="room-capacity">
             <i class="fas fa-users"></i>
-            ${room.capacity}
+            ${escapeHtml(room.capacity)}
           </div>
           <ul class="room-features">
-            ${room.features.map((feature) => `<li>${feature}</li>`).join('')}
+            ${room.features.map((feature) => `<li>${escapeHtml(feature)}</li>`).join('')}
           </ul>
         </div>
       `;
@@ -760,8 +760,8 @@ class BarzunkoApp {
                 <div class="testimonial-rating">
                     ${Array(testimonial.rating).fill('<i class="fas fa-star star"></i>').join('')}
                 </div>
-                <p class="testimonial-text">"${testimonial.text}"</p>
-                <div class="testimonial-author">- ${testimonial.name}</div>
+                <p class="testimonial-text">"${escapeHtml(testimonial.text)}"</p>
+                <div class="testimonial-author">- ${escapeHtml(testimonial.name)}</div>
             `;
       carousel.appendChild(card);
     });
@@ -1356,7 +1356,7 @@ class BarzunkoApp {
     slots = slots.filter((time) => this.slotFitsBusinessHours(this.selectedDate, time, duration));
     const weekday = selectedDateTime.getDay();
     const filteredSlots = slots.filter((time) => {
-      if (weekday === 5 && (time === '01:00' || time === '02:00')) return false;
+      if (weekday === 5 && time === '02:00') return false;
       if (weekday === 0 && time === '01:30') return false;
       return true;
     });
@@ -1731,7 +1731,7 @@ class BarzunkoApp {
 
   getStoredRebookingContext() {
     try {
-      const raw = localStorage.getItem(this.rebookingStorageKey);
+      const raw = sessionStorage.getItem(this.rebookingStorageKey);
 
       if (!raw) return null;
 
@@ -1740,7 +1740,7 @@ class BarzunkoApp {
       console.warn('Failed to parse rebooking context', error);
 
       try {
-        localStorage.removeItem(this.rebookingStorageKey);
+        sessionStorage.removeItem(this.rebookingStorageKey);
       } catch (removeError) {
         console.warn('Failed to clear rebooking context', removeError);
       }
@@ -1751,7 +1751,7 @@ class BarzunkoApp {
 
   clearRebookingContext({ removeQueryParam = false } = {}) {
     try {
-      localStorage.removeItem(this.rebookingStorageKey);
+      sessionStorage.removeItem(this.rebookingStorageKey);
     } catch (error) {
       console.warn('Unable to clear rebooking context from storage', error);
     }
@@ -1994,20 +1994,20 @@ class BarzunkoApp {
 
       roomOption.innerHTML = `
                 <div class="room-option-header">
-                    <h3 class="room-option-title">${room.name}</h3>
-                    <div class="room-option-price">$${room.hourlyRate}/hr</div>
+                    <h3 class="room-option-title">${escapeHtml(room.name)}</h3>
+                    <div class="room-option-price">$${escapeHtml(room.hourlyRate)}/hr</div>
                 </div>
                 <div class="room-capacity">
                     <i class="fas fa-users"></i>
-                    ${room.capacity}
+                    ${escapeHtml(room.capacity)}
                 </div>
                 <ul class="room-features">
                     ${room.features
                       .slice(0, 3)
-                      .map((feature) => `<li>${feature}</li>`)
+                      .map((feature) => `<li>${escapeHtml(feature)}</li>`)
                       .join('')}
                 </ul>
-                <div class="room-availability room-availability--${availabilityClass}">
+                <div class="room-availability room-availability--${escapeHtml(availabilityClass)}">
                     ${availabilityMessage}
                 </div>
             `;
@@ -2150,14 +2150,14 @@ class BarzunkoApp {
 
     if (!Number.isFinite(partySize) || partySize < minCapacity) {
       const minLabel = `${minCapacity} guest${minCapacity === 1 ? '' : 's'}`;
-      validation.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${room.name} requires at least ${minLabel}.`;
+      validation.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${escapeHtml(room.name)} requires at least ${escapeHtml(minLabel)}.`;
       validation.className = 'party-validation error';
       this.toggleExtraGuestAcknowledgement(false);
       return;
     }
 
     if (partySize > maxCapacity) {
-      validation.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${room.name} fits up to ${maxCapacity} guests. Extra guests are $${extraGuestRate} per person per hour and may require a larger room.`;
+      validation.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${escapeHtml(room.name)} fits up to ${escapeHtml(maxCapacity)} guests. Extra guests are $${escapeHtml(extraGuestRate)} per person per hour and may require a larger room.`;
       validation.className = 'party-validation error';
       this.toggleExtraGuestAcknowledgement(false);
       return;
@@ -2177,7 +2177,7 @@ class BarzunkoApp {
         surchargeText = `Each additional guest costs $${extraGuestRate} per person per hour${totalBreakdown}.`;
       }
 
-      validation.innerHTML = `<i class="fas fa-exclamation-circle"></i> Party size exceeds the recommended ${includedGuests} guests for ${room.name}. ${surchargeText} Please acknowledge below.`;
+      validation.innerHTML = `<i class="fas fa-exclamation-circle"></i> Party size exceeds the recommended ${escapeHtml(includedGuests)} guests for ${escapeHtml(room.name)}. ${escapeHtml(surchargeText)} Please acknowledge below.`;
       validation.className = 'party-validation warning';
       this.toggleExtraGuestAcknowledgement(true);
       const checkbox = document.getElementById('extra-guest-ack');
@@ -2855,7 +2855,7 @@ class BarzunkoApp {
       this.bookingData.createdAt = new Date().toISOString();
       this.bookingData.paymentIntentId = paymentIntent.id;
 
-      localStorage.setItem('barzunkoBooking', JSON.stringify(this.bookingData));
+      sessionStorage.setItem('barzunkoBooking', JSON.stringify(this.bookingData));
       this.hideLoading();
       window.location.href = 'confirmation.html';
     } catch (err) {
@@ -3523,7 +3523,7 @@ class BarzunkoApp {
     this.clearRebookingContext();
 
     try {
-      localStorage.setItem(this.rebookingStorageKey, JSON.stringify(context));
+      sessionStorage.setItem(this.rebookingStorageKey, JSON.stringify(context));
     } catch (error) {
       console.warn('Unable to cache rebooking context', error);
     }
@@ -4419,7 +4419,11 @@ class BarzunkoApp {
         };
         const statusDiff = rank(a.status) - rank(b.status);
         if (statusDiff !== 0) return statusDiff;
-        return (a.startTime || '').localeCompare(b.startTime || '');
+        // Sort by calendar date + startTime so carryover bookings (next calendar
+        // day, early morning) appear after the evening bookings of the business day.
+        const aKey = `${a.date || ''} ${a.startTime || ''}`;
+        const bKey = `${b.date || ''} ${b.startTime || ''}`;
+        return aKey.localeCompare(bKey);
       });
       this.renderAdminBookingsTable(bookings);
       if (this.getScheduleViewMode('admin') === 'grid') {
