@@ -293,7 +293,16 @@ function buildTimeSlotsForDate(dateStr, durationMinutes = MIN_BOOKING_DURATION_M
   const slots = [];
   const seen = new Set();
 
-  segments.forEach((segment) => {
+  // Process current-day segment before carryover so that late-night slots
+  // (e.g. Saturday 00:00 at 1440 min) take label priority over early-morning
+  // carryover slots (e.g. Friday-night 00:00 at 0 min).
+  const orderedSegments = [...segments].sort((a, b) => {
+    if (a.type === 'current' && b.type !== 'current') return -1;
+    if (a.type !== 'current' && b.type === 'current') return 1;
+    return 0;
+  });
+
+  orderedSegments.forEach((segment) => {
     const start = Math.max(0, segment.startMinutes || 0);
     const dayLimit = segment.closeMinutes;
     let latestStart = Math.min(segment.closeMinutes - durationMinutes, dayLimit);
@@ -486,6 +495,19 @@ function computeEndTime(date, startTime, duration) {
   };
 }
 
+function resolveBookingEndTime(booking) {
+  if (!booking || typeof booking !== 'object') {
+    return null;
+  }
+
+  const duration = Number(booking.duration);
+  if (booking.date && booking.startTime && Number.isFinite(duration) && duration > 0) {
+    return computeEndTime(booking.date, booking.startTime, duration).endTime;
+  }
+
+  return typeof booking.endTime === 'string' && booking.endTime ? booking.endTime : null;
+}
+
 function buildNoAvailabilityMessage(label, inventory) {
   if (inventory > 1) {
     const pluralLabel = label.endsWith('s') ? label : `${label}s`;
@@ -502,6 +524,7 @@ function sanitizeBookingSnapshot(doc) {
   const booking = doc.data();
   const roomConfig = getRoomConfig(booking.roomId);
   const startDate = combineDateTime(booking.date, booking.startTime);
+  const endTime = resolveBookingEndTime(booking);
   const cancelDeadline = new Date(startDate.getTime() - CANCEL_WINDOW_HOURS * HOURS_TO_MS);
   const msUntilStart = startDate.getTime() - Date.now();
   const isActiveStatus = ACTIVE_BOOKING_STATUSES.includes(booking.status);
@@ -516,7 +539,7 @@ function sanitizeBookingSnapshot(doc) {
     date: booking.date,
     businessDate: booking.businessDate || booking.date,
     startTime: booking.startTime,
-    endTime: booking.endTime,
+    endTime,
     duration: booking.duration,
     status: booking.status,
     paymentStatus: booking.paymentStatus || null,
@@ -622,12 +645,7 @@ async function ensureRoomAvailability(
     .filter((doc) => doc.id !== excludeBookingId)
     .map((doc) => {
       const data = doc.data();
-      const computedEnd =
-        data.endTime ||
-        (data.date && data.startTime && data.duration
-          ? computeEndTime(data.date, data.startTime, data.duration).endTime
-          : null);
-      return { startTime: data.startTime, endTime: computedEnd };
+      return { startTime: data.startTime, endTime: resolveBookingEndTime(data) };
     });
   const maxOverlap = computeMaxOverlapDuringWindow(overlapBookings, startTime, endTime);
 
@@ -753,7 +771,10 @@ function computeMaxOverlapDuringWindow(bookings, windowStart, windowEnd) {
   const events = [];
 
   bookings.forEach((booking) => {
-    const baseRange = normalizeTimeRange(booking.startTime, booking.endTime);
+    const baseRange = normalizeTimeRange(
+      booking.startTime,
+      resolveBookingEndTime(booking) || booking.endTime,
+    );
     if (!baseRange) return;
     const variants = buildRangeVariants(baseRange);
     variants.forEach((range) => {
@@ -1019,12 +1040,7 @@ async function createBookingInternal(params) {
   const existing = await fetchActiveRoomBookingsForBusinessDate(roomId, businessDate);
   const overlapBookings = existing.map((doc) => {
     const data = doc.data();
-    const computedEnd =
-      data.endTime ||
-      (data.date && data.startTime && data.duration
-        ? computeEndTime(data.date, data.startTime, data.duration).endTime
-        : null);
-    return { startTime: data.startTime, endTime: computedEnd };
+    return { startTime: data.startTime, endTime: resolveBookingEndTime(data) };
   });
   const maxOverlap = computeMaxOverlapDuringWindow(overlapBookings, startTime, endTime);
 
@@ -1095,12 +1111,7 @@ async function createBookingInternal(params) {
       );
       const txnBookings = txnSnapshot.map((doc) => {
         const data = doc.data();
-        const computedEnd =
-          data.endTime ||
-          (data.date && data.startTime && data.duration
-            ? computeEndTime(data.date, data.startTime, data.duration).endTime
-            : null);
-        return { startTime: data.startTime, endTime: computedEnd };
+        return { startTime: data.startTime, endTime: resolveBookingEndTime(data) };
       });
       const txnMaxOverlap = computeMaxOverlapDuringWindow(txnBookings, startTime, endTime);
 
@@ -1596,12 +1607,7 @@ exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context)
         .filter((doc) => !excludeBookingId || doc.id !== excludeBookingId)
         .map((doc) => {
           const data = doc.data();
-          const computedEnd =
-            data.endTime ||
-            (data.date && data.startTime && data.duration
-              ? computeEndTime(data.date, data.startTime, data.duration).endTime
-              : null);
-          return { startTime: data.startTime, endTime: computedEnd };
+          return { startTime: data.startTime, endTime: resolveBookingEndTime(data) };
         });
       const maxOverlap = computeMaxOverlapDuringWindow(overlapBookings, startTime, endTime);
 
@@ -1662,7 +1668,7 @@ exports.getMaxAvailableDuration = secureFunctions.https.onCall(async (data, cont
     if (excludeBookingId && doc.id === excludeBookingId) continue;
     const booking = doc.data();
     const bStart = timeStringToMinutes(booking.startTime);
-    let bEnd = timeStringToMinutes(booking.endTime);
+    let bEnd = timeStringToMinutes(resolveBookingEndTime(booking));
     if (!Number.isFinite(bStart) || !Number.isFinite(bEnd)) continue;
     if (bEnd <= bStart) {
       bEnd += MINUTES_IN_DAY;
@@ -2090,9 +2096,7 @@ exports.adminGetAvailabilityByDate = secureFunctions.https.onCall(async (data, c
         if (!byRoomByBusinessDate[bizDate][roomId]) {
           byRoomByBusinessDate[bizDate][roomId] = [];
         }
-        const endValue =
-          booking.endTime ||
-          computeEndTime(booking.date, booking.startTime, booking.duration || 1).endTime;
+        const endValue = resolveBookingEndTime(booking);
         byRoomByBusinessDate[bizDate][roomId].push({
           startTime: booking.startTime,
           endTime: endValue,

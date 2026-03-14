@@ -4577,8 +4577,7 @@ class BarzunkoApp {
 
     const bookingsWithRanges = assignableBookings
       .map((booking) => {
-        const rawEnd =
-          booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
+        const rawEnd = this.adminResolveBookingEndTime(booking);
         const range = this.adminNormalizeBookingRange(booking.startTime, rawEnd);
         if (!range) return null;
         return {
@@ -4630,6 +4629,17 @@ class BarzunkoApp {
     const hh = String(Math.floor(total / 60)).padStart(2, '0');
     const mm = String(total % 60).padStart(2, '0');
     return `${hh}:${mm}`;
+  }
+
+  adminResolveBookingEndTime(booking) {
+    if (!booking || typeof booking !== 'object') {
+      return '00:00';
+    }
+    const duration = Number(booking.duration);
+    if (booking.startTime && Number.isFinite(duration) && duration > 0) {
+      return this.adminComputeEndTime(booking.startTime, duration);
+    }
+    return booking.endTime || booking.startTime || '00:00';
   }
 
   adminNormalizeBookingRange(startTime, endTime) {
@@ -4824,8 +4834,7 @@ class BarzunkoApp {
             const phone = customer.phone || '';
             const start = booking.startTime || this.minutesToTimeString(entry.startMinutes || 0);
             const end =
-              booking.endTime ||
-              this.adminComputeEndTime(start, Number(booking.duration) || 1) ||
+              this.adminResolveBookingEndTime(booking) ||
               this.minutesToTimeString(entry.endMinutes || 0);
             const rawStatus = String(booking.status || 'pending').toLowerCase();
             const statusSlug = rawStatus === 'canceled' ? 'cancelled' : rawStatus;
@@ -5030,8 +5039,7 @@ class BarzunkoApp {
           const special =
             booking.customer?.specialRequests || booking.customerInfo?.specialRequests || '';
           const status = booking.status || 'pending';
-          const endTime =
-            booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
+          const endTime = this.adminResolveBookingEndTime(booking);
           const slotMinutes =
             row.endMinutes - row.startMinutes || this.adminScheduleIncrementMinutes || 30;
           const totalMinutes = Math.max(
@@ -5120,8 +5128,7 @@ class BarzunkoApp {
           const booking = bookingEntry.booking;
           const customer = booking.customer || booking.customerInfo || {};
           const name = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim();
-          const endTime =
-            booking.endTime || this.adminComputeEndTime(booking.startTime, booking.duration || 1);
+          const endTime = this.adminResolveBookingEndTime(booking);
           const depositValue = Number(booking.depositAmount);
           const depositText = Number.isFinite(depositValue)
             ? `Deposit $${depositValue.toFixed(2)}`
@@ -5216,6 +5223,7 @@ class BarzunkoApp {
     sortedBookings.forEach((booking) => {
       const normalizedRoomId = this.normalizeRoomId(booking.roomId);
       booking.roomId = normalizedRoomId;
+      booking.endTime = this.adminResolveBookingEndTime(booking);
       const room = this.rooms.find((r) => r.id === normalizedRoomId);
       const displayRoom = room?.name || this.adminRoomNameFromId(normalizedRoomId);
 
@@ -5691,7 +5699,17 @@ class BarzunkoApp {
     const slots = [];
     const seen = new Set();
 
-    segments.forEach((segment) => {
+    // Process current-day segment before carryover so that late-night slots
+    // (e.g. Saturday 00:00 at 1440 min) take label priority over early-morning
+    // carryover slots (e.g. Friday-night 00:00 at 0 min), preventing the
+    // Saturday-night post-midnight slots from being silently deduplicated.
+    const orderedSegments = [...segments].sort((a, b) => {
+      if (a.type === 'current' && b.type !== 'current') return -1;
+      if (a.type !== 'current' && b.type === 'current') return 1;
+      return 0;
+    });
+
+    orderedSegments.forEach((segment) => {
       const start = Math.max(0, segment.startMinutes || 0);
       const dayLimit = segment.closeMinutes;
       let latestStart = Math.min(segment.closeMinutes - durationMinutes, dayLimit);
