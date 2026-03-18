@@ -489,9 +489,11 @@ function addDurationMinutes(dateObj, durationHours) {
 function computeEndTime(date, startTime, duration) {
   const endDate = combineDateTime(date, startTime);
   addDurationMinutes(endDate, duration);
+  const parts = getZonedDateParts(endDate);
+  const endTime = `${parts.hour}:${parts.minute}`;
   return {
     endDate,
-    endTime: endDate.toTimeString().slice(0, 5),
+    endTime,
   };
 }
 
