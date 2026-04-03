@@ -10,6 +10,9 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_ALLOWED_CHARS = /^[0-9+\-().\s]+$/;
 const CUSTOMER_MIN_ADVANCE_HOURS = 4;
 const HOURS_TO_MS = 60 * 60 * 1000;
+const EXTRA_LARGE_FIRST_HOUR_BOTTLE_AMOUNT = 120;
+const EXTRA_LARGE_FIRST_HOUR_BOTTLE_DESCRIPTION =
+  'One house bottle required for the first hour of XL room reservations on Fridays and Saturdays only (underage groups can substitute food/drinks)';
 class BarzunkoApp {
   constructor() {
     this.currentPage = 'landing';
@@ -188,10 +191,15 @@ class BarzunkoApp {
         hourlyRate: 150,
         bookingFee: 0,
         extraGuestRate: 5,
+        requiredPurchase: {
+          description: EXTRA_LARGE_FIRST_HOUR_BOTTLE_DESCRIPTION,
+          amount: EXTRA_LARGE_FIRST_HOUR_BOTTLE_AMOUNT,
+        },
         inventory: 1,
         features: [
           'Stage with spotlights',
           'Song library 50k+',
+          'One house bottle required for first-hour XL bookings on Fridays and Saturdays only',
           'Premium lounge',
           'Dance floor',
         ],
@@ -2243,7 +2251,7 @@ class BarzunkoApp {
 
     const extraGuestFee = extraGuestRate * extraGuests * duration;
 
-    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room);
+    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room, date, time);
 
     const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
     const taxRate = this.taxRate || 0;
@@ -2459,9 +2467,14 @@ class BarzunkoApp {
     return table[roomId] ?? 0;
   }
 
-  getRequiredPurchaseAmount(room) {
+  getRequiredPurchaseAmount(room, dateStr, startTime) {
     if (!room || !room.requiredPurchase) return 0;
-    return room.requiredPurchase.amount || 0;
+    if (room.id !== 'extra-large') return room.requiredPurchase.amount || 0;
+    const businessDate = dateStr ? this.determineBusinessDate(dateStr, startTime) : null;
+    const safeDate = businessDate ? new Date(`${businessDate}T12:00:00`) : null;
+    const day = safeDate && !Number.isNaN(safeDate.getTime()) ? safeDate.getDay() : null; // 0=Sun
+    const isWeekend = day === 5 || day === 6;
+    return isWeekend ? room.requiredPurchase.amount || 0 : 0;
   }
 
   computeDepositAmount({ room, date, startTime, totalCostWithTax }) {
@@ -2531,7 +2544,7 @@ class BarzunkoApp {
 
     const extraGuestFee = extraGuestRate * extraGuests * duration;
 
-    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room);
+    const requiredPurchaseAmount = this.getRequiredPurchaseAmount(room, date, startTime);
 
     const totalCost = baseCost + bookingFee + extraGuestFee + requiredPurchaseAmount;
 

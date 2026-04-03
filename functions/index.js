@@ -40,13 +40,36 @@ const ROOM_PRICING = {
   'extra-large': { hourlyRate: 150, includedGuests: 25, extraGuestRate: 5 },
 };
 
-function calculateTotalCost(roomId, duration, partySize) {
+const EXTRA_LARGE_FIRST_HOUR_BOTTLE_AMOUNT = 120;
+
+function calculateRequiredPurchaseAmount(roomId, dateStr, startTime) {
+  if (roomId !== 'extra-large' || !dateStr || !startTime) return 0;
+  const businessDate = determineBusinessDate(dateStr, startTime);
+  return isFridayOrSaturday(businessDate) ? EXTRA_LARGE_FIRST_HOUR_BOTTLE_AMOUNT : 0;
+}
+
+function calculateBookingChargeDetails(roomId, duration, partySize, options = {}) {
   const pricing = ROOM_PRICING[roomId];
-  if (!pricing) return null;
+  if (!pricing) {
+    return { totalCost: null, extraGuestFee: 0, requiredPurchaseAmount: 0 };
+  }
   const dur = Number(duration);
+  if (!Number.isFinite(dur) || dur <= 0) {
+    return { totalCost: null, extraGuestFee: 0, requiredPurchaseAmount: 0 };
+  }
   const size = Math.max(1, Number(partySize) || 1);
   const extraGuests = Math.max(0, size - pricing.includedGuests);
-  return pricing.hourlyRate * dur + pricing.extraGuestRate * extraGuests * dur;
+  const extraGuestFee = pricing.extraGuestRate * extraGuests * dur;
+  const requiredPurchaseAmount = calculateRequiredPurchaseAmount(
+    roomId,
+    options.date,
+    options.startTime,
+  );
+  return {
+    totalCost: pricing.hourlyRate * dur + extraGuestFee + requiredPurchaseAmount,
+    extraGuestFee,
+    requiredPurchaseAmount,
+  };
 }
 
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN || null;
@@ -1309,7 +1332,11 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
 
   const businessDate = determineBusinessDate(date, startTime);
 
-  const totalCostNumber = calculateTotalCost(roomId, dur, partySize);
+  const pricingDetails = calculateBookingChargeDetails(roomId, dur, partySize, {
+    date,
+    startTime,
+  });
+  const totalCostNumber = pricingDetails.totalCost;
   const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
   const depositToCharge = depositTotals.total;
   if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
@@ -1405,7 +1432,11 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
   ensureMinimumAdvanceNotice(date, startTime);
 
   const businessDate = determineBusinessDate(date, startTime);
-  const totalCostNumber = calculateTotalCost(roomId, dur, partySize);
+  const pricingDetails = calculateBookingChargeDetails(roomId, dur, partySize, {
+    date,
+    startTime,
+  });
+  const totalCostNumber = pricingDetails.totalCost;
   const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
   const depositToCharge = depositTotals.total;
   if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
@@ -1471,6 +1502,8 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
     remainingBalanceBeforeTax:
       totalCostNumber != null ? Math.max(totalCostNumber - depositTotals.beforeTax, 0) : null,
     remainingTax: null,
+    extraGuestFee: pricingDetails.extraGuestFee,
+    requiredPurchaseAmount: pricingDetails.requiredPurchaseAmount,
     partySize: typeof partySize === 'number' ? partySize : null,
     customerInfo: {
       ...customerInfo,
