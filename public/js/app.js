@@ -112,7 +112,7 @@ class BarzunkoApp {
     this.businessData = {
       name: 'Barzunko',
       address: '675 Yonge St Basement, Toronto, ON M4Y 2B2',
-      phone: '+1-416-968-0909',
+      phone: '+1-647-278-4499',
       hours:
         'Mon-Thu: 6:00 PM - 2:30 AM | Fri: 6:00 PM - 3:00 AM | Sat: 1:00 PM - 3:00 AM | Sun: 1:00 PM - 2:30 AM',
       email: 'barzunko@gmail.com',
@@ -3952,19 +3952,27 @@ class BarzunkoApp {
     const times = timesArg || this.getTimeSlotsForDate(dateStr);
     const viewMode = this.getScheduleViewMode('staff');
     if (viewMode !== 'grid') {
-      this.adminRenderAvailabilityGrid(times, {}, {
-        containerId: 'staff-availability-grid',
-        context: 'staff',
-        viewMode: 'reservations',
-      });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        {
+          containerId: 'staff-availability-grid',
+          context: 'staff',
+          viewMode: 'reservations',
+        },
+      );
       return;
     }
     if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
-      this.adminRenderAvailabilityGrid(times, {}, {
-        containerId: 'staff-availability-grid',
-        context: 'staff',
-        viewMode: 'grid',
-      });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        {
+          containerId: 'staff-availability-grid',
+          context: 'staff',
+          viewMode: 'grid',
+        },
+      );
       return;
     }
     try {
@@ -3978,11 +3986,15 @@ class BarzunkoApp {
       });
     } catch (err) {
       console.error('staffFetchAvailability error', err);
-      this.adminRenderAvailabilityGrid(times, {}, {
-        containerId: 'staff-availability-grid',
-        context: 'staff',
-        viewMode: 'grid',
-      });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        {
+          containerId: 'staff-availability-grid',
+          context: 'staff',
+          viewMode: 'grid',
+        },
+      );
     }
   }
 
@@ -4419,7 +4431,11 @@ class BarzunkoApp {
     this.applyBusinessHoursForDate(dateStr);
     if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
       if (tableBody) tableBody.innerHTML = '<tr><td colspan="6">Functions not available</td></tr>';
-      this.adminRenderAvailabilityGrid(times, {}, { containerId: 'admin-availability-grid', context: 'admin' });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        { containerId: 'admin-availability-grid', context: 'admin' },
+      );
       return;
     }
     try {
@@ -4442,19 +4458,27 @@ class BarzunkoApp {
       if (this.getScheduleViewMode('admin') === 'grid') {
         this.adminFetchAvailability(times, dateStr);
       } else {
-        this.adminRenderAvailabilityGrid(times, {}, {
-          containerId: 'admin-availability-grid',
-          context: 'admin',
-          viewMode: 'reservations',
-        });
+        this.adminRenderAvailabilityGrid(
+          times,
+          {},
+          {
+            containerId: 'admin-availability-grid',
+            context: 'admin',
+            viewMode: 'reservations',
+          },
+        );
       }
     } catch (err) {
       console.error('adminFetchForSelectedDate error', err);
       this.adminGridAssignments = this.adminAssignBookingsToColumns([]);
-      this.adminRenderAvailabilityGrid(times, {}, {
-        containerId: 'admin-availability-grid',
-        context: 'admin',
-      });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        {
+          containerId: 'admin-availability-grid',
+          context: 'admin',
+        },
+      );
       this.showNotification('Unable to load bookings for selected day', 'error');
     }
   }
@@ -4464,19 +4488,27 @@ class BarzunkoApp {
     const viewMode = this.getScheduleViewMode('admin');
     this.applyBusinessHoursForDate(dateStr);
     if (viewMode !== 'grid') {
-      this.adminRenderAvailabilityGrid(times, {}, {
-        containerId: 'admin-availability-grid',
-        context: 'admin',
-        viewMode: 'reservations',
-      });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        {
+          containerId: 'admin-availability-grid',
+          context: 'admin',
+          viewMode: 'reservations',
+        },
+      );
       return;
     }
     if (!window.firebaseFunctions || !window.firebaseFunctions.httpsCallable) {
-      this.adminRenderAvailabilityGrid(times, {}, {
-        containerId: 'admin-availability-grid',
-        context: 'admin',
-        viewMode: 'grid',
-      });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        {
+          containerId: 'admin-availability-grid',
+          context: 'admin',
+          viewMode: 'grid',
+        },
+      );
       return;
     }
     try {
@@ -4490,11 +4522,15 @@ class BarzunkoApp {
       });
     } catch (err) {
       console.error('adminFetchAvailability error', err);
-      this.adminRenderAvailabilityGrid(times, {}, {
-        containerId: 'admin-availability-grid',
-        context: 'admin',
-        viewMode: 'grid',
-      });
+      this.adminRenderAvailabilityGrid(
+        times,
+        {},
+        {
+          containerId: 'admin-availability-grid',
+          context: 'admin',
+          viewMode: 'grid',
+        },
+      );
     }
   }
 
@@ -4727,9 +4763,10 @@ class BarzunkoApp {
     this.scheduleViewModes[key] = nextMode;
     this.updateScheduleViewToggleState(key, nextMode);
     this.updateScheduleControlVisibility(key);
-    const hadCache = !!this.scheduleRenderCache?.[
-      key === 'staff' ? 'staff-availability-grid' : 'admin-availability-grid'
-    ];
+    const hadCache =
+      !!this.scheduleRenderCache?.[
+        key === 'staff' ? 'staff-availability-grid' : 'admin-availability-grid'
+      ];
     this.rerenderScheduleFromCache(key);
     if (!hadCache) {
       if (key === 'staff') {
@@ -4748,9 +4785,10 @@ class BarzunkoApp {
     }
     this.scheduleGridDensity[key] = nextDensity;
     this.updateScheduleGridDensityToggleState(key, nextDensity);
-    const hadCache = !!this.scheduleRenderCache?.[
-      key === 'staff' ? 'staff-availability-grid' : 'admin-availability-grid'
-    ];
+    const hadCache =
+      !!this.scheduleRenderCache?.[
+        key === 'staff' ? 'staff-availability-grid' : 'admin-availability-grid'
+      ];
     this.rerenderScheduleFromCache(key);
     if (!hadCache) {
       if (key === 'staff') {
@@ -4836,10 +4874,11 @@ class BarzunkoApp {
           .map((entry) => {
             const booking = entry.booking || {};
             const customer = booking.customer || booking.customerInfo || {};
-            const name = [customer.firstName, customer.lastName]
-              .map((part) => String(part || '').trim())
-              .filter(Boolean)
-              .join(' ') ||
+            const name =
+              [customer.firstName, customer.lastName]
+                .map((part) => String(part || '').trim())
+                .filter(Boolean)
+                .join(' ') ||
               customer.email ||
               booking.id ||
               'Booking';
@@ -5028,7 +5067,9 @@ class BarzunkoApp {
         const candidate =
           colState.index < colState.entries.length ? colState.entries[colState.index] : null;
         const bookingEntry =
-          candidate && row.startMinutes < candidate.endMinutes && row.endMinutes > candidate.startMinutes
+          candidate &&
+          row.startMinutes < candidate.endMinutes &&
+          row.endMinutes > candidate.startMinutes
             ? candidate
             : null;
         if (bookingEntry) {
@@ -5083,7 +5124,8 @@ class BarzunkoApp {
             ' - ' +
             this.formatTime(endTime) +
             '</div>';
-          if (depositLine) html += '<div class="booking-detail">' + escapeHtml(depositLine) + '</div>';
+          if (depositLine)
+            html += '<div class="booking-detail">' + escapeHtml(depositLine) + '</div>';
           if (phone) html += '<div class="booking-detail">' + escapeHtml(phone) + '</div>';
           if (special) {
             const trimmed = special.length > 80 ? special.slice(0, 77) + '…' : special;
@@ -5091,7 +5133,8 @@ class BarzunkoApp {
           }
           html += '</div></div></td>';
         } else {
-          html += '<td><div class="slot available" data-tooltip="Available"><span class="sr-only">Available</span></div></td>';
+          html +=
+            '<td><div class="slot available" data-tooltip="Available"><span class="sr-only">Available</span></div></td>';
         }
       }
       html += '</tr>';
@@ -5507,8 +5550,7 @@ class BarzunkoApp {
 
     const body = document.createElement('p');
     body.className = 'booking-availability-note__body';
-    body.textContent =
-      `Please choose a start time at least ${this.getCustomerAdvanceNoticeText()} away, or call us directly and our team can check sooner availability.`;
+    body.textContent = `Please choose a start time at least ${this.getCustomerAdvanceNoticeText()} away, or call us directly and our team can check sooner availability.`;
 
     note.appendChild(title);
     note.appendChild(body);
