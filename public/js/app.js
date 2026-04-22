@@ -112,7 +112,7 @@ class BarzunkoApp {
     this.businessData = {
       name: 'Barzunko',
       address: '675 Yonge St Basement, Toronto, ON M4Y 2B2',
-      phone: '+1-647-278-4499',
+      phone: '+1-416-968-0909',
       hours:
         'Mon-Thu: 6:00 PM - 2:30 AM | Fri: 6:00 PM - 3:00 AM | Sat: 1:00 PM - 3:00 AM | Sun: 1:00 PM - 2:30 AM',
       email: 'barzunko@gmail.com',
