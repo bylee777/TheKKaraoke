@@ -1346,6 +1346,26 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
     );
   }
 
+  // Check for an existing confirmed booking by the same customer for this exact slot.
+  // This prevents double-charging when a customer retries after a network failure.
+  const emailNormalized = normalizeEmail(customerInfo?.email);
+  if (emailNormalized) {
+    const dupSnap = await db.collection('bookings')
+      .where('roomId', '==', roomId)
+      .where('date', '==', date)
+      .where('startTime', '==', startTime)
+      .where('customerInfo.email', '==', emailNormalized)
+      .where('status', 'in', ['confirmed', 'pending'])
+      .limit(1)
+      .get();
+    if (!dupSnap.empty) {
+      throw new functions.https.HttpsError(
+        'already-exists',
+        'You already have a booking for this time slot. Check your email for confirmation details, or contact us if you need help.',
+      );
+    }
+  }
+
   // Quick availability check
   await ensureRoomAvailability(roomId, date, startTime, endTime, null, null, { partySize });
 
@@ -1476,12 +1496,11 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
     );
   }
 
+  // Idempotency: if this PI was already finalized (e.g. response lost mid-flight),
+  // return the existing booking rather than throwing or double-writing.
   const existingRef = await findBookingRefByPaymentIntentId(intent.id);
   if (existingRef) {
-    throw new functions.https.HttpsError(
-      'already-exists',
-      'Payment has already been used for another booking.',
-    );
+    return { bookingId: existingRef.id };
   }
 
   const bookingDoc = {

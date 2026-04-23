@@ -122,7 +122,7 @@ class BarzunkoApp {
       {
         id: 'small',
         name: 'Small Room',
-        capacity: '1-4 people',
+        capacity: '4 included, max 5 guests',
         minCapacity: 1,
         maxCapacity: 5,
         includedGuests: 4,
@@ -131,10 +131,10 @@ class BarzunkoApp {
         extraGuestRate: 5,
         inventory: 4,
         features: [
-          'Premium sound system',
-          'LED lighting',
-          'Song library 50k+',
-          'Comfortable seating',
+          '4 rooms of this type',
+          '4 guests included',
+          '$5 per extra guest per hour up to 5 total',
+          'Premium sound system and LED lighting',
         ],
         photos: [
           'small/KakaoTalk_Photo_2025-11-04-20-57-23 001.jpeg',
@@ -146,7 +146,7 @@ class BarzunkoApp {
       {
         id: 'medium',
         name: 'Medium Room',
-        capacity: '1-8 people',
+        capacity: '8 included, max 12 guests',
         minCapacity: 1,
         maxCapacity: 12,
         includedGuests: 8,
@@ -155,10 +155,10 @@ class BarzunkoApp {
         extraGuestRate: 5,
         inventory: 4,
         features: [
-          'Enhanced sound system',
-          'Dynamic lighting',
-          'Song library 50k+',
-          'Party seating',
+          '4 rooms of this type',
+          '8 guests included',
+          '$5 per extra guest per hour up to 12 total',
+          'Enhanced sound system and party seating',
         ],
         photos: [
           'medium/KakaoTalk_Photo_2025-11-04-20-56-39 001.jpeg',
@@ -170,7 +170,7 @@ class BarzunkoApp {
       {
         id: 'large',
         name: 'Large Room',
-        capacity: '1-15 people (max 17)',
+        capacity: '15 included, max 17 guests',
         minCapacity: 1,
         maxCapacity: 17,
         includedGuests: 15,
@@ -178,13 +178,18 @@ class BarzunkoApp {
         bookingFee: 0,
         extraGuestRate: 5,
         inventory: 1,
-        features: ['Professional sound system', 'Stage lighting', 'Song library 50k+'],
+        features: [
+          '1 room of this type',
+          '15 guests included',
+          '$5 per extra guest per hour up to 17 total',
+          'Professional sound system and stage lighting',
+        ],
         photos: ['large.jpeg'],
       },
       {
         id: 'extra-large',
         name: 'Extra Large Room',
-        capacity: '1-25 people (max 30)',
+        capacity: '25 included, max 30 guests',
         minCapacity: 1,
         maxCapacity: 30,
         includedGuests: 25,
@@ -197,11 +202,11 @@ class BarzunkoApp {
         },
         inventory: 1,
         features: [
-          'Stage with spotlights',
-          'Song library 50k+',
-          'One house bottle required for first-hour XL bookings on Fridays and Saturdays only',
-          'Premium lounge',
-          'Dance floor',
+          '1 room of this type',
+          '25 guests included',
+          '$5 per extra guest per hour up to 30 total',
+          'Fri/Sat first-hour bookings require one house bottle or $120 purchase',
+          'Underage groups may substitute food and drinks',
         ],
         photos: ['xlarge.jpeg'],
       },
@@ -2817,12 +2822,31 @@ class BarzunkoApp {
       };
 
       // 1) Prepare payment (creates PaymentIntent only)
-      const prepareFn = window.firebaseFunctions.httpsCallable('prepareBookingPayment');
-      const prepRes = await prepareFn(payload);
-      const clientSecretToUse = prepRes.data?.clientSecret;
-      const paymentIntentId = prepRes.data?.paymentIntentId;
-      if (!clientSecretToUse || !paymentIntentId) {
-        throw new Error('Unable to start payment. Please try again.');
+      // If a previous attempt charged the card but lost the network before finalizeBooking
+      // responded, reuse that PI so we don't charge the customer a second time.
+      let clientSecretToUse;
+      let paymentIntentId;
+      const storedPending = (() => {
+        try { return JSON.parse(sessionStorage.getItem('barzunkoPendingPI') || 'null'); } catch { return null; }
+      })();
+      const pendingMatchesSlot = storedPending &&
+        storedPending.roomId === payload.roomId &&
+        storedPending.date === payload.date &&
+        storedPending.startTime === payload.startTime &&
+        storedPending.duration === payload.duration;
+
+      if (pendingMatchesSlot) {
+        // Card was already charged — go straight to finalize with the stored PI.
+        paymentIntentId = storedPending.paymentIntentId;
+        clientSecretToUse = null; // not needed; we skip re-confirmation below
+      } else {
+        const prepareFn = window.firebaseFunctions.httpsCallable('prepareBookingPayment');
+        const prepRes = await prepareFn(payload);
+        clientSecretToUse = prepRes.data?.clientSecret;
+        paymentIntentId = prepRes.data?.paymentIntentId;
+        if (!clientSecretToUse || !paymentIntentId) {
+          throw new Error('Unable to start payment. Please try again.');
+        }
       }
 
       // 2) Confirm the payment on the client using Stripe.js
@@ -2830,35 +2854,53 @@ class BarzunkoApp {
         document.getElementById('cardholder-name').value ||
         `${this.bookingData.customer.firstName} ${this.bookingData.customer.lastName}`;
 
-      const { error, paymentIntent } = await window.stripe.confirmCardPayment(clientSecretToUse, {
-        payment_method: {
-          card: this.cardElement,
-          billing_details: {
-            name: cardholderName,
-            email: this.bookingData.customer.email,
-            phone: this.bookingData.customer.phone,
+      let confirmedPaymentIntentId;
+      if (pendingMatchesSlot) {
+        // Payment was already confirmed in a prior attempt — skip re-charging.
+        confirmedPaymentIntentId = paymentIntentId;
+      } else {
+        const { error, paymentIntent } = await window.stripe.confirmCardPayment(clientSecretToUse, {
+          payment_method: {
+            card: this.cardElement,
+            billing_details: {
+              name: cardholderName,
+              email: this.bookingData.customer.email,
+              phone: this.bookingData.customer.phone,
+            },
           },
-        },
-      });
+        });
 
-      if (error) {
-        this.hideLoading();
-        this.showError(error.message || 'Payment incomplete, please retry.');
-        return;
-      }
+        if (error) {
+          this.hideLoading();
+          this.showError(error.message || 'Payment incomplete, please retry.');
+          return;
+        }
 
-      const okStatuses = ['succeeded', 'requires_capture', 'processing'];
-      if (!paymentIntent || !okStatuses.includes(paymentIntent.status)) {
-        this.hideLoading();
-        this.showError('Payment incomplete, please retry.');
-        return;
+        const okStatuses = ['succeeded', 'requires_capture', 'processing'];
+        if (!paymentIntent || !okStatuses.includes(paymentIntent.status)) {
+          this.hideLoading();
+          this.showError('Payment incomplete, please retry.');
+          return;
+        }
+
+        confirmedPaymentIntentId = paymentIntent.id;
+
+        // Card has been charged. Persist the PI so that if the network drops before
+        // finalizeBooking responds, a retry can reuse this PI instead of charging again.
+        sessionStorage.setItem('barzunkoPendingPI', JSON.stringify({
+          paymentIntentId: confirmedPaymentIntentId,
+          roomId: payload.roomId,
+          date: payload.date,
+          startTime: payload.startTime,
+          duration: payload.duration,
+        }));
       }
 
       // 3) Finalize booking (creates booking doc after payment success)
       const finalizeFn = window.firebaseFunctions.httpsCallable('finalizeBooking');
       const finalizeRes = await finalizeFn({
         ...payload,
-        paymentIntentId: paymentIntent.id,
+        paymentIntentId: confirmedPaymentIntentId,
       });
       const bookingId = finalizeRes.data?.bookingId;
 
@@ -2866,8 +2908,9 @@ class BarzunkoApp {
       this.bookingData.id = bookingId;
       this.bookingData.status = 'confirmed';
       this.bookingData.createdAt = new Date().toISOString();
-      this.bookingData.paymentIntentId = paymentIntent.id;
+      this.bookingData.paymentIntentId = confirmedPaymentIntentId;
 
+      sessionStorage.removeItem('barzunkoPendingPI');
       sessionStorage.setItem('barzunkoBooking', JSON.stringify(this.bookingData));
       this.hideLoading();
       window.location.href = 'confirmation.html';
