@@ -122,7 +122,7 @@ class BarzunkoApp {
       {
         id: 'small',
         name: 'Small Room',
-        capacity: '4 included, max 5 guests',
+        capacity: '4 included',
         minCapacity: 1,
         maxCapacity: 5,
         includedGuests: 4,
@@ -146,7 +146,7 @@ class BarzunkoApp {
       {
         id: 'medium',
         name: 'Medium Room',
-        capacity: '8 included, max 12 guests',
+        capacity: '8 included',
         minCapacity: 1,
         maxCapacity: 12,
         includedGuests: 8,
@@ -2827,9 +2827,14 @@ class BarzunkoApp {
       let clientSecretToUse;
       let paymentIntentId;
       const storedPending = (() => {
-        try { return JSON.parse(sessionStorage.getItem('barzunkoPendingPI') || 'null'); } catch { return null; }
+        try {
+          return JSON.parse(sessionStorage.getItem('barzunkoPendingPI') || 'null');
+        } catch {
+          return null;
+        }
       })();
-      const pendingMatchesSlot = storedPending &&
+      const pendingMatchesSlot =
+        storedPending &&
         storedPending.roomId === payload.roomId &&
         storedPending.date === payload.date &&
         storedPending.startTime === payload.startTime &&
@@ -2887,13 +2892,16 @@ class BarzunkoApp {
 
         // Card has been charged. Persist the PI so that if the network drops before
         // finalizeBooking responds, a retry can reuse this PI instead of charging again.
-        sessionStorage.setItem('barzunkoPendingPI', JSON.stringify({
-          paymentIntentId: confirmedPaymentIntentId,
-          roomId: payload.roomId,
-          date: payload.date,
-          startTime: payload.startTime,
-          duration: payload.duration,
-        }));
+        sessionStorage.setItem(
+          'barzunkoPendingPI',
+          JSON.stringify({
+            paymentIntentId: confirmedPaymentIntentId,
+            roomId: payload.roomId,
+            date: payload.date,
+            startTime: payload.startTime,
+            duration: payload.duration,
+          }),
+        );
       }
 
       // 3) Finalize booking (creates booking doc after payment success)
