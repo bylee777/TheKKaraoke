@@ -133,7 +133,7 @@ class BarzunkoApp {
         features: [
           '4 rooms of this type',
           '4 guests included',
-          '$5 per extra guest per hour up to 5 total',
+          '$5 per extra guest per hour',
           'Premium sound system and LED lighting',
         ],
         photos: [
@@ -157,7 +157,7 @@ class BarzunkoApp {
         features: [
           '4 rooms of this type',
           '8 guests included',
-          '$5 per extra guest per hour up to 12 total',
+          '$5 per extra guest per hour',
           'Enhanced sound system and party seating',
         ],
         photos: [
