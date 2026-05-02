@@ -2860,9 +2860,11 @@ class BarzunkoApp {
         `${this.bookingData.customer.firstName} ${this.bookingData.customer.lastName}`;
 
       let confirmedPaymentIntentId;
+      let confirmedPaymentStatus;
       if (pendingMatchesSlot) {
         // Payment was already confirmed in a prior attempt — skip re-charging.
         confirmedPaymentIntentId = paymentIntentId;
+        confirmedPaymentStatus = storedPending.paymentStatus || 'processing';
       } else {
         const { error, paymentIntent } = await window.stripe.confirmCardPayment(clientSecretToUse, {
           payment_method: {
@@ -2889,6 +2891,7 @@ class BarzunkoApp {
         }
 
         confirmedPaymentIntentId = paymentIntent.id;
+        confirmedPaymentStatus = paymentIntent.status;
 
         // Card has been charged. Persist the PI so that if the network drops before
         // finalizeBooking responds, a retry can reuse this PI instead of charging again.
@@ -2900,6 +2903,7 @@ class BarzunkoApp {
             date: payload.date,
             startTime: payload.startTime,
             duration: payload.duration,
+            paymentStatus: confirmedPaymentStatus,
           }),
         );
       }
@@ -2914,9 +2918,10 @@ class BarzunkoApp {
 
       // 4) Update local booking data and redirect to confirmation page
       this.bookingData.id = bookingId;
-      this.bookingData.status = 'confirmed';
+      this.bookingData.status = confirmedPaymentStatus === 'succeeded' ? 'confirmed' : 'pending';
       this.bookingData.createdAt = new Date().toISOString();
       this.bookingData.paymentIntentId = confirmedPaymentIntentId;
+      this.bookingData.paymentStatus = confirmedPaymentStatus;
 
       sessionStorage.removeItem('barzunkoPendingPI');
       sessionStorage.setItem('barzunkoBooking', JSON.stringify(this.bookingData));

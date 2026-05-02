@@ -1427,7 +1427,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
   validateCustomerInfo(customerInfo);
 
   const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
-  const okStatuses = ['succeeded', 'requires_capture'];
+  const okStatuses = ['succeeded', 'requires_capture', 'processing'];
   if (!intent || !okStatuses.includes(intent.status)) {
     throw new functions.https.HttpsError(
       'failed-precondition',
@@ -1540,20 +1540,39 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
       cancellation: false,
       rebooking: false,
     },
-    status: intent.status === 'succeeded' ? 'confirmed' : 'pending',
+    status: ['succeeded', 'requires_capture'].includes(intent.status) ? 'confirmed' : 'pending',
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
 
   // Create the booking doc with availability check inside a transaction
   let newBookingRef;
+  let existingBookingId = null;
   try {
     await db.runTransaction(async (transaction) => {
+      const finalizationRef = db.collection('paymentIntentFinalizations').doc(intent.id);
+      const finalizationSnap = await transaction.get(finalizationRef);
+      if (finalizationSnap.exists) {
+        existingBookingId = finalizationSnap.data()?.bookingId || null;
+        if (!existingBookingId) {
+          throw new functions.https.HttpsError(
+            'internal',
+            'Payment finalization record is missing a booking ID.',
+          );
+        }
+        return;
+      }
+
       await ensureRoomAvailability(roomId, date, startTime, endTime, null, transaction, {
         partySize,
       });
       const docRef = db.collection('bookings').doc();
       transaction.set(docRef, bookingDoc);
+      transaction.set(finalizationRef, {
+        bookingId: docRef.id,
+        paymentIntentId: intent.id,
+        createdAt: FieldValue.serverTimestamp(),
+      });
       newBookingRef = docRef;
     });
   } catch (err) {
@@ -1562,25 +1581,31 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
     throw err;
   }
 
-  try {
-    await sendBookingEmail({ id: newBookingRef.id, ...bookingDoc });
-  } catch (err) {
-    console.error('finalizeBooking sendBookingEmail failed', err);
+  if (existingBookingId) {
+    return { bookingId: existingBookingId };
   }
-  try {
-    await sendTelegramMessage(
-      [
-        '📅 New Booking (paid)',
-        `Date: ${bookingDoc.date} ${bookingDoc.startTime}`,
-        `Room: ${bookingDoc.roomId}`,
-        `Name: ${bookingDoc.customerInfo?.firstName || ''} ${bookingDoc.customerInfo?.lastName || ''}`,
-        `Phone: ${bookingDoc.customerInfo?.phone || 'n/a'}`,
-        `Party Size: ${bookingDoc.partySize ?? 'n/a'}`,
-        `Deposit: $${bookingDoc.depositAmount ?? 0}`,
-      ].join('\n'),
-    );
-  } catch (err) {
-    console.error('finalizeBooking sendTelegram failed', err);
+
+  if (bookingDoc.status === 'confirmed') {
+    try {
+      await sendBookingEmail({ id: newBookingRef.id, ...bookingDoc });
+    } catch (err) {
+      console.error('finalizeBooking sendBookingEmail failed', err);
+    }
+    try {
+      await sendTelegramMessage(
+        [
+          '📅 New Booking (paid)',
+          `Date: ${bookingDoc.date} ${bookingDoc.startTime}`,
+          `Room: ${bookingDoc.roomId}`,
+          `Name: ${bookingDoc.customerInfo?.firstName || ''} ${bookingDoc.customerInfo?.lastName || ''}`,
+          `Phone: ${bookingDoc.customerInfo?.phone || 'n/a'}`,
+          `Party Size: ${bookingDoc.partySize ?? 'n/a'}`,
+          `Deposit: $${bookingDoc.depositAmount ?? 0}`,
+        ].join('\n'),
+      );
+    } catch (err) {
+      console.error('finalizeBooking sendTelegram failed', err);
+    }
   }
 
   return { bookingId: newBookingRef.id };
@@ -2543,6 +2568,8 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
     };
     if (status === 'succeeded' || status === 'requires_capture') {
       updatePayload.status = 'confirmed';
+    } else if (['requires_payment_method', 'payment_failed', 'canceled'].includes(status)) {
+      updatePayload.status = 'cancelled';
     }
     await ref.update(updatePayload);
     if (status === 'succeeded') {
