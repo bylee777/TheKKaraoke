@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 const { FieldValue } = require('firebase-admin/firestore');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 const MINUTES_IN_DAY = 24 * 60;
 const BUSINESS_TIMEZONE = 'America/Toronto';
@@ -757,6 +758,123 @@ function requireStaffAccess(context) {
   }
 }
 
+const RATE_LIMITS = {
+  prepareBookingPayment: { max: 8, windowMs: 10 * 60 * 1000 },
+  finalizeBooking: { max: 20, windowMs: 10 * 60 * 1000 },
+  lookupBooking: { max: 10, windowMs: 10 * 60 * 1000 },
+  getRoomAvailability: { max: 120, windowMs: 60 * 1000 },
+  getMaxAvailableDuration: { max: 120, windowMs: 60 * 1000 },
+  cancelBookingGuest: { max: 5, windowMs: 10 * 60 * 1000 },
+  rebookBookingGuest: { max: 5, windowMs: 10 * 60 * 1000 },
+};
+
+function hashValue(value) {
+  return crypto
+    .createHash('sha256')
+    .update(String(value || ''))
+    .digest('hex');
+}
+
+function getRequestIp(context) {
+  const headers = context?.rawRequest?.headers || {};
+  const forwarded = headers['x-forwarded-for'];
+  const raw =
+    (Array.isArray(forwarded) ? forwarded[0] : forwarded || '').split(',')[0].trim() ||
+    headers['fastly-client-ip'] ||
+    headers['x-real-ip'] ||
+    context?.rawRequest?.ip ||
+    context?.rawRequest?.connection?.remoteAddress ||
+    'unknown';
+  return String(raw);
+}
+
+function summarizeRateLimitData(data = {}) {
+  const summary = {};
+  ['roomId', 'date', 'startTime', 'duration', 'newDate', 'newStartTime', 'newDuration'].forEach(
+    (key) => {
+      if (data[key] != null) summary[key] = String(data[key]).slice(0, 80);
+    },
+  );
+  if (data.bookingRef) summary.bookingRefHash = hashValue(data.bookingRef).slice(0, 16);
+  if (data.bookingId) summary.bookingIdHash = hashValue(data.bookingId).slice(0, 16);
+  if (data.paymentIntentId) {
+    summary.paymentIntentHash = hashValue(data.paymentIntentId).slice(0, 16);
+  }
+  const email = normalizeEmail(data.email || data.customerInfo?.email);
+  if (email) summary.emailHash = hashValue(email).slice(0, 16);
+  return summary;
+}
+
+async function logRateLimitBlock(scope, context, data, limitInfo) {
+  const ip = getRequestIp(context);
+  try {
+    await db.collection('abuseLogs').add({
+      type: 'rate-limit',
+      scope,
+      limit: limitInfo.max,
+      windowMs: limitInfo.windowMs,
+      count: limitInfo.count,
+      clientKey: limitInfo.clientKey,
+      ipHash: hashValue(ip).slice(0, 24),
+      authUid: context?.auth?.uid || null,
+      appId: context?.app?.appId || null,
+      request: summarizeRateLimitData(data),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('[rateLimit] Failed to write abuse log', scope, err);
+  }
+}
+
+async function enforcePublicRateLimit(context, scope, data = {}) {
+  if (hasStaffAccess(context)) return;
+  const config = RATE_LIMITS[scope];
+  if (!config) return;
+
+  const now = Date.now();
+  const windowId = Math.floor(now / config.windowMs);
+  const ip = getRequestIp(context);
+  const appId = context?.app?.appId || 'no-app';
+  const uid = context?.auth?.uid || 'anon';
+  const clientKey = hashValue(`${scope}|${ip}|${appId}|${uid}`).slice(0, 40);
+  const docRef = db.collection('rateLimits').doc(`${scope}_${windowId}_${clientKey}`);
+
+  const result = await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(docRef);
+    const current = snap.exists ? Number(snap.data()?.count) || 0 : 0;
+    if (current >= config.max) {
+      return { blocked: true, count: current };
+    }
+    const payload = {
+      scope,
+      clientKey,
+      windowId,
+      windowMs: config.windowMs,
+      count: current + 1,
+      lastSeenAt: FieldValue.serverTimestamp(),
+      expiresAt: new Date(now + config.windowMs * 2),
+    };
+    if (snap.exists) {
+      transaction.update(docRef, payload);
+    } else {
+      transaction.set(docRef, {
+        ...payload,
+        firstSeenAt: FieldValue.serverTimestamp(),
+      });
+    }
+    return { blocked: false, count: current + 1 };
+  });
+
+  if (result.blocked) {
+    const limitInfo = { ...config, count: result.count, clientKey };
+    await logRateLimitBlock(scope, context, data, limitInfo);
+    throw new functions.https.HttpsError(
+      'resource-exhausted',
+      'Too many requests. Please wait a moment and try again.',
+    );
+  }
+}
+
 function normalizeTimeRange(start, end) {
   const startMinutes = timeStringToMinutes(start);
   let endMinutes = timeStringToMinutes(end);
@@ -1289,7 +1407,8 @@ exports.createBooking = secureFunctions.https.onCall(async (data, context) => {
  * Validates availability and creates a PaymentIntent, but does NOT create a booking document.
  * The booking is only written after payment succeeds via finalizeBooking.
  */
-exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
+exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'prepareBookingPayment', data);
   const { roomId, date, startTime, duration, partySize, customerInfo } = data || {};
 
   if (!roomId || !date || !startTime || !duration || !customerInfo) {
@@ -1400,7 +1519,8 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data) => {
  * Callable: finalizeBooking
  * After payment succeeds, this writes the booking document and sends email.
  */
-exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
+exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'finalizeBooking', data);
   const {
     paymentIntentId,
     roomId,
@@ -1610,7 +1730,8 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data) => {
 
   return { bookingId: newBookingRef.id };
 });
-exports.lookupBooking = secureFunctions.https.onCall(async (data) => {
+exports.lookupBooking = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'lookupBooking', data);
   const bookingRefRaw = typeof data?.bookingRef === 'string' ? data.bookingRef.trim() : '';
   const emailNormalized = normalizeEmail(data?.email);
 
@@ -1636,6 +1757,7 @@ exports.lookupBooking = secureFunctions.https.onCall(async (data) => {
 });
 
 exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'getRoomAvailability', data);
   const { date, startTime } = data || {};
   const duration = Number(data?.duration);
   const excludeBookingId =
@@ -1706,6 +1828,7 @@ exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context)
 });
 
 exports.getMaxAvailableDuration = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'getMaxAvailableDuration', data);
   const { roomId, date, startTime } = data || {};
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
@@ -2211,7 +2334,8 @@ exports.adminGetAvailabilityByDate = secureFunctions.https.onCall(async (data, c
   return { times: timeList, availability };
 });
 
-exports.cancelBookingGuest = secureFunctions.https.onCall(async (data) => {
+exports.cancelBookingGuest = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'cancelBookingGuest', data);
   const bookingId = typeof data?.bookingId === 'string' ? data.bookingId.trim() : '';
   const email = data?.email;
 
@@ -2257,7 +2381,8 @@ exports.cancelBookingGuest = secureFunctions.https.onCall(async (data) => {
   };
 });
 
-exports.rebookBookingGuest = secureFunctions.https.onCall(async (data) => {
+exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'rebookBookingGuest', data);
   const bookingId = typeof data?.bookingId === 'string' ? data.bookingId.trim() : '';
   const email = data?.email;
   const newDate = typeof data?.newDate === 'string' ? data.newDate.trim() : '';
