@@ -311,6 +311,62 @@
         background: #11151d;
       }
 
+      .room-card__gallery {
+        position: relative;
+        overflow: hidden;
+        background: #11151d;
+        aspect-ratio: 4 / 3;
+      }
+
+      .room-card__gallery img {
+        display: none;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .room-card__gallery img.active {
+        display: block;
+      }
+
+      .gallery-btn {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(0, 0, 0, 0.45);
+        border: none;
+        color: #fff;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
+        z-index: 2;
+      }
+
+      .gallery-btn:hover {
+        background: rgba(0, 0, 0, 0.7);
+      }
+
+      .gallery-btn--prev { left: 8px; }
+      .gallery-btn--next { right: 8px; }
+
+      .gallery-counter {
+        position: absolute;
+        bottom: 8px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        color: #fff;
+        font-size: 0.72rem;
+        padding: 2px 7px;
+        border-radius: 999px;
+        pointer-events: none;
+      }
+
       .room-card__body {
         padding: 1rem;
       }
@@ -545,36 +601,45 @@
         </div>
         <div class="room-grid">
           <article class="room-card">
-            <img
-              class="room-card__image"
-              src="image/KKsmall.jpeg"
-              alt="Small private karaoke room at The K Karaoke Christie"
-              loading="lazy"
-            />
+            <div class="room-card__gallery" data-gallery>
+              <img class="active" src="image/Kkaraoke/small1.jpeg" alt="Small karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/small2.jpeg" alt="Small karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/small3.jpeg" alt="Small karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/small4.jpeg" alt="Small karaoke room at The K Karaoke Christie" loading="lazy" />
+              <button class="gallery-btn gallery-btn--prev" aria-label="Previous photo">&#8249;</button>
+              <button class="gallery-btn gallery-btn--next" aria-label="Next photo">&#8250;</button>
+              <span class="gallery-counter">1 / 4</span>
+            </div>
             <div class="room-card__body">
               <h3>Small Room</h3>
               <p>Compact room for smaller groups and casual karaoke nights.</p>
             </div>
           </article>
           <article class="room-card">
-            <img
-              class="room-card__image"
-              src="image/KKmed.jpeg"
-              alt="Medium private karaoke room at The K Karaoke Christie"
-              loading="lazy"
-            />
+            <div class="room-card__gallery" data-gallery>
+              <img class="active" src="image/Kkaraoke/medRoom1.jpeg" alt="Medium karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/medRoom2.jpeg" alt="Medium karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/medRoom3.jpeg" alt="Medium karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/medRoom4.jpeg" alt="Medium karaoke room at The K Karaoke Christie" loading="lazy" />
+              <button class="gallery-btn gallery-btn--prev" aria-label="Previous photo">&#8249;</button>
+              <button class="gallery-btn gallery-btn--next" aria-label="Next photo">&#8250;</button>
+              <span class="gallery-counter">1 / 4</span>
+            </div>
             <div class="room-card__body">
               <h3>Medium Room</h3>
               <p>More seating for friend groups, birthdays, and after-work plans.</p>
             </div>
           </article>
           <article class="room-card">
-            <img
-              class="room-card__image"
-              src="image/KKlarge.jpeg"
-              alt="Large private karaoke room at The K Karaoke Christie"
-              loading="lazy"
-            />
+            <div class="room-card__gallery" data-gallery>
+              <img class="active" src="image/Kkaraoke/Large1.jpeg" alt="Large karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/Large2.jpeg" alt="Large karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/Large3.jpeg" alt="Large karaoke room at The K Karaoke Christie" loading="lazy" />
+              <img src="image/Kkaraoke/Large4.jpeg" alt="Large karaoke room at The K Karaoke Christie" loading="lazy" />
+              <button class="gallery-btn gallery-btn--prev" aria-label="Previous photo">&#8249;</button>
+              <button class="gallery-btn gallery-btn--next" aria-label="Next photo">&#8250;</button>
+              <span class="gallery-counter">1 / 4</span>
+            </div>
             <div class="room-card__body">
               <h3>Large Room</h3>
               <p>Roomier setup for bigger parties and high-energy group sessions.</p>
@@ -625,5 +690,22 @@
       <span>&copy; 2026 The K Karaoke</span>
       <span>416-371-4142 / 699 Bloor St West, Toronto</span>
     </footer>
+  <script>
+    document.querySelectorAll('[data-gallery]').forEach((gallery) => {
+      const imgs = Array.from(gallery.querySelectorAll('img'));
+      const counter = gallery.querySelector('.gallery-counter');
+      let current = 0;
+
+      function show(index) {
+        imgs[current].classList.remove('active');
+        current = (index + imgs.length) % imgs.length;
+        imgs[current].classList.add('active');
+        if (counter) counter.textContent = `${current + 1} / ${imgs.length}`;
+      }
+
+      gallery.querySelector('.gallery-btn--prev').addEventListener('click', () => show(current - 1));
+      gallery.querySelector('.gallery-btn--next').addEventListener('click', () => show(current + 1));
+    });
+  </script>
   </body>
 </html>
