@@ -33,6 +33,7 @@ class BarzunkoApp {
     this.isRebookingFlow = false;
     this.rebookContext = null;
     this.rebookingStorageKey = 'barzunkoRebookContext';
+    this.waitlistTime = null;
     this.taxRate = 0.13;
 
     this.adminBookingsById = {};
@@ -494,6 +495,11 @@ class BarzunkoApp {
       if (e.target.id === 'staff-login-form') {
         e.preventDefault();
         this.staffLogin(e);
+      }
+
+      if (e.target.id === 'waitlist-form') {
+        e.preventDefault();
+        this.submitWaitlist();
       }
     });
 
@@ -1417,6 +1423,16 @@ class BarzunkoApp {
             });
           } else {
             timeSlot.classList.add('disabled');
+            if (typeof slot === 'object' && slot.bookedOut) {
+              const waitlistBtn = document.createElement('button');
+              waitlistBtn.className = 'btn btn--sm time-slot__waitlist-btn';
+              waitlistBtn.textContent = 'Waitlist';
+              waitlistBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.openWaitlistModal(time);
+              });
+              timeSlot.appendChild(waitlistBtn);
+            }
           }
         } else {
           timeSlot.classList.add('disabled');
@@ -1485,10 +1501,9 @@ class BarzunkoApp {
           const canFitDuration = Number.isFinite(maxHours) ? maxHours >= duration : false;
 
           if (remaining > 0 && canFitDuration) {
-            availableSlots.push({
-              time,
-              available: true,
-            });
+            availableSlots.push({ time, available: true });
+          } else if (remaining === 0) {
+            availableSlots.push({ time, available: false, bookedOut: true });
           }
         } catch (slotErr) {
           console.warn('Skipping slot due to availability error', time, slotErr);
@@ -6445,6 +6460,88 @@ class BarzunkoApp {
     const toast = document.getElementById('notification-toast');
     if (toast) {
       toast.classList.remove('show');
+    }
+  }
+
+  openWaitlistModal(time) {
+    this.waitlistTime = time;
+    const room = this.selectedRoom;
+    const date = this.selectedDate;
+
+    const roomNameEl = document.getElementById('waitlist-room-name');
+    const dateEl = document.getElementById('waitlist-date');
+    const timeEl = document.getElementById('waitlist-time');
+    const durationEl = document.getElementById('waitlist-duration');
+    if (roomNameEl) roomNameEl.textContent = room ? room.name : '';
+    if (dateEl) dateEl.textContent = date || '';
+    if (timeEl) timeEl.textContent = this.formatTime(time);
+    if (durationEl) {
+      const d = this.bookingData.duration || 1;
+      durationEl.textContent = `${d} hour${d !== 1 ? 's' : ''}`;
+    }
+
+    const form = document.getElementById('waitlist-form');
+    if (form) form.reset();
+    const statusEl = document.getElementById('waitlist-status');
+    if (statusEl) {
+      statusEl.textContent = '';
+      statusEl.className = 'waitlist-status';
+    }
+
+    this.showModal('waitlist-modal');
+  }
+
+  async submitWaitlist() {
+    const name = document.getElementById('waitlist-name')?.value.trim() || '';
+    const email = document.getElementById('waitlist-email')?.value.trim() || '';
+    const phone = document.getElementById('waitlist-phone')?.value.trim() || '';
+    const statusEl = document.getElementById('waitlist-status');
+
+    if (!name || !email) {
+      if (statusEl) {
+        statusEl.textContent = 'Please enter your name and email.';
+        statusEl.className = 'waitlist-status waitlist-status--error';
+      }
+      return;
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      if (statusEl) {
+        statusEl.textContent = 'Please enter a valid email address.';
+        statusEl.className = 'waitlist-status waitlist-status--error';
+      }
+      return;
+    }
+
+    const submitBtn = document.getElementById('waitlist-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const joinWaitlist = window.firebaseFunctions.httpsCallable('joinWaitlist');
+      const result = await joinWaitlist({
+        roomId: this.selectedRoom?.id,
+        date: this.selectedDate,
+        startTime: this.waitlistTime,
+        duration: this.bookingData.duration || 1,
+        partySize: this.bookingData.partySize || 1,
+        name,
+        email,
+        phone,
+      });
+      if (statusEl) {
+        statusEl.textContent = result.data?.message || "You're on the waitlist! We'll email you if a spot opens up.";
+        statusEl.className = 'waitlist-status waitlist-status--success';
+      }
+      const form = document.getElementById('waitlist-form');
+      if (form) form.reset();
+      setTimeout(() => this.hideModal('waitlist-modal'), 3000);
+    } catch (err) {
+      const msg = err?.message || 'Something went wrong. Please try again.';
+      if (statusEl) {
+        statusEl.textContent = msg;
+        statusEl.className = 'waitlist-status waitlist-status--error';
+      }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   }
 

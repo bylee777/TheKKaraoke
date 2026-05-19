@@ -377,6 +377,50 @@
         <i class="fas fa-times"></i>
       </button>
     </div>
+    <!-- Waitlist Modal -->
+    <div class="modal hidden" id="waitlist-modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Join the Waitlist</h3>
+          <button class="modal-close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="waitlist-slot-summary">
+            <strong>Room:</strong> <span id="waitlist-room-name"></span> &nbsp;|&nbsp;
+            <strong>Date:</strong> <span id="waitlist-date"></span> &nbsp;|&nbsp;
+            <strong>Time:</strong> <span id="waitlist-time"></span> &nbsp;|&nbsp;
+            <strong>Duration:</strong> <span id="waitlist-duration"></span>
+          </p>
+          <p>If a spot opens up, everyone on the waitlist for this slot gets notified at the same time. <strong>This is not a reservation</strong> — it's first come, first served. The first person to complete their booking secures the spot.</p>
+          <form id="waitlist-form">
+            <div class="form-group">
+              <label class="form-label">Name <span class="required-indicator">*</span></label>
+              <input type="text" id="waitlist-name" class="form-control" required autocomplete="name" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email <span class="required-indicator">*</span></label>
+              <input type="email" id="waitlist-email" class="form-control" required autocomplete="email" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone (optional)</label>
+              <input type="tel" id="waitlist-phone" class="form-control" autocomplete="tel" />
+            </div>
+            <div id="waitlist-status" class="waitlist-status"></div>
+            <div class="modal-footer" style="padding: 0; margin-top: var(--space-16);">
+              <button type="submit" id="waitlist-submit-btn" class="btn btn--primary">
+                <i class="fas fa-clock"></i>
+                Join Waitlist
+              </button>
+              <button type="button" class="btn btn--outline modal-close">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <!-- Error Modal -->
     <div class="modal hidden" id="error-modal">
       <div class="modal-backdrop"></div>

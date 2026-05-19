@@ -766,6 +766,7 @@ const RATE_LIMITS = {
   getMaxAvailableDuration: { max: 120, windowMs: 60 * 1000 },
   cancelBookingGuest: { max: 5, windowMs: 10 * 60 * 1000 },
   rebookBookingGuest: { max: 5, windowMs: 10 * 60 * 1000 },
+  joinWaitlist: { max: 10, windowMs: 10 * 60 * 1000 },
 };
 
 function hashValue(value) {
@@ -1070,6 +1071,106 @@ async function sendCancellationEmail(booking) {
   }
 }
 
+async function sendWaitlistConfirmationEmail({ name, email, roomId, date, startTime }) {
+  const to = normalizeEmail(email);
+  if (!to || !mailTransport) {
+    console.log('sendWaitlistConfirmationEmail stub:', email);
+    return;
+  }
+  const roomName = getRoomConfig(roomId).label;
+  const subject = 'Please Do not Reply to this email - You\'re on the Barzunko waitlist';
+  const html = `
+    <p>Hi ${escapeHtml(name)},</p>
+    <p>You've been added to the waitlist for:</p>
+    <ul>
+      <li><strong>Room:</strong> ${escapeHtml(roomName)}</li>
+      <li><strong>Date:</strong> ${escapeHtml(date)}</li>
+      <li><strong>Time:</strong> ${escapeHtml(formatTimeLabel(startTime))}</li>
+    </ul>
+    <p>We'll email you if a spot opens up. When it does, everyone on the waitlist for this slot gets notified at the same time — <strong>it's first come, first served, and this is not a reservation.</strong> The first person to complete their booking secures the spot.</p>
+    <p><strong>Please do not reply to this email.</strong></p>
+  `;
+  try {
+    await mailTransport.sendMail({ to, from: gmailFrom, subject, html });
+  } catch (err) {
+    console.error('sendWaitlistConfirmationEmail failed', err);
+  }
+}
+
+async function sendWaitlistNotificationEmail({ name, email, roomId, date, startTime, duration }) {
+  const to = normalizeEmail(email);
+  if (!to || !mailTransport) {
+    console.log('sendWaitlistNotificationEmail stub:', email);
+    return;
+  }
+  const roomName = getRoomConfig(roomId).label;
+  const subject = 'Please Do not Reply to this email - A Barzunko waitlist spot is now available!';
+  const html = `
+    <p>Hi ${escapeHtml(name)},</p>
+    <p>A spot has opened up that matches your waitlist request:</p>
+    <ul>
+      <li><strong>Room:</strong> ${escapeHtml(roomName)}</li>
+      <li><strong>Date:</strong> ${escapeHtml(date)}</li>
+      <li><strong>Time:</strong> ${escapeHtml(formatTimeLabel(startTime))}</li>
+      <li><strong>Duration:</strong> ${escapeHtml(String(duration))} hour${Number(duration) !== 1 ? 's' : ''}</li>
+    </ul>
+    <p><strong>This notification has been sent to everyone on the waitlist for this slot — it's first come, first served. The first person to complete their booking secures the spot.</strong></p>
+    <p><a href="https://thek-karaoke.web.app/booking.html" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Book Now</a></p>
+    <p>Or copy this link: https://thek-karaoke.web.app/booking.html</p>
+    <p>For assistance call us at 416-968-0909.</p>
+    <p><strong>Please do not reply to this email.</strong></p>
+  `;
+  try {
+    await mailTransport.sendMail({ to, from: gmailFrom, subject, html });
+  } catch (err) {
+    console.error('sendWaitlistNotificationEmail failed', err);
+  }
+}
+
+async function notifyAllWaitlistEntries(roomId, date, startTime) {
+  const snapshot = await db
+    .collection('waitlist')
+    .where('roomId', '==', roomId)
+    .where('date', '==', date)
+    .where('startTime', '==', startTime)
+    .where('status', '==', 'pending')
+    .get();
+
+  if (snapshot.empty) return;
+
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      status: 'notified',
+      notifiedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  await batch.commit();
+
+  await Promise.all(
+    snapshot.docs.map((doc) => {
+      const entry = doc.data();
+      return sendWaitlistNotificationEmail({
+        name: entry.name,
+        email: entry.email,
+        roomId: entry.roomId,
+        date: entry.date,
+        startTime: entry.startTime,
+        duration: entry.duration,
+      }).catch((err) => console.error('sendWaitlistNotificationEmail failed', entry.email, err));
+    }),
+  );
+
+  await sendTelegramMessage(
+    [
+      '📋 Waitlist Notified',
+      `Date: ${date} ${startTime}`,
+      `Room: ${roomId}`,
+      `Notified: ${snapshot.docs.length} people`,
+    ].join('\n'),
+  );
+}
+
 // Calendar integration stub. Integrate with the Google Calendar API once
 // credentials are provided. For now we just log the event details.
 async function addBookingToCalendar(booking) {
@@ -1350,6 +1451,9 @@ async function cancelBookingInternal(bookingId) {
       `Status: ${booking.status || 'cancelled'}`,
     ].join('\n'),
   );
+  await notifyAllWaitlistEntries(booking.roomId, booking.date, booking.startTime).catch((err) =>
+    console.error('notifyAllWaitlistEntries failed', err),
+  );
 }
 
 async function cancelBookingWithoutRefund(bookingId) {
@@ -1373,6 +1477,9 @@ async function cancelBookingWithoutRefund(bookingId) {
       `Phone: ${booking.customerInfo?.phone || 'n/a'}`,
       `Status: ${booking.status || 'cancelled'}`,
     ].join('\n'),
+  );
+  await notifyAllWaitlistEntries(booking.roomId, booking.date, booking.startTime).catch((err) =>
+    console.error('notifyAllWaitlistEntries failed', err),
   );
 }
 
@@ -2516,6 +2623,81 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
   };
 });
 
+exports.joinWaitlist = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'joinWaitlist', data);
+
+  const roomId = typeof data?.roomId === 'string' ? data.roomId.trim() : '';
+  const date = typeof data?.date === 'string' ? data.date.trim() : '';
+  const startTime = typeof data?.startTime === 'string' ? data.startTime.trim() : '';
+  const duration = Number(data?.duration);
+  const name = typeof data?.name === 'string' ? data.name.trim() : '';
+  const email = normalizeEmail(data?.email);
+  const phone = typeof data?.phone === 'string' ? data.phone.trim() : '';
+  const partySize = Number(data?.partySize) || 1;
+
+  if (!roomId || !date || !startTime || !name || !email) {
+    throw new functions.https.HttpsError('invalid-argument', 'roomId, date, startTime, name, and email are required.');
+  }
+  if (!ROOM_CONFIG[roomId]) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid roomId.');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid date format.');
+  }
+  if (!/^\d{2}:\d{2}$/.test(startTime)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid startTime format.');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid email address.');
+  }
+  if (name.length > MAX_NAME_LENGTH) {
+    throw new functions.https.HttpsError('invalid-argument', 'Name is too long.');
+  }
+
+  // Prevent duplicate entries for same person/slot
+  const existing = await db
+    .collection('waitlist')
+    .where('roomId', '==', roomId)
+    .where('date', '==', date)
+    .where('startTime', '==', startTime)
+    .where('email', '==', email)
+    .where('status', 'in', ['pending', 'notified'])
+    .limit(1)
+    .get();
+
+  if (!existing.empty) {
+    return { message: 'You are already on the waitlist for this slot.' };
+  }
+
+  await db.collection('waitlist').add({
+    roomId,
+    date,
+    startTime,
+    duration: Number.isFinite(duration) && duration > 0 ? duration : 1,
+    partySize,
+    name,
+    email,
+    phone,
+    status: 'pending',
+    createdAt: FieldValue.serverTimestamp(),
+    notifiedAt: null,
+    expiresAt: null,
+  });
+
+  await sendWaitlistConfirmationEmail({ name, email, roomId, date, startTime });
+
+  await sendTelegramMessage(
+    [
+      '📋 Waitlist Entry Added',
+      `Date: ${date} ${startTime}`,
+      `Room: ${roomId}`,
+      `Name: ${name}`,
+    ].join('\n'),
+  );
+
+  return { message: 'You have been added to the waitlist.' };
+});
+
 /**
  * Callable Cloud Function: cancelBooking
  *
@@ -2805,3 +2987,6 @@ exports.adminCaptureBySecret = secureFunctions.https.onCall(async (data, context
     throw new functions.https.HttpsError('internal', 'Capture failed');
   }
 });
+
+// Runs every 20 minutes. Finds waitlist entries whose 1-hour notification window
+// has expired and cascades to the next pending person for that slot.

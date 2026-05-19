@@ -2110,8 +2110,53 @@ main {
 }
 
 .time-slot.disabled {
-  opacity: 0.3;
+  opacity: 0.5;
   cursor: not-allowed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.time-slot__waitlist-btn {
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  color: rgba(139, 92, 246, 0.9);
+  cursor: pointer;
+  pointer-events: all;
+  transition: background var(--duration-fast) var(--ease-standard);
+  white-space: nowrap;
+}
+
+.time-slot__waitlist-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.waitlist-slot-summary {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: var(--radius-base);
+  padding: var(--space-12);
+  margin-bottom: var(--space-16);
+}
+
+.waitlist-status {
+  min-height: 1.25rem;
+  font-size: 0.875rem;
+  margin-top: var(--space-8);
+}
+
+.waitlist-status--error {
+  color: var(--color-error);
+}
+
+.waitlist-status--success {
+  color: var(--color-success, #4ade80);
 }
 
 .booking-availability-note {
