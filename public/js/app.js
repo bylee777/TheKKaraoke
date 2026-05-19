@@ -1413,6 +1413,15 @@ class BarzunkoApp {
         const timeSlot = document.createElement('div');
         timeSlot.className = 'time-slot';
         timeSlot.textContent = this.formatTime(time);
+        if (hours < 13) {
+          const nextDate = new Date(selectedDateTime.getTime());
+          nextDate.setDate(nextDate.getDate() + 1);
+          const dayName = nextDate.toLocaleDateString('en-CA', { weekday: 'short' });
+          const nextDayEl = document.createElement('small');
+          nextDayEl.className = 'time-slot__next-day';
+          nextDayEl.textContent = dayName;
+          timeSlot.appendChild(nextDayEl);
+        }
         // Check if time slot meets minimum notice requirement
         if (slotDateTime >= bookingCutoff) {
           const isAvailable = typeof slot === 'object' ? slot.available !== false : true;
