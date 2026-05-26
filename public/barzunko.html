@@ -101,10 +101,13 @@
                 View Rooms
               </button>
             </div>
-            <p class="hero-description" style="margin-top: 8px; font-weight: 600;">
-              For same day reservation call
-              <a href="tel:+14169680909" style="text-decoration: underline; color: inherit;">416-968-0909</a>
-            </p>
+            <div class="hero-sameday">
+              <button class="btn btn--outline" id="hero-sameday-btn">
+                <i class="fas fa-clock"></i>
+                Join Same-Day List
+              </button>
+              <span class="hero-sameday__or">or call <a href="tel:+14169680909">416-968-0909</a></span>
+            </div>
               <div class="hero-stats">
               <div class="stat">
                 <div class="stat-number neon-text">10</div>
@@ -386,6 +389,57 @@
       }
       window.app.currentPage = 'landing';
       window.app.init();
+      document.getElementById('hero-sameday-btn')?.addEventListener('click', () => {
+        window.app.openSameDayModal();
+      });
     </script>
+
+    <!-- Same-Day Walk-In Modal -->
+    <div class="modal hidden" id="same-day-modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Join Same-Day List</h3>
+          <button class="modal-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <p>Leave your details and we'll give you a call if we can fit you in today.</p>
+          <div class="same-day-modal__frisatnotice hidden" id="same-day-modal-frisatnotice">
+            <i class="fas fa-exclamation-circle"></i>
+            <strong>Friday &amp; Saturday reminder:</strong> There is a <strong>$20 minimum spend per person</strong> for all bookings.
+          </div>
+          <form id="same-day-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">First &amp; Last Name <span class="required-indicator">*</span></label>
+                <input type="text" id="same-day-name" class="form-control" required autocomplete="name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Phone Number <span class="required-indicator">*</span></label>
+                <input type="tel" id="same-day-phone" class="form-control" required autocomplete="tel" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Party Size <span class="required-indicator">*</span></label>
+                <input type="number" id="same-day-party" class="form-control" min="1" max="30" value="2" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Preferred Time (optional)</label>
+                <input type="text" id="same-day-time" class="form-control" placeholder="e.g. 9:00 PM" />
+              </div>
+            </div>
+            <div id="same-day-status" class="waitlist-status"></div>
+            <div class="modal-footer" style="padding: 0; margin-top: var(--space-16);">
+              <button type="submit" id="same-day-submit-btn" class="btn btn--primary">
+                <i class="fas fa-phone"></i>
+                Add Me to the List
+              </button>
+              <button type="button" class="btn btn--outline modal-close">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

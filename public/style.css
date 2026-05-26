@@ -1150,6 +1150,26 @@ main {
   margin-bottom: var(--space-32);
 }
 
+.hero-sameday {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: var(--space-8);
+  margin-bottom: var(--space-16);
+}
+
+.hero-sameday__or {
+  font-size: 0.875rem;
+  opacity: 0.7;
+}
+
+.hero-sameday__or a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .glow-btn {
   position: relative;
   overflow: hidden;
@@ -2116,6 +2136,48 @@ main {
   flex-direction: column;
   align-items: center;
   gap: var(--space-8);
+}
+
+.same-day-section {
+  margin-top: var(--space-24);
+  border: 1px dashed rgba(139, 92, 246, 0.35);
+  border-radius: var(--radius-base);
+  padding: var(--space-16) var(--space-20);
+}
+
+.same-day-section__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+}
+
+.same-day-section__text h4 {
+  margin: 0 0 var(--space-4);
+  font-size: 1rem;
+}
+
+.same-day-section__text p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.same-day-section__frisatnotice {
+  margin-top: var(--space-8);
+  font-size: 0.85rem;
+  color: var(--color-warning, #f59e0b);
+}
+
+.same-day-modal__frisatnotice {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-base);
+  padding: var(--space-12);
+  margin-bottom: var(--space-16);
+  font-size: 0.875rem;
+  color: var(--color-warning, #f59e0b);
 }
 
 .time-slot__next-day {

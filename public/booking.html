@@ -192,6 +192,23 @@
                   <div class="time-grid" id="time-grid">
                     <!-- Time slots will be populated by JavaScript -->
                   </div>
+                  <!-- Same-day walk-in section — shown only when today is selected -->
+                  <div class="same-day-section hidden" id="same-day-section">
+                    <div class="same-day-section__inner">
+                      <div class="same-day-section__text">
+                        <h4><i class="fas fa-door-open"></i> Want to come in today?</h4>
+                        <p>Can't find a time that works online? Add yourself to our same-day list and we'll call you if we can fit you in.</p>
+                        <p class="same-day-section__frisatnotice hidden" id="same-day-frisatnotice">
+                          <i class="fas fa-exclamation-circle"></i>
+                          <strong>Fri &amp; Sat:</strong> There is a $20 minimum spend per person.
+                        </p>
+                      </div>
+                      <button class="btn btn--outline" id="same-day-join-btn">
+                        <i class="fas fa-list"></i>
+                        Join Same-Day List
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -377,6 +394,54 @@
         <i class="fas fa-times"></i>
       </button>
     </div>
+    <!-- Same-Day Walk-In Modal -->
+    <div class="modal hidden" id="same-day-modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Join Same-Day List</h3>
+          <button class="modal-close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <p>Leave your details and we'll give you a call if we can fit you in today.</p>
+          <div class="same-day-modal__frisatnotice hidden" id="same-day-modal-frisatnotice">
+            <i class="fas fa-exclamation-circle"></i>
+            <strong>Friday &amp; Saturday reminder:</strong> There is a <strong>$20 minimum spend per person</strong> for all bookings.
+          </div>
+          <form id="same-day-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">First &amp; Last Name <span class="required-indicator">*</span></label>
+                <input type="text" id="same-day-name" class="form-control" required autocomplete="name" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Phone Number <span class="required-indicator">*</span></label>
+                <input type="tel" id="same-day-phone" class="form-control" required autocomplete="tel" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Party Size <span class="required-indicator">*</span></label>
+                <input type="number" id="same-day-party" class="form-control" min="1" max="30" value="2" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Preferred Time (optional)</label>
+                <input type="text" id="same-day-time" class="form-control" placeholder="e.g. 9:00 PM" />
+              </div>
+            </div>
+            <div id="same-day-status" class="waitlist-status"></div>
+            <div class="modal-footer" style="padding: 0; margin-top: var(--space-16);">
+              <button type="submit" id="same-day-submit-btn" class="btn btn--primary">
+                <i class="fas fa-phone"></i>
+                Add Me to the List
+              </button>
+              <button type="button" class="btn btn--outline modal-close">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <!-- Waitlist Modal -->
     <div class="modal hidden" id="waitlist-modal">
       <div class="modal-backdrop"></div>

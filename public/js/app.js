@@ -501,6 +501,11 @@ class BarzunkoApp {
         e.preventDefault();
         this.submitWaitlist();
       }
+
+      if (e.target.id === 'same-day-form') {
+        e.preventDefault();
+        this.submitSameDayWaitlist();
+      }
     });
 
     // Input changes
@@ -1340,6 +1345,7 @@ class BarzunkoApp {
     const timeSlotsContainer = document.getElementById('time-slots');
 
     if (!timeGrid || !timeSlotsContainer) return;
+    this.updateSameDaySection();
 
     const durationEl = document.getElementById('duration');
     const duration = durationEl
@@ -4017,6 +4023,7 @@ class BarzunkoApp {
       this.staffRenderRoomTimers();
       this.staffStartTimerTicker();
       await this.staffFetchAvailability(times, dateStr);
+      this.loadSameDayRequests(dateStr);
     } catch (err) {
       console.error('staffFetchForSelectedDate error', err);
       this.adminGridAssignments = this.adminAssignBookingsToColumns([]);
@@ -4024,6 +4031,7 @@ class BarzunkoApp {
       this.staffRenderRoomTimers();
       this.adminRenderAvailabilityGrid(times, {}, { containerId: 'staff-availability-grid' });
       this.showNotification('Unable to load bookings for that day.', 'error');
+      this.loadSameDayRequests(dateStr);
     }
   }
 
@@ -4548,8 +4556,10 @@ class BarzunkoApp {
           },
         );
       }
+      this.loadSameDayRequests(dateStr);
     } catch (err) {
       console.error('adminFetchForSelectedDate error', err);
+      this.loadSameDayRequests(dateStr);
       this.adminGridAssignments = this.adminAssignBookingsToColumns([]);
       this.adminRenderAvailabilityGrid(
         times,
@@ -6469,6 +6479,109 @@ class BarzunkoApp {
     const toast = document.getElementById('notification-toast');
     if (toast) {
       toast.classList.remove('show');
+    }
+  }
+
+  async loadSameDayRequests(dateStr) {
+    const tbody = document.getElementById('same-day-requests-body');
+    if (!tbody) return;
+    if (!window.firebaseFunctions?.httpsCallable) return;
+    try {
+      const fn = window.firebaseFunctions.httpsCallable('adminGetSameDayRequests');
+      const res = await fn({ date: dateStr });
+      this.renderSameDayRequests(res.data?.requests || []);
+    } catch (err) {
+      console.error('loadSameDayRequests error', err);
+    }
+  }
+
+  renderSameDayRequests(requests) {
+    const tbody = document.getElementById('same-day-requests-body');
+    if (!tbody) return;
+    if (!requests.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;opacity:0.5;">No same-day requests for this date.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = requests.map((r) => {
+      const time = r.createdAt ? new Date(r.createdAt).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
+      const note = r.isFriSat ? '<span style="color:var(--color-warning,#f59e0b)">⚠️ $20 min/person</span>' : '';
+      return `<tr>
+        <td>${escapeHtml(time)}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td><a href="tel:${escapeHtml(r.phone)}">${escapeHtml(r.phone)}</a></td>
+        <td>${escapeHtml(String(r.partySize))}</td>
+        <td>${escapeHtml(r.preferredTime || '—')}</td>
+        <td>${note}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  updateSameDaySection() {
+    const section = document.getElementById('same-day-section');
+    if (!section) return;
+    const today = this.getTodayDateString();
+    const isToday = this.selectedDate === today;
+    section.classList.toggle('hidden', !isToday);
+    if (isToday) {
+      const dayOfWeek = new Date().getDay();
+      const isFriSat = dayOfWeek === 5 || dayOfWeek === 6;
+      const notice = document.getElementById('same-day-frisatnotice');
+      if (notice) notice.classList.toggle('hidden', !isFriSat);
+      const btn = document.getElementById('same-day-join-btn');
+      if (btn && !btn._sameDayBound) {
+        btn._sameDayBound = true;
+        btn.addEventListener('click', () => this.openSameDayModal());
+      }
+    }
+  }
+
+  openSameDayModal() {
+    const form = document.getElementById('same-day-form');
+    if (form) form.reset();
+    const statusEl = document.getElementById('same-day-status');
+    if (statusEl) { statusEl.textContent = ''; statusEl.className = 'waitlist-status'; }
+
+    const dayOfWeek = new Date().getDay();
+    const isFriSat = dayOfWeek === 5 || dayOfWeek === 6;
+    const notice = document.getElementById('same-day-modal-frisatnotice');
+    if (notice) notice.classList.toggle('hidden', !isFriSat);
+
+    this.showModal('same-day-modal');
+  }
+
+  async submitSameDayWaitlist() {
+    const name = document.getElementById('same-day-name')?.value.trim() || '';
+    const phone = document.getElementById('same-day-phone')?.value.trim() || '';
+    const partySize = parseInt(document.getElementById('same-day-party')?.value, 10) || 1;
+    const preferredTime = document.getElementById('same-day-time')?.value.trim() || '';
+    const statusEl = document.getElementById('same-day-status');
+
+    if (!name || !phone) {
+      if (statusEl) { statusEl.textContent = 'Please enter your name and phone number.'; statusEl.className = 'waitlist-status waitlist-status--error'; }
+      return;
+    }
+
+    const submitBtn = document.getElementById('same-day-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const joinFn = window.firebaseFunctions.httpsCallable('joinSameDayWaitlist');
+      const result = await joinFn({
+        name,
+        phone,
+        partySize,
+        preferredTime,
+        date: this.getTodayDateString(),
+      });
+      if (statusEl) { statusEl.textContent = result.data?.message || "You're on the list! We'll call you if we can fit you in."; statusEl.className = 'waitlist-status waitlist-status--success'; }
+      const form = document.getElementById('same-day-form');
+      if (form) form.reset();
+      setTimeout(() => this.hideModal('same-day-modal'), 3500);
+    } catch (err) {
+      const msg = err?.message || 'Something went wrong. Please try again.';
+      if (statusEl) { statusEl.textContent = msg; statusEl.className = 'waitlist-status waitlist-status--error'; }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   }
 

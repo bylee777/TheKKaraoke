@@ -767,6 +767,7 @@ const RATE_LIMITS = {
   cancelBookingGuest: { max: 5, windowMs: 10 * 60 * 1000 },
   rebookBookingGuest: { max: 5, windowMs: 10 * 60 * 1000 },
   joinWaitlist: { max: 10, windowMs: 10 * 60 * 1000 },
+  joinSameDayWaitlist: { max: 10, windowMs: 10 * 60 * 1000 },
 };
 
 function hashValue(value) {
@@ -1423,12 +1424,20 @@ async function cancelBookingInternal(bookingId) {
       if (intent.status === 'requires_capture') {
         // Authorization only, cancel to release hold
         await getStripe().paymentIntents.cancel(intent.id);
-      } else if (intent.status === 'succeeded' || intent.charges?.data?.length) {
+      } else if (intent.status === 'succeeded') {
         await getStripe().refunds.create({ payment_intent: intent.id });
       }
+      // If intent.status is 'canceled' or anything else, no action needed
     } catch (err) {
-      console.error('Stripe reversal failed', err);
-      throw new functions.https.HttpsError('internal', 'Unable to reverse payment');
+      // If the charge was already refunded (e.g. admin refunded in Stripe dashboard
+      // first, or a prior request already processed it), treat as success — the
+      // customer is getting their money back either way.
+      if (err?.code === 'charge_already_refunded') {
+        console.log('[cancelBookingInternal] Charge already refunded, continuing', bookingId);
+      } else {
+        console.error('Stripe reversal failed', err);
+        throw new functions.https.HttpsError('internal', 'Unable to reverse payment');
+      }
     }
   }
 
@@ -2138,8 +2147,13 @@ exports.adminRefundBySecret = secureFunctions.https.onCall(async (data, context)
       await getStripe().refunds.create({ payment_intent: intentId });
     }
   } catch (err) {
-    console.error('[adminRefund] Refund failed', err);
-    throw new functions.https.HttpsError('internal', 'Refund failed');
+    if (err?.code === 'charge_already_refunded') {
+      // Already refunded — treat as success and continue updating Firestore
+      console.log('[adminRefund] Charge already refunded, continuing', bookingId);
+    } else {
+      console.error('[adminRefund] Refund failed', err);
+      throw new functions.https.HttpsError('internal', 'Refund failed');
+    }
   }
 
   await ref.update({
@@ -2364,6 +2378,31 @@ exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, conte
       return aKey.localeCompare(bKey);
     });
   return { bookings };
+});
+
+exports.adminGetSameDayRequests = secureFunctions.https.onCall(async (data, context) => {
+  requireStaffAccess(context);
+  const { date } = data || {};
+  if (!date) {
+    throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
+  }
+  const snapshot = await db
+    .collection('samedayWaitlist')
+    .where('date', '==', date)
+    .get();
+  const requests = snapshot.docs
+    .map((doc) => ({
+      id: doc.id,
+      name: doc.data().name || '',
+      phone: doc.data().phone || '',
+      partySize: doc.data().partySize || 1,
+      preferredTime: doc.data().preferredTime || '',
+      isFriSat: doc.data().isFriSat || false,
+      status: doc.data().status || 'pending',
+      createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || null,
+    }))
+    .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  return { requests };
 });
 
 exports.adminGetAvailabilityByDate = secureFunctions.https.onCall(async (data, context) => {
@@ -2698,6 +2737,51 @@ exports.joinWaitlist = secureFunctions.https.onCall(async (data, context) => {
   return { message: 'You have been added to the waitlist.' };
 });
 
+exports.joinSameDayWaitlist = secureFunctions.https.onCall(async (data, context) => {
+  await enforcePublicRateLimit(context, 'joinSameDayWaitlist', data);
+
+  const name = typeof data?.name === 'string' ? data.name.trim() : '';
+  const phone = typeof data?.phone === 'string' ? data.phone.trim() : '';
+  const partySize = Number(data?.partySize) || 1;
+  const preferredTime = typeof data?.preferredTime === 'string' ? data.preferredTime.trim() : '';
+  const date = typeof data?.date === 'string' ? data.date.trim() : '';
+
+  if (!name || !phone || !date) {
+    throw new functions.https.HttpsError('invalid-argument', 'name, phone, and date are required.');
+  }
+  if (name.length > MAX_NAME_LENGTH) {
+    throw new functions.https.HttpsError('invalid-argument', 'Name is too long.');
+  }
+
+  const dayOfWeek = parseDateDay(date);
+  const isFriSat = dayOfWeek === 5 || dayOfWeek === 6;
+
+  await db.collection('samedayWaitlist').add({
+    name,
+    phone,
+    partySize,
+    preferredTime,
+    date,
+    isFriSat,
+    status: 'pending',
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  const lines = [
+    '📋 Same-Day Walk-In Request',
+    `Date: ${date}`,
+    `Name: ${name}`,
+    `Phone: ${phone}`,
+    `Party size: ${partySize}`,
+    preferredTime ? `Preferred time: ${preferredTime}` : null,
+    isFriSat ? '⚠️ Fri/Sat — $20 minimum spend per person applies' : null,
+  ].filter(Boolean);
+
+  await sendTelegramMessage(lines.join('\n'));
+
+  return { message: 'You have been added to the same-day list. We will call you if we can fit you in!' };
+});
+
 /**
  * Callable Cloud Function: cancelBooking
  *
@@ -2878,6 +2962,9 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
     } else if (['requires_payment_method', 'payment_failed', 'canceled'].includes(status)) {
       updatePayload.status = 'cancelled';
     }
+    // 'refunded' status: only update paymentStatus, do NOT change booking status.
+    // The booking was already cancelled by cancelBookingInternal before the refund
+    // was issued, so overwriting it would undo the cancellation.
     await ref.update(updatePayload);
     if (status === 'succeeded') {
       const fresh = await ref.get();
@@ -2909,8 +2996,12 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
         await updateBookingPayment(intent.status);
         break;
       case 'payment_intent.payment_failed':
-      case 'charge.refunded':
         await updateBookingPayment(intent.status || 'payment_failed');
+        break;
+      case 'charge.refunded':
+        // Pass 'refunded' explicitly — intent.status is still 'succeeded' after a refund,
+        // so passing it would incorrectly re-confirm the booking and re-send a confirmation email.
+        await updateBookingPayment('refunded');
         break;
       default:
         break;
