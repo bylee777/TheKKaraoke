@@ -6546,6 +6546,57 @@ class BarzunkoApp {
     const notice = document.getElementById('same-day-modal-frisatnotice');
     if (notice) notice.classList.toggle('hidden', !isFriSat);
 
+    // Populate the time dropdown based on today's business hours
+    // Schedule in total minutes from midnight (close times are next-day, so > 1440)
+    const MINS_SCHEDULE = {
+      0: { open: 13 * 60, close: 26 * 60 }, // Sun  1:00 PM – 2:00 AM
+      1: { open: 18 * 60, close: 26 * 60 }, // Mon  6:00 PM – 2:00 AM
+      2: { open: 18 * 60, close: 26 * 60 }, // Tue
+      3: { open: 18 * 60, close: 26 * 60 }, // Wed
+      4: { open: 18 * 60, close: 26 * 60 }, // Thu
+      5: { open: 18 * 60, close: 27 * 60 }, // Fri  6:00 PM – 3:00 AM
+      6: { open: 13 * 60, close: 27 * 60 }, // Sat  1:00 PM – 3:00 AM
+    };
+    const todaySchedule = MINS_SCHEDULE[dayOfWeek];
+    const timeSelect = document.getElementById('same-day-time');
+    if (timeSelect && todaySchedule) {
+      timeSelect.innerHTML = '<option value="" disabled selected>Select a time…</option>';
+
+      // Filter out times that have already passed (plus a 15-min buffer)
+      const now = new Date();
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+      // Before noon means we're in the post-midnight portion of a business day
+      // (e.g. 1:30 AM), so offset by 1440 so post-midnight slot comparisons work
+      const compareMins = now.getHours() < 12 ? nowMins + 1440 : nowMins;
+      const BUFFER = 10;
+
+      let hasOptions = false;
+      for (let m = todaySchedule.open; m <= todaySchedule.close; m += 30) {
+        if (m <= compareMins + BUFFER) continue; // already passed
+        const h24 = Math.floor(m / 60) % 24;
+        const mins = m % 60;
+        const minStr = mins === 0 ? '00' : '30';
+        let label;
+        if (h24 === 0) label = `12:${minStr} AM`;
+        else if (h24 < 12) label = `${h24}:${minStr} AM`;
+        else if (h24 === 12) label = `12:${minStr} PM`;
+        else label = `${h24 - 12}:${minStr} PM`;
+        const opt = document.createElement('option');
+        opt.value = label;
+        opt.textContent = label;
+        timeSelect.appendChild(opt);
+        hasOptions = true;
+      }
+
+      if (!hasOptions) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.disabled = true;
+        opt.textContent = 'No more times available today';
+        timeSelect.appendChild(opt);
+      }
+    }
+
     this.showModal('same-day-modal');
   }
 
@@ -6556,8 +6607,8 @@ class BarzunkoApp {
     const preferredTime = document.getElementById('same-day-time')?.value.trim() || '';
     const statusEl = document.getElementById('same-day-status');
 
-    if (!name || !phone) {
-      if (statusEl) { statusEl.textContent = 'Please enter your name and phone number.'; statusEl.className = 'waitlist-status waitlist-status--error'; }
+    if (!name || !phone || !preferredTime) {
+      if (statusEl) { statusEl.textContent = 'Please fill in your name, phone number, and preferred time.'; statusEl.className = 'waitlist-status waitlist-status--error'; }
       return;
     }
 

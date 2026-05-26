@@ -425,8 +425,10 @@
                 <input type="number" id="same-day-party" class="form-control" min="1" max="30" value="2" required />
               </div>
               <div class="form-group">
-                <label class="form-label">Preferred Time (optional)</label>
-                <input type="text" id="same-day-time" class="form-control" placeholder="e.g. 9:00 PM" />
+                <label class="form-label">Preferred Time <span class="required-indicator">*</span></label>
+                <select id="same-day-time" class="form-control" required>
+                  <option value="" disabled selected>Select a time…</option>
+                </select>
               </div>
             </div>
             <div id="same-day-status" class="waitlist-status"></div>
