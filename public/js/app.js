@@ -147,9 +147,9 @@ class BarzunkoApp {
       {
         id: 'medium',
         name: 'Medium Room',
-        capacity: '8 included',
+        capacity: '8 included, max 10 guests',
         minCapacity: 1,
-        maxCapacity: 12,
+        maxCapacity: 10,
         includedGuests: 8,
         hourlyRate: 60,
         bookingFee: 0,
@@ -6613,7 +6613,10 @@ class BarzunkoApp {
     }
 
     const submitBtn = document.getElementById('same-day-submit-btn');
-    if (submitBtn) submitBtn.disabled = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…';
+    }
 
     try {
       const joinFn = window.firebaseFunctions.httpsCallable('joinSameDayWaitlist');
@@ -6632,7 +6635,10 @@ class BarzunkoApp {
       const msg = err?.message || 'Something went wrong. Please try again.';
       if (statusEl) { statusEl.textContent = msg; statusEl.className = 'waitlist-status waitlist-status--error'; }
     } finally {
-      if (submitBtn) submitBtn.disabled = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-phone"></i> Add Me to the List';
+      }
     }
   }
 

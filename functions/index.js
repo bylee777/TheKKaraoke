@@ -413,14 +413,31 @@ function ensureNotInPast(date, startTime) {
 }
 
 const ROOM_CONFIG = {
-  small: { inventory: 4, label: 'Small Room' },
-  medium: { inventory: 4, label: 'Medium Room' },
-  large: { inventory: 1, label: 'Large Room' },
-  'extra-large': { inventory: 1, label: 'Extra Large Room' },
+  small: { inventory: 4, label: 'Small Room', minCapacity: 1, maxCapacity: 5 },
+  medium: { inventory: 4, label: 'Medium Room', minCapacity: 1, maxCapacity: 10 },
+  large: { inventory: 1, label: 'Large Room', minCapacity: 1, maxCapacity: 17 },
+  'extra-large': { inventory: 1, label: 'Extra Large Room', minCapacity: 1, maxCapacity: 30 },
 };
 
 function getRoomConfig(roomId) {
-  return ROOM_CONFIG[roomId] || { inventory: 1, label: 'selected room' };
+  return (
+    ROOM_CONFIG[roomId] || { inventory: 1, label: 'selected room', minCapacity: 1, maxCapacity: 30 }
+  );
+}
+
+function validatePartySizeForRoom(roomId, partySize) {
+  if (partySize == null || partySize === '') {
+    return null;
+  }
+  const size = Number(partySize);
+  const { label, minCapacity, maxCapacity } = getRoomConfig(roomId);
+  if (!Number.isInteger(size) || size < minCapacity || size > maxCapacity) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `Party size must be between ${minCapacity}-${maxCapacity} for ${label}.`,
+    );
+  }
+  return size;
 }
 
 function mediumInventoryPenalty(roomId, partySize) {
@@ -464,7 +481,6 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-const MAX_PARTY_SIZE = 30;
 const MAX_NAME_LENGTH = 50;
 const MAX_SPECIAL_REQUESTS_LENGTH = 500;
 
@@ -1232,6 +1248,7 @@ async function createBookingInternal(params) {
     throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
   }
 
+  const normalizedPartySize = validatePartySizeForRoom(roomId, partySize);
   const { inventory, label } = getRoomConfig(roomId);
   const noAvailabilityMessage = buildNoAvailabilityMessage(label, inventory);
 
@@ -1291,7 +1308,8 @@ async function createBookingInternal(params) {
 
   // Apply reserved slot policy (Fri/Sat 21:00-23:00) for small/medium rooms
   const reserved = reservedSlotsForWindow(roomId, businessDate, startTime, endTime, schedule);
-  const effectiveInventory = Math.max(inventory - reserved, 0);
+  const penalty = mediumInventoryPenalty(roomId, normalizedPartySize);
+  const effectiveInventory = Math.max(inventory - reserved - penalty, 0);
   if (maxOverlap + 1 > effectiveInventory) {
     throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
   }
@@ -1331,7 +1349,7 @@ async function createBookingInternal(params) {
     remainingBalance,
     remainingBalanceBeforeTax,
     remainingTax,
-    partySize: typeof partySize === 'number' ? partySize : null,
+    partySize: normalizedPartySize,
     customerInfo: normalizedCustomerInfo,
     paymentIntentId: paymentIntent.id,
     paymentStatus: 'requires_payment_method',
@@ -1367,7 +1385,8 @@ async function createBookingInternal(params) {
         endTime,
         schedule,
       );
-      const txnEffectiveInventory = Math.max(inventory - txnReserved, 0);
+      const txnPenalty = mediumInventoryPenalty(roomId, normalizedPartySize);
+      const txnEffectiveInventory = Math.max(inventory - txnReserved - txnPenalty, 0);
       if (txnMaxOverlap + 1 > txnEffectiveInventory) {
         throw new functions.https.HttpsError('failed-precondition', noAvailabilityMessage);
       }
@@ -1542,14 +1561,8 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
     throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
   }
 
-  const partySizeNum = Number(partySize);
-  if (Number.isFinite(partySizeNum) && partySizeNum > MAX_PARTY_SIZE) {
-    throw new functions.https.HttpsError('invalid-argument', `Party size cannot exceed ${MAX_PARTY_SIZE}`);
-  }
+  const normalizedPartySize = validatePartySizeForRoom(roomId, partySize);
   validateCustomerInfo(customerInfo);
-
-  const { inventory } = getRoomConfig(roomId);
-  const noAvailabilityMessage = buildNoAvailabilityMessage(getRoomConfig(roomId).label, inventory);
 
   // Compute end time
   const dateObj = new Date(`${date}T${startTime}`);
@@ -1567,7 +1580,7 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
 
   const businessDate = determineBusinessDate(date, startTime);
 
-  const pricingDetails = calculateBookingChargeDetails(roomId, dur, partySize, {
+  const pricingDetails = calculateBookingChargeDetails(roomId, dur, normalizedPartySize, {
     date,
     startTime,
   });
@@ -1602,7 +1615,9 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
   }
 
   // Quick availability check
-  await ensureRoomAvailability(roomId, date, startTime, endTime, null, null, { partySize });
+  await ensureRoomAvailability(roomId, date, startTime, endTime, null, null, {
+    partySize: normalizedPartySize,
+  });
 
   // Create PaymentIntent only
   try {
@@ -1656,10 +1671,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError('invalid-argument', 'Invalid duration');
   }
 
-  const partySizeNum = Number(partySize);
-  if (Number.isFinite(partySizeNum) && partySizeNum > MAX_PARTY_SIZE) {
-    throw new functions.https.HttpsError('invalid-argument', `Party size cannot exceed ${MAX_PARTY_SIZE}`);
-  }
+  const normalizedPartySize = validatePartySizeForRoom(roomId, partySize);
   validateCustomerInfo(customerInfo);
 
   const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
@@ -1670,9 +1682,6 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
       `Payment not completed. Status: ${intent?.status || 'unknown'}`,
     );
   }
-
-  const { inventory, label } = getRoomConfig(roomId);
-  const noAvailabilityMessage = buildNoAvailabilityMessage(label, inventory);
 
   const dateObj = new Date(`${date}T${startTime}`);
   addDurationMinutes(dateObj, dur);
@@ -1688,7 +1697,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
   ensureMinimumAdvanceNotice(date, startTime);
 
   const businessDate = determineBusinessDate(date, startTime);
-  const pricingDetails = calculateBookingChargeDetails(roomId, dur, partySize, {
+  const pricingDetails = calculateBookingChargeDetails(roomId, dur, normalizedPartySize, {
     date,
     startTime,
   });
@@ -1759,7 +1768,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
     remainingTax: null,
     extraGuestFee: pricingDetails.extraGuestFee,
     requiredPurchaseAmount: pricingDetails.requiredPurchaseAmount,
-    partySize: typeof partySize === 'number' ? partySize : null,
+    partySize: normalizedPartySize,
     customerInfo: {
       ...customerInfo,
       email: normalizeEmail(customerInfo?.email),
@@ -1800,7 +1809,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
       }
 
       await ensureRoomAvailability(roomId, date, startTime, endTime, null, transaction, {
-        partySize,
+        partySize: normalizedPartySize,
       });
       const docRef = db.collection('bookings').doc();
       transaction.set(docRef, bookingDoc);
@@ -2073,6 +2082,9 @@ exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context)
   }
   const current = snap.data();
   const targetRoomId = roomId || current.roomId;
+  const normalizedPartySize = Number.isFinite(Number(partySize))
+    ? validatePartySizeForRoom(targetRoomId, partySize)
+    : null;
   if (data?.allowPast !== true) {
     ensureNotInPast(newDate, newStartTime);
   }
@@ -2087,7 +2099,7 @@ exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context)
       endTime,
       bookingId,
       transaction,
-      { overrideWalkInHold: true },
+      { overrideWalkInHold: true, partySize: normalizedPartySize ?? current.partySize },
     );
     const updatePayload = {
       roomId: targetRoomId,
@@ -2098,7 +2110,7 @@ exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context)
       duration,
       updatedAt: FieldValue.serverTimestamp(),
     };
-    if (Number.isFinite(Number(partySize))) updatePayload.partySize = Number(partySize);
+    if (normalizedPartySize != null) updatePayload.partySize = normalizedPartySize;
     if (customerInfo) updatePayload.customerInfo = { ...current.customerInfo, ...customerInfo };
     if (Number.isFinite(Number(totalCost))) updatePayload.totalCost = Number(totalCost);
     if (Number.isFinite(Number(depositAmount))) updatePayload.depositAmount = Number(depositAmount);
@@ -2241,13 +2253,17 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
     }
 
     const current = snap.data() || {};
+    const nextRoomId = roomId ? String(roomId) : current.roomId;
+    const nextPartySize = Number.isFinite(Number(partySize))
+      ? validatePartySizeForRoom(nextRoomId, partySize)
+      : null;
     const updatePayload = { updatedAt: FieldValue.serverTimestamp() };
 
-    if (roomId) updatePayload.roomId = String(roomId);
+    if (roomId) updatePayload.roomId = nextRoomId;
     if (date) updatePayload.date = String(date);
     if (startTime) updatePayload.startTime = String(startTime);
     if (Number.isFinite(durNum)) updatePayload.duration = durNum;
-    if (Number.isFinite(Number(partySize))) updatePayload.partySize = Number(partySize);
+    if (nextPartySize != null) updatePayload.partySize = nextPartySize;
     if (normalizedCustomerInfo)
       updatePayload.customerInfo = { ...current.customerInfo, ...normalizedCustomerInfo };
     if (Number.isFinite(Number(totalCost))) updatePayload.totalCost = Number(totalCost);
@@ -2302,6 +2318,9 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
   if (!allowPastFlag) {
     ensureNotInPast(date, startTime);
   }
+  const normalizedPartySize = Number.isFinite(Number(partySize))
+    ? validatePartySizeForRoom(roomId, partySize)
+    : null;
   const endTime = maybeComputeEnd(date, startTime, durNum);
   if (endTime) {
     ensureWithinBusinessHours(date, startTime, endTime);
@@ -2314,7 +2333,7 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
     startTime: String(startTime),
     endTime: endTime,
     duration: durNum,
-    partySize: Number.isFinite(Number(partySize)) ? Number(partySize) : null,
+    partySize: normalizedPartySize,
     customerInfo: normalizedCustomerInfo,
     totalCost: Number.isFinite(Number(totalCost)) ? Number(totalCost) : null,
     depositAmount: Number.isFinite(Number(depositAmount)) ? Number(depositAmount) : null,
@@ -2587,6 +2606,9 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
   ensureWithinBusinessHours(newDate, newStartTime, endTime);
   const businessDate = determineBusinessDate(newDate, newStartTime);
   const targetRoomId = requestedRoomId || booking.roomId;
+  const normalizedPartySize = Number.isFinite(requestedPartySize)
+    ? validatePartySizeForRoom(targetRoomId, requestedPartySize)
+    : null;
 
   const normalizedCustomerInfo = customerInfo
     ? {
@@ -2629,6 +2651,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
       endTime,
       bookingId,
       transaction,
+      { partySize: normalizedPartySize ?? currentData.partySize },
     );
 
     const updatePayload = {
@@ -2638,9 +2661,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
       startTime: newStartTime,
       endTime,
       duration,
-      partySize: Number.isFinite(requestedPartySize)
-        ? requestedPartySize
-        : (currentData.partySize ?? null),
+      partySize: normalizedPartySize ?? currentData.partySize ?? null,
       customerInfo: normalizedCustomerInfo,
       updatedAt: FieldValue.serverTimestamp(),
     };
@@ -2832,6 +2853,7 @@ exports.rebookBooking = secureFunctions.https.onCall(async (data, context) => {
     duration: newDuration,
     totalCost: newTotalCost || oldBooking.totalCost,
     depositAmount: newDepositAmount || oldBooking.depositAmount,
+    partySize: oldBooking.partySize,
     customerInfo: oldBooking.customerInfo,
   });
   try {
