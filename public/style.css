@@ -5633,25 +5633,70 @@ td,
   gap: 0.6rem;
   flex-wrap: wrap;
   text-align: center;
-  padding: 0.7rem 1rem;
+  padding: 0.85rem 1rem;
   margin-top: 65px;
-  background: linear-gradient(120deg, var(--neon-purple, #8b5cf6), var(--electric-blue, #3b82f6));
+  background: linear-gradient(90deg, var(--neon-purple, #8b5cf6), var(--electric-blue, #3b82f6), var(--hot-pink, #ec4899), var(--neon-purple, #8b5cf6));
+  background-size: 300% 100%;
   color: #fff;
-  font-weight: 700;
-  font-size: 0.9rem;
-  letter-spacing: 0.02em;
-  position: relative;
-  z-index: 1;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  position: sticky;
+  top: 65px;
+  z-index: 999;
+  animation: banner-gradient-shift 8s ease infinite, banner-glow-pulse 2.4s ease-in-out infinite;
 }
 
 .announcement-banner__icon {
-  font-size: 1.05rem;
+  font-size: 1.2rem;
+  animation: banner-icon-bounce 1.6s ease-in-out infinite;
+}
+
+@keyframes banner-gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes banner-glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 14px rgba(139, 92, 246, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(236, 72, 153, 0.7);
+  }
+}
+
+@keyframes banner-icon-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
 }
 
 @media (max-width: 560px) {
   .announcement-banner {
-    font-size: 0.78rem;
-    padding: 0.6rem 0.75rem;
+    font-size: 0.82rem;
+    padding: 0.7rem 0.75rem;
     margin-top: 49px;
+    top: 49px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-banner,
+  .announcement-banner__icon {
+    animation: none;
   }
 }
