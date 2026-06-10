@@ -5624,3 +5624,34 @@ td,
     border-radius: 10px;
   }
 }
+
+/* World Cup Season Announcement Banner */
+.announcement-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  text-align: center;
+  padding: 0.7rem 1rem;
+  margin-top: 65px;
+  background: linear-gradient(120deg, var(--neon-purple, #8b5cf6), var(--electric-blue, #3b82f6));
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  position: relative;
+  z-index: 1;
+}
+
+.announcement-banner__icon {
+  font-size: 1.05rem;
+}
+
+@media (max-width: 560px) {
+  .announcement-banner {
+    font-size: 0.78rem;
+    padding: 0.6rem 0.75rem;
+    margin-top: 49px;
+  }
+}

@@ -170,6 +170,32 @@
         color: var(--text);
       }
 
+      .announcement-banner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        text-align: center;
+        padding: 0.7rem 1rem;
+        background: linear-gradient(120deg, var(--accent), var(--hot));
+        color: #151006;
+        font-weight: 700;
+        font-size: 0.9rem;
+        letter-spacing: 0.02em;
+      }
+
+      .announcement-banner__icon {
+        font-size: 1.05rem;
+      }
+
+      @media (max-width: 560px) {
+        .announcement-banner {
+          font-size: 0.78rem;
+          padding: 0.6rem 0.75rem;
+        }
+      }
+
       .hero {
         width: min(92%, 1180px);
         margin: 0 auto;
@@ -540,6 +566,11 @@
           </div>
         </div>
       </nav>
+
+      <div class="announcement-banner">
+        <i class="fas fa-futbol announcement-banner__icon" aria-hidden="true"></i>
+        <span>World Cup Season: Catch the matches here! Open until 4 AM on Fridays &amp; Saturdays!</span>
+      </div>
 
       <header class="hero">
         <div class="hero__content">
