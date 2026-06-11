@@ -140,10 +140,26 @@ function parseDateDay(dateStr) {
   return safeDate.getDay();
 }
 
+const WORLD_CUP_SCHEDULE = {
+  0: { openTime: '13:00', closeTime: '03:00', label: 'Sunday' },
+  1: { openTime: '18:00', closeTime: '03:00', label: 'Monday' },
+  2: { openTime: '18:00', closeTime: '03:00', label: 'Tuesday' },
+  3: { openTime: '18:00', closeTime: '03:00', label: 'Wednesday' },
+  4: { openTime: '18:00', closeTime: '03:00', label: 'Thursday' },
+  5: { openTime: '18:00', closeTime: '04:00', label: 'Friday' },
+  6: { openTime: '13:00', closeTime: '04:00', label: 'Saturday' },
+};
+
+function isWorldCupDate(dateStr) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  return d >= new Date('2026-06-11T00:00:00') && d <= new Date('2026-07-19T23:59:59');
+}
+
 function getBusinessScheduleForDate(dateStr) {
   const day = parseDateDay(dateStr);
+  const activeSchedule = isWorldCupDate(dateStr) ? WORLD_CUP_SCHEDULE : BUSINESS_SCHEDULE;
   const schedule =
-    BUSINESS_SCHEDULE[day ?? DEFAULT_SCHEDULE_DAY] || BUSINESS_SCHEDULE[DEFAULT_SCHEDULE_DAY];
+    activeSchedule[day ?? DEFAULT_SCHEDULE_DAY] || activeSchedule[DEFAULT_SCHEDULE_DAY];
   const openMinutes = timeStringToMinutes(schedule.openTime);
   let closeMinutes = timeStringToMinutes(schedule.closeTime);
   if (!Number.isFinite(openMinutes) || !Number.isFinite(closeMinutes)) {
