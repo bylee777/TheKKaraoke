@@ -5790,6 +5790,15 @@ class BarzunkoApp {
   }
 
   getBusinessScheduleForDate(dateStr) {
+    const worldCupHoursByDay = {
+      0: { open: '13:00', close: '03:00' }, // Sunday
+      1: { open: '18:00', close: '03:00' }, // Monday
+      2: { open: '18:00', close: '03:00' },
+      3: { open: '18:00', close: '03:00' },
+      4: { open: '18:00', close: '03:00' },
+      5: { open: '18:00', close: '04:00' }, // Friday
+      6: { open: '13:00', close: '04:00' }, // Saturday
+    };
     const map = this.businessHoursByDay || {};
     const fallback = map[1] || { open: '18:00', close: '02:30' };
     if (dateStr === '2026-01-01') {
@@ -5800,8 +5809,10 @@ class BarzunkoApp {
       const safeDate = new Date(`${dateStr}T12:00:00`);
       if (!Number.isNaN(safeDate.getTime())) {
         const day = safeDate.getDay();
-        if (Object.prototype.hasOwnProperty.call(map, day)) {
-          baseSchedule = map[day];
+        const isWorldCup = safeDate >= new Date('2026-06-11T00:00:00') && safeDate <= new Date('2026-07-19T23:59:59');
+        const activeMap = isWorldCup ? worldCupHoursByDay : map;
+        if (Object.prototype.hasOwnProperty.call(activeMap, day)) {
+          baseSchedule = activeMap[day];
         }
       }
     }
