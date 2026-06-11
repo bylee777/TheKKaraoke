@@ -1380,8 +1380,11 @@ class BarzunkoApp {
     // Filter out slots that cannot fit within business hours for the chosen duration
     slots = slots.filter((time) => this.slotFitsBusinessHours(this.selectedDate, time, duration));
     const weekday = selectedDateTime.getDay();
+    const isWorldCupDate =
+      selectedDateTime >= new Date('2026-06-11T00:00:00') &&
+      selectedDateTime <= new Date('2026-07-19T23:59:59');
     const filteredSlots = slots.filter((time) => {
-      if (weekday === 5 && time === '02:00') return false;
+      if (!isWorldCupDate && weekday === 5 && time === '02:00') return false;
       if (weekday === 0 && time === '01:30') return false;
       return true;
     });
