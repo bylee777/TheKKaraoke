@@ -313,7 +313,11 @@ function ensureWithinBusinessHours(date, startTime, endTime) {
     }
 
     if (startMinutes < segment.startMinutes) {
-      return false;
+      // Post-midnight times (e.g. '03:00') that don't fit the previous night's
+      // carryover belong to THIS day's late-night window (start + 24h).
+      const shiftedStart = startMinutes + MINUTES_IN_DAY;
+      const shiftedEnd = normalizedEnd + MINUTES_IN_DAY;
+      return shiftedStart >= segment.startMinutes && shiftedEnd <= segment.closeMinutes;
     }
     return normalizedEnd <= segment.closeMinutes;
   });
@@ -416,7 +420,7 @@ function getLatestCompletedBusinessDate(now = new Date()) {
 }
 
 function ensureNotInPast(date, startTime) {
-  const startDate = combineDateTime(date, startTime);
+  const startDate = combineDateTimeForSlot(date, startTime);
   if (Number.isNaN(startDate.getTime())) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date or time provided.');
   }
@@ -472,7 +476,7 @@ const MIN_ADVANCE_HOURS = 4;
 const HOURS_TO_MS = 60 * 60 * 1000;
 
 function ensureMinimumAdvanceNotice(date, startTime, hours = MIN_ADVANCE_HOURS) {
-  const startDate = combineDateTime(date, startTime);
+  const startDate = combineDateTimeForSlot(date, startTime);
   if (Number.isNaN(startDate.getTime())) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date or time provided.');
   }
@@ -533,6 +537,18 @@ function combineDateTime(date, time) {
   return new Date(candidateUtc.getTime() + diffMs);
 }
 
+function combineDateTimeForSlot(date, time) {
+  // Post-midnight start times (00:00-03:59) belong to the NIGHT of the selected
+  // date, so the actual wall-clock moment is on the next calendar day. The venue
+  // never opens before 13:00, so any hour < 13 is unambiguously a late-night slot.
+  const startDate = combineDateTime(date, time);
+  const hour = Number(String(time).split(':')[0]);
+  if (Number.isFinite(hour) && hour < 13) {
+    startDate.setTime(startDate.getTime() + MINUTES_IN_DAY * 60 * 1000);
+  }
+  return startDate;
+}
+
 function addDurationMinutes(dateObj, durationHours) {
   const minutesToAdd = Math.round(Number(durationHours) * 60);
   if (!Number.isFinite(minutesToAdd)) {
@@ -581,7 +597,7 @@ function sanitizeBookingSnapshot(doc) {
 
   const booking = doc.data();
   const roomConfig = getRoomConfig(booking.roomId);
-  const startDate = combineDateTime(booking.date, booking.startTime);
+  const startDate = combineDateTimeForSlot(booking.date, booking.startTime);
   const endTime = resolveBookingEndTime(booking);
   const cancelDeadline = new Date(startDate.getTime() - CANCEL_WINDOW_HOURS * HOURS_TO_MS);
   const msUntilStart = startDate.getTime() - Date.now();
@@ -2542,7 +2558,7 @@ exports.cancelBookingGuest = secureFunctions.https.onCall(async (data, context) 
         'Only active bookings can be cancelled.',
       );
     }
-    const startDate = combineDateTime(booking.date, booking.startTime);
+    const startDate = combineDateTimeForSlot(booking.date, booking.startTime);
     if (startDate.getTime() - Date.now() < CANCEL_WINDOW_HOURS * HOURS_TO_MS) {
       throw new functions.https.HttpsError(
         'failed-precondition',
@@ -2607,7 +2623,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
     );
   }
 
-  const originalStart = combineDateTime(booking.date, booking.startTime);
+  const originalStart = combineDateTimeForSlot(booking.date, booking.startTime);
   if (originalStart.getTime() - Date.now() < CANCEL_WINDOW_HOURS * HOURS_TO_MS) {
     throw new functions.https.HttpsError(
       'failed-precondition',

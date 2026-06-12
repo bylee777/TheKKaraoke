@@ -972,7 +972,7 @@ class BarzunkoApp {
           return false;
         }
 
-        const selectedDateTime = new Date(`${this.selectedDate}T${this.selectedTime}`);
+        const selectedDateTime = this.combineDateTimeForSlot(this.selectedDate, this.selectedTime);
         const bookingCutoff = this.getCustomerAdvanceBookingCutoff();
 
         if (
@@ -1266,6 +1266,7 @@ class BarzunkoApp {
             const [slotHours, slotMinutes] = String(time).split(':').map(Number);
             const slotDateTime = new Date(dayDate);
             slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
+            if (slotHours < 13) slotDateTime.setDate(slotDateTime.getDate() + 1);
             const isAvailable = typeof slot === 'object' ? slot.available !== false : true;
             return isAvailable && slotDateTime >= bookingCutoff;
           });
@@ -1278,6 +1279,7 @@ class BarzunkoApp {
             const [slotHours, slotMinutes] = slot.split(':').map(Number);
             const slotDateTime = new Date(dayDate);
             slotDateTime.setHours(slotHours, slotMinutes, 0, 0);
+            if (slotHours < 13) slotDateTime.setDate(slotDateTime.getDate() + 1);
             return slotDateTime >= bookingCutoff;
           });
         }
@@ -1392,6 +1394,7 @@ class BarzunkoApp {
       const dt = new Date(selectedDateTime.getTime());
       const [h, m] = time.split(':').map(Number);
       dt.setHours(h, m, 0, 0);
+      if (h < 13) dt.setDate(dt.getDate() + 1);
       return dt >= bookingCutoff;
     };
     const futureSlots = filteredSlots.filter(isFutureSlot);
@@ -1418,6 +1421,7 @@ class BarzunkoApp {
         const slotDateTime = new Date(selectedDateTime.getTime());
         const [hours, minutes] = time.split(':').map(Number);
         slotDateTime.setHours(hours, minutes, 0, 0);
+        if (hours < 13) slotDateTime.setDate(slotDateTime.getDate() + 1);
 
         const timeSlot = document.createElement('div');
         timeSlot.className = 'time-slot';
@@ -1990,7 +1994,7 @@ class BarzunkoApp {
       }
     }
     if (booking.date && booking.startTime) {
-      const local = new Date(`${booking.date}T${booking.startTime}`);
+      const local = this.combineDateTimeForSlot(booking.date, booking.startTime);
       if (!Number.isNaN(local.getTime())) {
         return local.getTime() >= Date.now();
       }
@@ -5591,6 +5595,19 @@ class BarzunkoApp {
     }
   }
 
+  combineDateTimeForSlot(dateStr, timeStr) {
+    // Post-midnight start times (00:00-03:59) belong to the NIGHT of the selected
+    // date, so the actual wall-clock moment is on the next calendar day. The venue
+    // never opens before 13:00, so any hour < 13 is unambiguously a late-night slot.
+    const dt = new Date(`${dateStr}T${timeStr}`);
+    if (Number.isNaN(dt.getTime())) return dt;
+    const hour = Number(String(timeStr).split(':')[0]);
+    if (Number.isFinite(hour) && hour < 13) {
+      dt.setDate(dt.getDate() + 1);
+    }
+    return dt;
+  }
+
   parseDateFromYMD(dateStr) {
     if (!dateStr || typeof dateStr !== 'string') return null;
     const parts = dateStr.split('-').map((part) => Number(part));
@@ -5740,7 +5757,13 @@ class BarzunkoApp {
     return segments.some((seg) => {
       const segStart = seg.startMinutes || 0;
       const segEnd = seg.closeMinutes || 0;
-      return start >= segStart && end <= segEnd;
+      if (start >= segStart && end <= segEnd) return true;
+      // Post-midnight labels (e.g. '03:00') from the current day's late-night
+      // window represent start + 24h; re-check shifted into that window.
+      if (seg.type === 'current' && start < segStart) {
+        return start + 1440 >= segStart && end + 1440 <= segEnd;
+      }
+      return false;
     });
   }
 
@@ -5960,7 +5983,11 @@ class BarzunkoApp {
         return endMinutes <= segment.closeMinutes;
       }
       if (startMinutes < segment.startMinutes) {
-        return false;
+        // Post-midnight times (e.g. '03:00') that don't fit the previous night's
+        // carryover belong to THIS day's late-night window (start + 24h).
+        return (
+          startMinutes + 1440 >= segment.startMinutes && endMinutes + 1440 <= segment.closeMinutes
+        );
       }
       return endMinutes <= segment.closeMinutes;
     });
@@ -6314,7 +6341,7 @@ class BarzunkoApp {
       return;
     }
 
-    const candidateStart = new Date(`${date}T${startTime}`);
+    const candidateStart = this.combineDateTimeForSlot(date, startTime);
     if (Number.isNaN(candidateStart.getTime())) {
       if (statusEl) statusEl.textContent = 'Invalid date/time.';
       if (submitBtn) submitBtn.disabled = true;
