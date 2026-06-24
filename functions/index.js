@@ -652,7 +652,12 @@ function sanitizeGuestBookingSnapshot(doc) {
   if (!full) {
     return null;
   }
+  const raw = typeof doc?.data === 'function' ? doc.data() : null;
   return {
+    // True when this booking is protected by a manage token. The token VALUE is
+    // intentionally never included here; the client must already hold it (from
+    // the confirmation email link) to cancel/reschedule.
+    manageTokenRequired: Boolean(raw?.manageToken),
     id: full.id,
     roomId: full.roomId,
     roomName: full.roomName,
@@ -752,6 +757,45 @@ function assertGuestOwnership(booking, email) {
   }
 }
 
+// Public site origin used to build customer-facing links in emails.
+const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || 'https://thek-karaoke.web.app').replace(
+  /\/+$/,
+  '',
+);
+
+// High-entropy ownership token (~192 bits). Delivered to the customer via the
+// confirmation email's manage link and returned to the booker at finalize time;
+// it is the proof of ownership required to cancel/reschedule online. It is
+// intentionally NEVER returned by lookupBooking, so knowing booking id + email
+// alone is not sufficient to obtain it.
+function generateManageToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+// Constant-time comparison so we don't leak the token byte-by-byte via timing.
+function tokensMatch(a, b) {
+  const bufA = Buffer.from(String(a || ''));
+  const bufB = Buffer.from(String(b || ''));
+  if (bufA.length === 0 || bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Authorize a guest cancel/reschedule. New bookings carry a manageToken, which
+// is required. Bookings created before manage tokens existed (no field) fall
+// back to the legacy email-match check so they remain manageable.
+function assertGuestAuthorization(booking, email, token) {
+  if (booking?.manageToken) {
+    if (!tokensMatch(token, booking.manageToken)) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'A valid manage link is required to modify this booking. Please use the link in your confirmation email, or contact the venue.',
+      );
+    }
+    return;
+  }
+  assertGuestOwnership(booking, email);
+}
+
 // Runtime secrets are provided by Secret Manager bindings or env files.
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || null;
 let stripeClient = null;
@@ -785,7 +829,17 @@ const SECRET_BINDINGS = [
   'GMAIL_PASS',
   'GMAIL_FROM',
 ];
-const secureFunctions = functions.runWith({ secrets: SECRET_BINDINGS });
+const secureFunctions = functions.runWith({
+  secrets: SECRET_BINDINGS,
+  // Enforce App Check on every callable below. The web clients activate App
+  // Check (reCAPTCHA v3) in firebase-init.js, so legitimate browser calls carry
+  // a valid token; this blocks direct/scripted invocation of the public booking
+  // endpoints that bypasses the web app and its reCAPTCHA. Has no effect on the
+  // Stripe webhook (an onRequest handler authenticated via signature instead).
+  // NOTE: before deploying, confirm the web app is registered under Firebase
+  // Console -> App Check, or token minting will fail and calls will be rejected.
+  enforceAppCheck: true,
+});
 
 function requireAdmin(context) {
   if (!context || !context.auth || context.auth.token?.isAdmin !== true) {
@@ -825,17 +879,30 @@ function hashValue(value) {
     .digest('hex');
 }
 
+// Number of proxy hops Google's infrastructure appends to the RIGHT of
+// X-Forwarded-For. The trustworthy client IP is that many entries from the end
+// of the list: a caller can spoof anything they prepend, but cannot forge the
+// peer IP the platform appends. Reading the left-most entry (the old behaviour)
+// let an attacker rotate the header to get a fresh rate-limit bucket on every
+// request. Override via env if the deployment sits behind additional proxies.
+const TRUSTED_PROXY_HOPS = Math.max(1, Number(process.env.RATE_LIMIT_TRUSTED_PROXY_HOPS) || 1);
+
 function getRequestIp(context) {
   const headers = context?.rawRequest?.headers || {};
   const forwarded = headers['x-forwarded-for'];
-  const raw =
-    (Array.isArray(forwarded) ? forwarded[0] : forwarded || '').split(',')[0].trim() ||
-    headers['fastly-client-ip'] ||
-    headers['x-real-ip'] ||
-    context?.rawRequest?.ip ||
-    context?.rawRequest?.connection?.remoteAddress ||
-    'unknown';
-  return String(raw);
+  const chain = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (chain.length > 0) {
+    const idx = Math.max(0, chain.length - TRUSTED_PROXY_HOPS);
+    return String(chain[idx]);
+  }
+  // Note: client-supplied headers like x-real-ip / fastly-client-ip are
+  // intentionally NOT trusted here; fall back only to the real socket peer.
+  const fallback =
+    context?.rawRequest?.ip || context?.rawRequest?.connection?.remoteAddress || 'unknown';
+  return String(fallback);
 }
 
 function summarizeRateLimitData(data = {}) {
@@ -1055,6 +1122,16 @@ async function sendBookingEmail(booking) {
   const subject = 'Please Do not Reply to this email - Your Barzunko booking is confirmed';
   const firstName = escapeHtml(booking.customerInfo?.firstName || '');
   const lastName = escapeHtml(booking.customerInfo?.lastName || '');
+  const manageToken = booking.manageToken || '';
+  const manageLink = manageToken
+    ? `${PUBLIC_SITE_URL}/manage.html?bookingId=${encodeURIComponent(booking.id)}` +
+      `&email=${encodeURIComponent(to)}&token=${encodeURIComponent(manageToken)}`
+    : '';
+  const manageSection = manageLink
+    ? `<p>Need to cancel or reschedule? Use your secure link:</p>
+       <p><a href="${manageLink}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Manage your booking</a></p>
+       <p style="font-size:12px;color:#666;word-break:break-all;">Or copy this link: ${manageLink}<br>Keep this link private — anyone with it can change or cancel your booking.</p>`
+    : '';
   const html = `
     <p>Hi ${firstName} ${lastName},</p>
     <p>Thanks for booking with Barzunko! Here are your details:</p>
@@ -1072,7 +1149,7 @@ async function sendBookingEmail(booking) {
     </ul>
     <p>Please let us know if you are running late as we do not compensate for lateness.</p>
     <p>We do not allow outside drinks or foods. All guests must bring valid government picture ID (passport, driver license, ON photo card, or health card) for ordering alcohol.</p>
-    <p>If you need to make changes you can do it on our website at manage booking section with your email or Booking ID</p>
+    ${manageSection}
     <p>For all other inquires call us at 416-968-0909.</p>
     <p><strong>Please do not reply to this email.</strong></p>
     <p>See you soon!</p>
@@ -1385,6 +1462,7 @@ async function createBookingInternal(params) {
     customerInfo: normalizedCustomerInfo,
     paymentIntentId: paymentIntent.id,
     paymentStatus: 'requires_payment_method',
+    manageToken: generateManageToken(),
     calendarEventId: null,
     textSent: {
       booking: false,
@@ -1777,7 +1855,8 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
   // return the existing booking rather than throwing or double-writing.
   const existingRef = await findBookingRefByPaymentIntentId(intent.id);
   if (existingRef) {
-    return { bookingId: existingRef.id };
+    const existingSnap = await existingRef.get();
+    return { bookingId: existingRef.id, manageToken: existingSnap.data()?.manageToken || null };
   }
 
   const bookingDoc = {
@@ -1811,6 +1890,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
     },
     paymentIntentId: intent.id,
     paymentStatus: intent.status,
+    manageToken: generateManageToken(),
     calendarEventId: null,
     textSent: {
       booking: false,
@@ -1859,7 +1939,8 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
   }
 
   if (existingBookingId) {
-    return { bookingId: existingBookingId };
+    const existingSnap = await db.collection('bookings').doc(existingBookingId).get();
+    return { bookingId: existingBookingId, manageToken: existingSnap.data()?.manageToken || null };
   }
 
   if (bookingDoc.status === 'confirmed') {
@@ -1885,7 +1966,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
     }
   }
 
-  return { bookingId: newBookingRef.id };
+  return { bookingId: newBookingRef.id, manageToken: bookingDoc.manageToken };
 });
 exports.lookupBooking = secureFunctions.https.onCall(async (data, context) => {
   await enforcePublicRateLimit(context, 'lookupBooking', data);
@@ -2535,6 +2616,7 @@ exports.cancelBookingGuest = secureFunctions.https.onCall(async (data, context) 
   await enforcePublicRateLimit(context, 'cancelBookingGuest', data);
   const bookingId = typeof data?.bookingId === 'string' ? data.bookingId.trim() : '';
   const email = data?.email;
+  const token = typeof data?.token === 'string' ? data.token.trim() : '';
 
   if (!bookingId || !email) {
     throw new functions.https.HttpsError('invalid-argument', 'bookingId and email are required.');
@@ -2551,7 +2633,7 @@ exports.cancelBookingGuest = secureFunctions.https.onCall(async (data, context) 
       throw new functions.https.HttpsError('not-found', 'Booking not found.');
     }
     const booking = snap.data();
-    assertGuestOwnership(booking, email);
+    assertGuestAuthorization(booking, email, token);
     if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
       throw new functions.https.HttpsError(
         'failed-precondition',
@@ -2582,6 +2664,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
   await enforcePublicRateLimit(context, 'rebookBookingGuest', data);
   const bookingId = typeof data?.bookingId === 'string' ? data.bookingId.trim() : '';
   const email = data?.email;
+  const token = typeof data?.token === 'string' ? data.token.trim() : '';
   const newDate = typeof data?.newDate === 'string' ? data.newDate.trim() : '';
   const newStartTime = typeof data?.newStartTime === 'string' ? data.newStartTime.trim() : '';
   const duration = Number(data?.newDuration);
@@ -2614,7 +2697,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
   }
 
   const booking = bookingSnap.data();
-  assertGuestOwnership(booking, email);
+  assertGuestAuthorization(booking, email, token);
 
   if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
     throw new functions.https.HttpsError(
@@ -2667,7 +2750,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
     }
 
     const currentData = current.data();
-    assertGuestOwnership(currentData, email);
+    assertGuestAuthorization(currentData, email, token);
 
     if (!ACTIVE_BOOKING_STATUSES.includes(currentData.status)) {
       throw new functions.https.HttpsError(
@@ -2974,7 +3057,7 @@ exports.stripeWebhook = secureFunctions.https.onRequest(async (req, res) => {
     event = getStripe().webhooks.constructEvent(req.rawBody, sig, stripeWebhookSecret);
   } catch (err) {
     console.error('[stripeWebhook] Signature verification failed', err.message || err);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    return res.status(400).send('Webhook signature verification failed');
   }
 
   const intent = event.data?.object;

@@ -33,6 +33,8 @@ class BarzunkoApp {
     this.isRebookingFlow = false;
     this.rebookContext = null;
     this.rebookingStorageKey = 'barzunkoRebookContext';
+    this.manageTokensById = {};
+    this.manageTokenStorageKey = 'barzunkoManageTokens';
     this.waitlistTime = null;
     this.taxRate = 0.13;
 
@@ -2952,6 +2954,11 @@ class BarzunkoApp {
         paymentIntentId: confirmedPaymentIntentId,
       });
       const bookingId = finalizeRes.data?.bookingId;
+      // Persist the manage token returned to the booker so they can cancel or
+      // reschedule in this session without waiting for the confirmation email.
+      if (bookingId && finalizeRes.data?.manageToken) {
+        this.setManageToken(bookingId, finalizeRes.data.manageToken);
+      }
 
       // 4) Update local booking data and redirect to confirmation page
       this.bookingData.id = bookingId;
@@ -3016,6 +3023,7 @@ class BarzunkoApp {
       const payload = {
         bookingId: this.rebookContext.booking.id,
         email: this.rebookContext.email || this.bookingData.customer?.email || '',
+        token: this.rebookContext.token || this.getManageToken(this.rebookContext.booking.id),
         newDate: this.bookingData.date,
         newStartTime: this.bookingData.startTime,
         newDuration: this.bookingData.duration,
@@ -3221,6 +3229,37 @@ class BarzunkoApp {
     }
   }
 
+  // Manage tokens prove ownership for guest cancel/reschedule. They arrive via
+  // the confirmation email link (or are returned at booking time) and are kept
+  // per-tab in sessionStorage so the rebook round-trip survives navigation.
+  // They are deliberately never fetched from the server via a plain lookup.
+  setManageToken(bookingId, token) {
+    if (!bookingId || !token) return;
+    this.manageTokensById[bookingId] = token;
+    try {
+      const store = JSON.parse(sessionStorage.getItem(this.manageTokenStorageKey) || '{}');
+      store[bookingId] = token;
+      sessionStorage.setItem(this.manageTokenStorageKey, JSON.stringify(store));
+    } catch (err) {
+      /* sessionStorage unavailable — in-memory map still works for this view */
+    }
+  }
+
+  getManageToken(bookingId) {
+    if (!bookingId) return '';
+    if (this.manageTokensById[bookingId]) return this.manageTokensById[bookingId];
+    try {
+      const store = JSON.parse(sessionStorage.getItem(this.manageTokenStorageKey) || '{}');
+      if (store[bookingId]) {
+        this.manageTokensById[bookingId] = store[bookingId];
+        return store[bookingId];
+      }
+    } catch (err) {
+      /* ignore */
+    }
+    return '';
+  }
+
   initManagePage() {
     if (typeof window === 'undefined') return;
 
@@ -3230,7 +3269,18 @@ class BarzunkoApp {
 
     const bookingId = params.get('bookingId') || params.get('reference') || '';
 
+    const token = params.get('token') || '';
+
     const rebookSuccess = params.get('rebookSuccess') === '1';
+
+    if (bookingId && token) {
+      this.setManageToken(bookingId, token);
+      // Strip the token from the visible URL so it doesn't linger in the
+      // address bar, browser history, or any outbound referrer header.
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('token');
+      window.history.replaceState({}, document.title, cleanUrl.toString());
+    }
 
     if (email) {
       const emailInput = document.getElementById('booking-email');
@@ -3376,9 +3426,14 @@ class BarzunkoApp {
 
     const startDisplay = `${this.formatDateDisplay(booking.date)} at ${this.formatTime(booking.startTime)}`;
 
-    const canCancel = Boolean(booking.canCancel);
+    // A token-protected booking can only be changed online if this browser is
+    // holding its manage token (i.e. the customer arrived via their email link).
+    const needsManageLink =
+      Boolean(booking.manageTokenRequired) && !this.getManageToken(booking.id);
 
-    const canRebook = Boolean(booking.canRebook);
+    const canCancel = Boolean(booking.canCancel) && !needsManageLink;
+
+    const canRebook = Boolean(booking.canRebook) && !needsManageLink;
 
     const statusSlug = (booking.status || 'unknown').toLowerCase();
 
@@ -3387,9 +3442,11 @@ class BarzunkoApp {
     const cancelDeadlineDisplay = booking.cancelableUntil
       ? new Date(booking.cancelableUntil).toLocaleString()
       : 'the cancellation deadline has passed';
-    const cancelMessage = canCancel
-      ? `Free cancellation available until ${cancelDeadlineDisplay}.`
-      : 'Cancellations are no longer available online. Please contact the venue for assistance.';
+    const cancelMessage = needsManageLink
+      ? 'To cancel or reschedule online, open the “Manage your booking” link in your confirmation email. For help, call 416-968-0909.'
+      : canCancel
+        ? `Free cancellation available until ${cancelDeadlineDisplay}.`
+        : 'Cancellations are no longer available online. Please contact the venue for assistance.';
 
     bookingDetails.classList.remove('hidden');
 
@@ -3623,6 +3680,7 @@ class BarzunkoApp {
     const context = {
       booking,
       email: this.currentManagedEmail || booking.customer.email || '',
+      token: this.getManageToken(booking.id),
       preferences: normalizedPreferences,
     };
 
@@ -3665,6 +3723,8 @@ class BarzunkoApp {
         bookingId: this.activeManagedBooking.id,
 
         email: this.currentManagedEmail || this.activeManagedBooking.customer.email,
+
+        token: this.getManageToken(this.activeManagedBooking.id),
       });
 
       const updatedBooking = response.data?.booking;

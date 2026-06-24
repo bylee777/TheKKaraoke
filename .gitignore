@@ -11,3 +11,10 @@ firebase-debug.log
 
 functions/.runtimeconfig.json
 functions/env.local
+
+# OS / editor / debug junk (should never be committed)
+.DS_Store
+*-debug.log
+firestore-debug.log
+ui-debug.log
+.java.exe
