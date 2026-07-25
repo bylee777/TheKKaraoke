@@ -140,26 +140,10 @@ function parseDateDay(dateStr) {
   return safeDate.getDay();
 }
 
-const WORLD_CUP_SCHEDULE = {
-  0: { openTime: '13:00', closeTime: '03:00', label: 'Sunday' },
-  1: { openTime: '18:00', closeTime: '03:00', label: 'Monday' },
-  2: { openTime: '18:00', closeTime: '03:00', label: 'Tuesday' },
-  3: { openTime: '18:00', closeTime: '03:00', label: 'Wednesday' },
-  4: { openTime: '18:00', closeTime: '03:00', label: 'Thursday' },
-  5: { openTime: '18:00', closeTime: '04:00', label: 'Friday' },
-  6: { openTime: '13:00', closeTime: '04:00', label: 'Saturday' },
-};
-
-function isWorldCupDate(dateStr) {
-  const d = new Date(`${dateStr}T12:00:00`);
-  return d >= new Date('2026-06-11T00:00:00') && d <= new Date('2026-07-19T23:59:59');
-}
-
 function getBusinessScheduleForDate(dateStr) {
   const day = parseDateDay(dateStr);
-  const activeSchedule = isWorldCupDate(dateStr) ? WORLD_CUP_SCHEDULE : BUSINESS_SCHEDULE;
   const schedule =
-    activeSchedule[day ?? DEFAULT_SCHEDULE_DAY] || activeSchedule[DEFAULT_SCHEDULE_DAY];
+    BUSINESS_SCHEDULE[day ?? DEFAULT_SCHEDULE_DAY] || BUSINESS_SCHEDULE[DEFAULT_SCHEDULE_DAY];
   const openMinutes = timeStringToMinutes(schedule.openTime);
   let closeMinutes = timeStringToMinutes(schedule.closeTime);
   if (!Number.isFinite(openMinutes) || !Number.isFinite(closeMinutes)) {
@@ -858,6 +842,54 @@ function requireStaffAccess(context) {
       'Admin or staff privileges required',
     );
   }
+}
+
+// --- Admin input validation (OWASP A03/A04 defense-in-depth) -----------------
+// The admin UI only ever submits the values below. Rejecting anything else
+// keeps malformed or tampered payloads from reaching Firestore / Stripe and
+// bounds the shape of persisted documents.
+const DATE_STRING_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ADMIN_BOOKING_STATUSES = ['pending', 'confirmed', 'cancelled', 'canceled'];
+const ADMIN_PAYMENT_STATUSES = [
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+  'processing',
+  'requires_capture',
+  'canceled',
+  'succeeded',
+  'refunded',
+];
+
+function assertValidDateString(date, field = 'date') {
+  if (typeof date !== 'string' || !DATE_STRING_RE.test(date)) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `${field} must be a valid YYYY-MM-DD string`,
+    );
+  }
+}
+
+// Optional enum guard: undefined/null pass (field not being changed), any other
+// non-allowlisted value is rejected.
+function assertAllowedValue(value, allowed, field) {
+  if (value === undefined || value === null) return;
+  if (typeof value !== 'string' || !allowed.includes(value)) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid ${field}`);
+  }
+}
+
+// Structured audit trail for privileged admin actions. Cloud Logging retains
+// these, so every cancel / refund / capture / edit is attributable to an actor
+// (OWASP A09 — Security Logging & Monitoring).
+function logAdminAction(context, action, details = {}) {
+  functions.logger.info(`admin_action:${action}`, {
+    action,
+    actorUid: context?.auth?.uid || null,
+    actorEmail: context?.auth?.token?.email || null,
+    appCheck: Boolean(context?.app),
+    ...details,
+  });
 }
 
 const RATE_LIMITS = {
@@ -2140,6 +2172,7 @@ exports.adminCancelBySecret = secureFunctions.https.onCall(async (data, context)
     throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
   }
   await cancelBookingInternal(bookingId);
+  logAdminAction(context, 'booking_cancel', { bookingId });
   const snap = await db.collection('bookings').doc(bookingId).get();
   return { message: 'Booking cancelled', booking: sanitizeBookingSnapshot(snap) };
 });
@@ -2151,6 +2184,7 @@ exports.adminCancelWithoutRefund = secureFunctions.https.onCall(async (data, con
     throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
   }
   await cancelBookingWithoutRefund(bookingId);
+  logAdminAction(context, 'booking_cancel_no_refund', { bookingId });
   const snap = await db.collection('bookings').doc(bookingId).get();
   return { message: 'Booking cancelled (no refund)', booking: sanitizeBookingSnapshot(snap) };
 });
@@ -2236,6 +2270,7 @@ exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context)
     transaction.update(ref, updatePayload);
   });
   const updated = await ref.get();
+  logAdminAction(context, 'booking_rebook', { bookingId, newDate, newStartTime });
   return { message: 'Booking updated', booking: sanitizeBookingSnapshot(updated) };
 });
 
@@ -2298,6 +2333,7 @@ exports.adminRefundBySecret = secureFunctions.https.onCall(async (data, context)
   );
 
   const updated = await ref.get();
+  logAdminAction(context, 'payment_refund', { bookingId });
   return {
     message: 'Payment refunded',
     booking: sanitizeBookingSnapshot(updated),
@@ -2331,19 +2367,28 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
     allowPast,
   } = data || {};
 
+  // Validate/allowlist the free-form fields before anything is persisted.
+  assertAllowedValue(status, ADMIN_BOOKING_STATUSES, 'status');
+  assertAllowedValue(paymentStatus, ADMIN_PAYMENT_STATUSES, 'paymentStatus');
+  if (date) assertValidDateString(date);
+
   // Admin override: default allowPast to true for admins unless explicitly false
   const allowPastFlag =
     allowPast === false ? false : context?.auth?.token?.isAdmin === true ? true : true;
 
-  // Normalize commonly provided values
+  // Normalize commonly provided values. Pick only allowlisted customer keys
+  // (no `...customerInfo` spread) so a payload can't mass-assign arbitrary
+  // fields into the persisted document.
   const durNum = Number(duration);
   const normalizedCustomerInfo = customerInfo
     ? {
-        ...customerInfo,
         firstName: customerInfo?.firstName ? String(customerInfo.firstName).trim() : '',
         lastName: customerInfo?.lastName ? String(customerInfo.lastName).trim() : '',
         email: normalizeEmail(customerInfo?.email),
         phone: customerInfo?.phone ? String(customerInfo.phone).trim() : '',
+        ...(customerInfo?.specialRequests
+          ? { specialRequests: String(customerInfo.specialRequests).trim() }
+          : {}),
         ...(Object.prototype.hasOwnProperty.call(customerInfo, 'marketingOptIn')
           ? { marketingOptIn: customerInfo?.marketingOptIn === true }
           : {}),
@@ -2417,6 +2462,10 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
 
     await ref.update(updatePayload);
     const updated = await ref.get();
+    logAdminAction(context, 'booking_update', {
+      bookingId: String(bookingId).trim(),
+      fields: Object.keys(updatePayload),
+    });
     return { message: 'Booking upserted', booking: sanitizeBookingSnapshot(updated) };
   }
 
@@ -2483,15 +2532,14 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
     ].join('\n'),
   );
   const created = await ref.get();
+  logAdminAction(context, 'booking_create', { bookingId: ref.id });
   return { message: 'Booking created', booking: sanitizeBookingSnapshot(created) };
 });
 
 exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, context) => {
   requireStaffAccess(context);
   const { date } = data || {};
-  if (!date) {
-    throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
-  }
+  assertValidDateString(date);
   // Query by both 'date' (calendar date) and 'businessDate' to capture early-morning
   // carryover bookings whose calendar date is the next day but belong to this business day.
   const [byDate, byBusinessDate] = await Promise.all([
@@ -2515,9 +2563,7 @@ exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, conte
 exports.adminGetSameDayRequests = secureFunctions.https.onCall(async (data, context) => {
   requireStaffAccess(context);
   const { date } = data || {};
-  if (!date) {
-    throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
-  }
+  assertValidDateString(date);
   const snapshot = await db
     .collection('samedayWaitlist')
     .where('date', '==', date)
@@ -2541,9 +2587,7 @@ exports.adminGetAvailabilityByDate = secureFunctions.https.onCall(async (data, c
   requireStaffAccess(context);
   const { date, times, duration } = data || {};
   const dur = Number(duration) || 1;
-  if (!date) {
-    throw new functions.https.HttpsError('invalid-argument', 'date is required (YYYY-MM-DD)');
-  }
+  assertValidDateString(date);
   const schedule = getBusinessScheduleForDate(date);
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date provided.');
@@ -2931,6 +2975,7 @@ exports.cancelBooking = secureFunctions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'bookingId is required');
   }
   await cancelBookingInternal(bookingId);
+  logAdminAction(context, 'booking_cancel', { bookingId });
   return { message: 'Booking cancelled' };
 });
 
@@ -2979,6 +3024,7 @@ exports.rebookBooking = secureFunctions.https.onCall(async (data, context) => {
   } catch (err) {
     console.error('sendBookingEmail failed after admin rebook', err);
   }
+  logAdminAction(context, 'booking_rebook', { bookingId, newBookingId: result.id });
   return {
     message: 'Booking rebooked',
     newBookingId: result.id,
@@ -3209,6 +3255,7 @@ exports.adminCaptureBySecret = secureFunctions.https.onCall(async (data, context
       paymentStatus: captured.status,
       updatedAt: FieldValue.serverTimestamp(),
     });
+    logAdminAction(context, 'payment_capture', { bookingId, status: captured.status });
     return { ok: true, status: captured.status };
   } catch (err) {
     console.error('Capture PaymentIntent failed', err);

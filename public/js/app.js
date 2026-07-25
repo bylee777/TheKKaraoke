@@ -1384,11 +1384,8 @@ class BarzunkoApp {
     // Filter out slots that cannot fit within business hours for the chosen duration
     slots = slots.filter((time) => this.slotFitsBusinessHours(this.selectedDate, time, duration));
     const weekday = selectedDateTime.getDay();
-    const isWorldCupDate =
-      selectedDateTime >= new Date('2026-06-11T00:00:00') &&
-      selectedDateTime <= new Date('2026-07-19T23:59:59');
     const filteredSlots = slots.filter((time) => {
-      if (!isWorldCupDate && weekday === 5 && time === '02:00') return false;
+      if (weekday === 5 && time === '02:00') return false;
       if (weekday === 0 && time === '01:30') return false;
       return true;
     });
@@ -3849,16 +3846,15 @@ class BarzunkoApp {
       await window.firebaseAuth.signInWithEmailAndPassword(email, password);
     } catch (err) {
       console.error('adminLogin', err);
-      let message = 'Unable to sign in. Please check your credentials.';
+      // Generic default. user-not-found, wrong-password, invalid-credential and
+      // user-disabled all fall through to this so the response never reveals
+      // whether an account exists (account-enumeration hardening, OWASP A07).
+      let message = 'Incorrect email or password.';
       const code = err?.code;
       if (code === 'auth/invalid-email') {
         message = 'Invalid email address.';
-      } else if (code === 'auth/user-disabled') {
-        message = 'This account has been disabled.';
-      } else if (code === 'auth/user-not-found') {
-        message = 'No admin account found for that email.';
-      } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        message = 'Incorrect email or password.';
+      } else if (code === 'auth/too-many-requests') {
+        message = 'Too many attempts. Please wait a moment and try again.';
       }
       this.showNotification(message, 'error');
     } finally {
@@ -3987,14 +3983,13 @@ class BarzunkoApp {
       await window.firebaseAuth.signInWithEmailAndPassword(email, password);
     } catch (err) {
       console.error('staffLogin', err);
-      let message = 'Unable to sign in. Please try again.';
+      // Generic default for the same account-enumeration reason as adminLogin.
+      let message = 'Incorrect email or password.';
       const code = err?.code;
       if (code === 'auth/invalid-email') {
         message = 'Invalid email address.';
-      } else if (code === 'auth/user-not-found') {
-        message = 'No staff account found for that email.';
-      } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        message = 'Incorrect email or password.';
+      } else if (code === 'auth/too-many-requests') {
+        message = 'Too many attempts. Please wait a moment and try again.';
       }
       this.showNotification(message, 'error');
     }
@@ -5876,15 +5871,6 @@ class BarzunkoApp {
   }
 
   getBusinessScheduleForDate(dateStr) {
-    const worldCupHoursByDay = {
-      0: { open: '13:00', close: '03:00' }, // Sunday
-      1: { open: '18:00', close: '03:00' }, // Monday
-      2: { open: '18:00', close: '03:00' },
-      3: { open: '18:00', close: '03:00' },
-      4: { open: '18:00', close: '03:00' },
-      5: { open: '18:00', close: '04:00' }, // Friday
-      6: { open: '13:00', close: '04:00' }, // Saturday
-    };
     const map = this.businessHoursByDay || {};
     const fallback = map[1] || { open: '18:00', close: '02:30' };
     if (dateStr === '2026-01-01') {
@@ -5895,10 +5881,8 @@ class BarzunkoApp {
       const safeDate = new Date(`${dateStr}T12:00:00`);
       if (!Number.isNaN(safeDate.getTime())) {
         const day = safeDate.getDay();
-        const isWorldCup = safeDate >= new Date('2026-06-11T00:00:00') && safeDate <= new Date('2026-07-19T23:59:59');
-        const activeMap = isWorldCup ? worldCupHoursByDay : map;
-        if (Object.prototype.hasOwnProperty.call(activeMap, day)) {
-          baseSchedule = activeMap[day];
+        if (Object.prototype.hasOwnProperty.call(map, day)) {
+          baseSchedule = map[day];
         }
       }
     }
