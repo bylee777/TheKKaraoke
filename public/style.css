@@ -1331,6 +1331,12 @@ main {
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
 }
 
+.special-card:only-child {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(100%, 600px);
+}
+
 .special-card__poster {
   height: clamp(250px, 32vw, 420px);
   background-size: cover;
@@ -1351,12 +1357,6 @@ main {
     linear-gradient(132deg, rgba(59, 130, 246, 0.2), rgba(6, 182, 212, 0.08)),
     url('image/barzunko-all-you-can.jpg');
   background-position: center 33%;
-}
-
-.special-poster--asahi {
-  background-image:
-    linear-gradient(132deg, rgba(59, 130, 246, 0.2), rgba(6, 182, 212, 0.08)),
-    url('image/barzunko-asahi-draft.jpg');
 }
 
 .special-card__content {

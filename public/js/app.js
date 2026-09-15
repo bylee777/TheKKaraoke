@@ -974,7 +974,7 @@ class BarzunkoApp {
           return false;
         }
 
-        const selectedDateTime = this.combineDateTimeForSlot(this.selectedDate, this.selectedTime);
+        const selectedDateTime = this.nightSlotStart(this.selectedDate, this.selectedTime);
         const bookingCutoff = this.getCustomerAdvanceBookingCutoff();
 
         if (
@@ -1993,7 +1993,7 @@ class BarzunkoApp {
       }
     }
     if (booking.date && booking.startTime) {
-      const local = this.combineDateTimeForSlot(booking.date, booking.startTime);
+      const local = this.bookingStart(booking.date, booking.startTime);
       if (!Number.isNaN(local.getTime())) {
         return local.getTime() >= Date.now();
       }
@@ -2869,13 +2869,19 @@ class BarzunkoApp {
           return null;
         }
       })();
+      // Only skip re-confirmation for an intent we know was actually charged.
+      // A stored-but-unconfirmed intent must go back through prepare, which now
+      // returns that same intent from its hold rather than opening a new one.
+      const chargedStatuses = ['succeeded', 'requires_capture', 'processing'];
       const pendingMatchesSlot =
         storedPending &&
         storedPending.roomId === payload.roomId &&
         storedPending.date === payload.date &&
         storedPending.startTime === payload.startTime &&
-        storedPending.duration === payload.duration;
+        storedPending.duration === payload.duration &&
+        chargedStatuses.includes(storedPending.paymentStatus);
 
+      let alreadyPaidStatus = null;
       if (pendingMatchesSlot) {
         // Card was already charged — go straight to finalize with the stored PI.
         paymentIntentId = storedPending.paymentIntentId;
@@ -2887,6 +2893,39 @@ class BarzunkoApp {
         paymentIntentId = prepRes.data?.paymentIntentId;
         if (!clientSecretToUse || !paymentIntentId) {
           throw new Error('Unable to start payment. Please try again.');
+        }
+
+        // Persist the intent as soon as it exists, not just after it is charged.
+        // If the tab reloads or the network drops mid-confirm, the retry picks
+        // this up and reuses the same intent instead of opening a second one.
+        sessionStorage.setItem(
+          'barzunkoPendingPI',
+          JSON.stringify({
+            paymentIntentId,
+            roomId: payload.roomId,
+            date: payload.date,
+            startTime: payload.startTime,
+            duration: payload.duration,
+            paymentStatus: 'unconfirmed',
+          }),
+        );
+
+        // The server hands back an existing intent when another tab is already
+        // checking out this slot. If that tab has paid, confirming again would
+        // throw, so check first and fall straight through to finalize.
+        if (prepRes.data?.reused) {
+          try {
+            const { paymentIntent: existing } =
+              await window.stripe.retrievePaymentIntent(clientSecretToUse);
+            if (
+              existing &&
+              ['succeeded', 'requires_capture', 'processing'].includes(existing.status)
+            ) {
+              alreadyPaidStatus = existing.status;
+            }
+          } catch (retrieveErr) {
+            console.warn('Could not check reused payment intent status', retrieveErr);
+          }
         }
       }
 
@@ -2901,6 +2940,10 @@ class BarzunkoApp {
         // Payment was already confirmed in a prior attempt — skip re-charging.
         confirmedPaymentIntentId = paymentIntentId;
         confirmedPaymentStatus = storedPending.paymentStatus || 'processing';
+      } else if (alreadyPaidStatus) {
+        // Reused intent that another tab already paid — do not charge again.
+        confirmedPaymentIntentId = paymentIntentId;
+        confirmedPaymentStatus = alreadyPaidStatus;
       } else {
         const { error, paymentIntent } = await window.stripe.confirmCardPayment(clientSecretToUse, {
           payment_method: {
@@ -4781,10 +4824,17 @@ class BarzunkoApp {
         const rawEnd = this.adminResolveBookingEndTime(booking);
         const range = this.adminNormalizeBookingRange(booking.startTime, rawEnd);
         if (!range) return null;
+        // A carryover booking (calendar date is the morning after its business
+        // day, e.g. Fri-night 1am stored with Saturday's date) belongs in this
+        // business day's late-night rows (24h+), not the top-of-grid rows that
+        // represent the *previous* night's close.
+        const isCarryover =
+          booking.businessDate && booking.date && booking.date !== booking.businessDate;
+        const shift = isCarryover ? 24 * 60 : 0;
         return {
           booking,
-          startMinutes: range.startMinutes,
-          endMinutes: range.endMinutes,
+          startMinutes: range.startMinutes + shift,
+          endMinutes: range.endMinutes + shift,
         };
       })
       .filter(Boolean)
@@ -5650,17 +5700,25 @@ class BarzunkoApp {
     }
   }
 
-  combineDateTimeForSlot(dateStr, timeStr) {
-    // Post-midnight start times (00:00-03:59) belong to the NIGHT of the selected
-    // date, so the actual wall-clock moment is on the next calendar day. The venue
-    // never opens before 13:00, so any hour < 13 is unambiguously a late-night slot.
-    const dt = new Date(`${dateStr}T${timeStr}`);
+  // Wall-clock start of a slot picked on a NIGHT. Every picker in the UI is
+  // night-based: "Aug 22" + "12:00 AM" is the midnight that ends Saturday night,
+  // i.e. Aug 23. The venue never opens before 13:00, so any hour < 13 is a
+  // late-night slot belonging to the night that was picked.
+  nightSlotStart(nightDate, timeStr) {
+    const dt = new Date(`${nightDate}T${timeStr}`);
     if (Number.isNaN(dt.getTime())) return dt;
     const hour = Number(String(timeStr).split(':')[0]);
     if (Number.isFinite(hour) && hour < 13) {
       dt.setDate(dt.getDate() + 1);
     }
     return dt;
+  }
+
+  // Wall-clock start of a SAVED booking. `booking.date` is already the literal
+  // calendar date of the slot, so it is read as-is. Shifting it here is what made
+  // a saved 12 AM booking look a day later than it is.
+  bookingStart(dateStr, timeStr) {
+    return new Date(`${dateStr}T${timeStr}`);
   }
 
   parseDateFromYMD(dateStr) {
@@ -6385,7 +6443,7 @@ class BarzunkoApp {
       return;
     }
 
-    const candidateStart = this.combineDateTimeForSlot(date, startTime);
+    const candidateStart = this.nightSlotStart(date, startTime);
     if (Number.isNaN(candidateStart.getTime())) {
       if (statusEl) statusEl.textContent = 'Invalid date/time.';
       if (submitBtn) submitBtn.disabled = true;

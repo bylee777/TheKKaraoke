@@ -1,16 +1,118 @@
 rules_version = '2';
+// CANONICAL Firestore rules for the shared `thek-karaoke` project.
+// The tablet, booking, and TheKKaraoke apps all deploy to the SAME project, so the
+// last `firebase deploy --only firestore:rules` wins. Keep the copies in
+// apps/tablet, apps/booking, and apps/TheKKaraoke byte-for-byte identical, or one
+// deploy will silently drop collections (e.g. orders/menu) and break the POS.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.isAdmin == true;
+    }
+
+    // User profiles: customers can manage their own profile; admins can read all.
+    match /users/{userId} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      allow create: if
+        request.auth != null &&
+        request.auth.uid == userId &&
+        request.resource.data.uid == userId;
+      allow update: if
+        isAdmin() ||
+        (
+          request.auth != null &&
+          request.auth.uid == userId &&
+          request.resource.data.uid == resource.data.uid
+        );
+      allow delete: if isAdmin();
+    }
+
     // Rooms collection: anyone can read room data but only admins can write.
     match /rooms/{roomId} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.token.isAdmin == true;
+      allow write: if isAdmin();
     }
 
-    // Bookings collection: only admins can read or write bookings directly.
+    // Bookings collection:
+    // - admins/POS can read and update all bookings
+    // - customers can create and read/cancel only their OWN bookings
+    // - cross-room availability goes through the check_availability Cloud Function
+    //   (Admin SDK); clients can NO LONGER read other guests' bookings (no public read).
+    // ⚠️ Deploy order: ship check_availability + the apps/booking client change FIRST,
+    //   or availability breaks. See firestore.unified.rules notes.
     match /bookings/{bookingId} {
-      allow read: if request.auth != null && request.auth.token.isAdmin == true;
-      allow write: if request.auth != null && request.auth.token.isAdmin == true;
+      allow read: if
+        isAdmin() ||
+        (request.auth != null && resource.data.userId == request.auth.uid);
+
+      allow create: if
+        isAdmin() ||
+        (
+          request.auth != null &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.status == "confirmed"
+        ) ||
+        (
+          request.auth == null &&
+          request.resource.data.isGuest == true &&
+          request.resource.data.status == "confirmed"
+        );
+
+      allow update: if
+        isAdmin() ||
+        (
+          request.auth != null &&
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.status in ["confirmed", "cancelled"] &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // Checkout holds and slot locks are concurrency plumbing for the booking
+    // flow: holds stop a customer's second tab from opening a second charge,
+    // slot locks give racing transactions a document to conflict on. Only the
+    // Cloud Functions (Admin SDK, bypasses these rules) may touch them — a
+    // client that could write here could block or oversell rooms.
+    match /checkoutHolds/{holdId} {
+      allow read, write: if false;
+    }
+
+    match /slotLocks/{lockId} {
+      allow read, write: if false;
+    }
+
+    // Waitlist entries are operational staff data. Backend functions can still
+    // use the Admin SDK; POS/admin clients need this rule for direct reads.
+    match /waitlist/{entryId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Same-day walk-in waitlist entries (written by the walk-in management app).
+    match /samedayWaitlist/{entryId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Menu catalog consumed by tablets/booking apps. POS/admin systems can update it.
+    match /config/{configId} {
+      allow read: if configId == "menu";
+      allow write: if
+        configId == "menu" &&
+        isAdmin();
+    }
+
+    // Guest-facing clients (tablet/booking) never create orders directly — those go
+    // through Cloud Functions on the Admin SDK, which bypasses these rules. The POS is
+    // NOT a guest client: quick-serve tickets are rung up and paid at the till, so it
+    // creates orders directly (renderer.js handlePayQuickServe) and reads/updates them
+    // as an authenticated admin. `create: if false` breaks that flow for admins too.
+    match /orders/{orderId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }

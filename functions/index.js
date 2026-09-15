@@ -118,6 +118,10 @@ function getPreviousDate(dateStr) {
   return shiftDate(dateStr, -1);
 }
 
+function getNextDate(dateStr) {
+  return shiftDate(dateStr, 1);
+}
+
 function timeStringToMinutes(time) {
   if (typeof time !== 'string') return NaN;
   const [h, m] = time.split(':').map(Number);
@@ -230,6 +234,31 @@ function determineBusinessDate(dateStr, startTime) {
   return dateStr;
 }
 
+// The business day a booking belongs to. Prefers the stored businessDate;
+// legacy docs without one (created before the field existed) derive it from
+// their calendar date + startTime, so an early-morning carryover booking
+// resolves to the previous night's business day.
+function effectiveBusinessDate(booking) {
+  if (booking?.businessDate) return booking.businessDate;
+  return determineBusinessDate(booking?.date, booking?.startTime);
+}
+
+// Every date picker in the product — the customer calendar, the admin day sheet,
+// the reschedule pickers — works in NIGHTS: picking "Aug 22" plus "12:00 AM" means
+// the midnight that ends Saturday night, which is Aug 23 on the wall clock.
+// Storage is the other way round: `date` is the literal calendar date, and
+// `businessDate` is derived back out of it. Callables convert at the trust
+// boundary so the two readings can never disagree. They used to, and every
+// post-midnight booking was filed one night early.
+// Convert exactly ONCE, at the entry of a callable — never in an internal helper.
+function calendarDateForNight(nightDate, startTime) {
+  const nextDate = getNextDate(nightDate);
+  if (!nextDate) return nightDate;
+  // If filing it on the next calendar day lands it back on the night that was
+  // picked, that next day is the slot's real wall-clock date.
+  return determineBusinessDate(nextDate, startTime) === nightDate ? nextDate : nightDate;
+}
+
 async function fetchActiveRoomBookingsForBusinessDate(roomId, businessDate, transaction = null) {
   const baseQuery = db
     .collection('bookings')
@@ -243,15 +272,32 @@ async function fetchActiveRoomBookingsForBusinessDate(roomId, businessDate, tran
     .where('status', 'in', ACTIVE_BOOKING_STATUSES)
     .where('date', '==', businessDate);
 
+  // Legacy docs (no businessDate field) that belong to this business night but
+  // start after midnight carry the *next* calendar date.
+  const carryoverQuery = db
+    .collection('bookings')
+    .where('roomId', '==', roomId)
+    .where('status', 'in', ACTIVE_BOOKING_STATUSES)
+    .where('date', '==', getNextDate(businessDate));
+
   const baseSnap = transaction ? await transaction.get(baseQuery) : await baseQuery.get();
   const fallbackSnap = transaction
     ? await transaction.get(fallbackQuery)
     : await fallbackQuery.get();
+  const carryoverSnap = transaction
+    ? await transaction.get(carryoverQuery)
+    : await carryoverQuery.get();
 
   const docs = new Map();
   baseSnap.forEach((doc) => docs.set(doc.id, doc));
   fallbackSnap.forEach((doc) => docs.set(doc.id, doc));
-  return Array.from(docs.values());
+  carryoverSnap.forEach((doc) => docs.set(doc.id, doc));
+  // The calendar-date queries also match bookings of the adjacent business
+  // days (e.g. a Fri-night 1am booking carries Saturday's calendar date);
+  // keep only bookings whose business day is the requested one.
+  return Array.from(docs.values()).filter(
+    (doc) => effectiveBusinessDate(doc.data()) === businessDate,
+  );
 }
 
 async function fetchActiveBookingsForBusinessDate(businessDate) {
@@ -264,11 +310,24 @@ async function fetchActiveBookingsForBusinessDate(businessDate) {
     .where('status', 'in', ACTIVE_BOOKING_STATUSES)
     .where('date', '==', businessDate);
 
-  const [baseSnap, fallbackSnap] = await Promise.all([baseQuery.get(), fallbackQuery.get()]);
+  // Catches legacy carryover docs (no businessDate, next calendar date).
+  const carryoverQuery = db
+    .collection('bookings')
+    .where('status', 'in', ACTIVE_BOOKING_STATUSES)
+    .where('date', '==', getNextDate(businessDate));
+
+  const [baseSnap, fallbackSnap, carryoverSnap] = await Promise.all([
+    baseQuery.get(),
+    fallbackQuery.get(),
+    carryoverQuery.get(),
+  ]);
   const docs = new Map();
   baseSnap.forEach((doc) => docs.set(doc.id, doc));
   fallbackSnap.forEach((doc) => docs.set(doc.id, doc));
-  return Array.from(docs.values());
+  carryoverSnap.forEach((doc) => docs.set(doc.id, doc));
+  return Array.from(docs.values()).filter(
+    (doc) => effectiveBusinessDate(doc.data()) === businessDate,
+  );
 }
 
 function ensureWithinBusinessHours(date, startTime, endTime) {
@@ -404,7 +463,10 @@ function getLatestCompletedBusinessDate(now = new Date()) {
 }
 
 function ensureNotInPast(date, startTime) {
-  const startDate = combineDateTimeForSlot(date, startTime);
+  // `date` must be the slot's literal calendar date, not the night it belongs
+  // to — callables run it through calendarDateForNight() first. Passing a night
+  // date here reads a 12 AM slot as 24 hours earlier than it really is.
+  const startDate = combineDateTime(date, startTime);
   if (Number.isNaN(startDate.getTime())) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date or time provided.');
   }
@@ -460,7 +522,7 @@ const MIN_ADVANCE_HOURS = 4;
 const HOURS_TO_MS = 60 * 60 * 1000;
 
 function ensureMinimumAdvanceNotice(date, startTime, hours = MIN_ADVANCE_HOURS) {
-  const startDate = combineDateTimeForSlot(date, startTime);
+  const startDate = combineDateTime(date, startTime);
   if (Number.isNaN(startDate.getTime())) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date or time provided.');
   }
@@ -521,18 +583,6 @@ function combineDateTime(date, time) {
   return new Date(candidateUtc.getTime() + diffMs);
 }
 
-function combineDateTimeForSlot(date, time) {
-  // Post-midnight start times (00:00-03:59) belong to the NIGHT of the selected
-  // date, so the actual wall-clock moment is on the next calendar day. The venue
-  // never opens before 13:00, so any hour < 13 is unambiguously a late-night slot.
-  const startDate = combineDateTime(date, time);
-  const hour = Number(String(time).split(':')[0]);
-  if (Number.isFinite(hour) && hour < 13) {
-    startDate.setTime(startDate.getTime() + MINUTES_IN_DAY * 60 * 1000);
-  }
-  return startDate;
-}
-
 function addDurationMinutes(dateObj, durationHours) {
   const minutesToAdd = Math.round(Number(durationHours) * 60);
   if (!Number.isFinite(minutesToAdd)) {
@@ -581,7 +631,7 @@ function sanitizeBookingSnapshot(doc) {
 
   const booking = doc.data();
   const roomConfig = getRoomConfig(booking.roomId);
-  const startDate = combineDateTimeForSlot(booking.date, booking.startTime);
+  const startDate = combineDateTime(booking.date, booking.startTime);
   const endTime = resolveBookingEndTime(booking);
   const cancelDeadline = new Date(startDate.getTime() - CANCEL_WINDOW_HOURS * HOURS_TO_MS);
   const msUntilStart = startDate.getTime() - Date.now();
@@ -595,7 +645,7 @@ function sanitizeBookingSnapshot(doc) {
     roomId: booking.roomId,
     roomName: roomConfig.label,
     date: booking.date,
-    businessDate: booking.businessDate || booking.date,
+    businessDate: effectiveBusinessDate(booking),
     startTime: booking.startTime,
     endTime,
     duration: booking.duration,
@@ -683,6 +733,93 @@ async function findBookingRefByPaymentIntentId(intentId) {
   return snap.docs[0].ref;
 }
 
+// ---------------------------------------------------------------------------
+// Checkout holds
+//
+// A booking document does not exist until finalizeBooking runs, which is *after*
+// the card is charged. For the whole time a customer sits on the card form there
+// is no record of their pending purchase, so two checkouts for the same slot both
+// pass every duplicate and availability check, both charge, and both finalize.
+// The per-PaymentIntent idempotency record does not help either: two checkouts
+// create two different intents.
+//
+// A hold is that missing record. It is written at prepare time under an id
+// derived from room + business date + start time + email, so a second checkout
+// for the same customer and slot collides on the document id and reuses the
+// first PaymentIntent instead of creating a second one to charge.
+// ---------------------------------------------------------------------------
+const CHECKOUT_HOLD_TTL_MS = 20 * 60 * 1000;
+
+function checkoutHoldRef(roomId, businessDate, startTime, email) {
+  const key = [roomId, businessDate, startTime, normalizeEmail(email)].join('|');
+  const id = crypto.createHash('sha256').update(key).digest('hex').slice(0, 40);
+  return db.collection('checkoutHolds').doc(id);
+}
+
+function isHoldLive(hold) {
+  if (!hold) return false;
+  const expires = hold.expiresAt?.toMillis?.() ?? 0;
+  return expires > Date.now();
+}
+
+// Holds are advisory: they expire on their own, so a failed release is logged
+// rather than surfaced. Never let this break a booking that already succeeded.
+async function releaseCheckoutHold(roomId, businessDate, startTime, email) {
+  try {
+    await checkoutHoldRef(roomId, businessDate, startTime, email).delete();
+  } catch (err) {
+    console.error('Failed to release checkout hold', err);
+  }
+}
+
+// Defence in depth for the availability check, which is a query rather than a
+// document read. Emulator testing shows racing transactions do serialise on
+// their own today, but that rests on query isolation we do not control. Reading
+// and writing this per-room-per-day document inside those transactions makes the
+// guarantee explicit: concurrent bookings for the same room and date now
+// conflict on a real document, so the loser retries against the winner's write.
+// Volume here is a handful of bookings per room per day, far below the ~1
+// sustained write/sec that makes a hot document a problem.
+function slotLockRef(roomId, businessDate) {
+  return db.collection('slotLocks').doc(`${roomId}__${businessDate}`);
+}
+
+// Firestore requires every read in a transaction to happen before any write, so
+// taking the lock is split: read it up front, write it once the reads are done.
+async function readSlotLock(transaction, roomId, businessDate) {
+  const ref = slotLockRef(roomId, businessDate);
+  await transaction.get(ref);
+  return ref;
+}
+
+function writeSlotLock(transaction, ref, roomId, businessDate) {
+  transaction.set(
+    ref,
+    { roomId, businessDate, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+}
+
+// Reverse a charge we are not going to honour, so a customer is never left paid
+// with no booking. Mirrors the reversal logic in cancelBookingInternal.
+async function reversePaymentIntent(intentId, reason) {
+  if (!intentId) return;
+  try {
+    const intent = await getStripe().paymentIntents.retrieve(intentId);
+    if (intent.status === 'requires_capture') {
+      await getStripe().paymentIntents.cancel(intentId);
+    } else if (intent.status === 'succeeded') {
+      await getStripe().refunds.create({ payment_intent: intentId });
+    } else if (intent.status !== 'canceled') {
+      await getStripe().paymentIntents.cancel(intentId);
+    }
+    console.log(`Reversed PaymentIntent ${intentId} (${reason})`);
+  } catch (err) {
+    if (err?.code === 'charge_already_refunded') return;
+    console.error(`Failed to reverse PaymentIntent ${intentId} after ${reason}`, err);
+  }
+}
+
 async function ensureRoomAvailability(
   roomId,
   date,
@@ -693,11 +830,13 @@ async function ensureRoomAvailability(
   options = {},
 ) {
   const { inventory, label } = getRoomConfig(roomId);
-  const schedule = getBusinessScheduleForDate(date);
+  const businessDate = determineBusinessDate(date, startTime);
+  // Reserved-slot rules follow the NIGHT's hours, not those of the calendar day
+  // the slot happens to fall on — 12 AM belongs to the previous night's close.
+  const schedule = getBusinessScheduleForDate(businessDate);
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
   }
-  const businessDate = determineBusinessDate(date, startTime);
   const snapshot = await fetchActiveRoomBookingsForBusinessDate(
     roomId,
     businessDate,
@@ -1409,15 +1548,14 @@ async function createBookingInternal(params) {
   addDurationMinutes(dateObj, dur);
   const endTime = dateObj.toTimeString().slice(0, 5);
 
-  const schedule = getBusinessScheduleForDate(date);
+  const businessDate = determineBusinessDate(date, startTime);
+  const schedule = getBusinessScheduleForDate(businessDate);
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date provided.');
   }
 
   ensureWithinBusinessHours(date, startTime, endTime);
   ensureNotInPast(date, startTime);
-
-  const businessDate = determineBusinessDate(date, startTime);
 
   const totalCostNumber = Number.isFinite(Number(totalCost)) ? Number(totalCost) : null;
   const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
@@ -1661,7 +1799,9 @@ async function cancelBookingWithoutRefund(bookingId) {
  */
 exports.createBooking = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
-  const { roomId, date, startTime, duration, totalCost, customerInfo, partySize } = data || {};
+  const { roomId, date: nightDate, startTime, duration, totalCost, customerInfo, partySize } =
+    data || {};
+  const date = calendarDateForNight(nightDate, startTime);
   const result = await createBookingInternal({
     roomId,
     date,
@@ -1686,9 +1826,9 @@ exports.createBooking = secureFunctions.https.onCall(async (data, context) => {
  */
 exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, context) => {
   await enforcePublicRateLimit(context, 'prepareBookingPayment', data);
-  const { roomId, date, startTime, duration, partySize, customerInfo } = data || {};
+  const { roomId, date: nightDate, startTime, duration, partySize, customerInfo } = data || {};
 
-  if (!roomId || !date || !startTime || !duration || !customerInfo) {
+  if (!roomId || !nightDate || !startTime || !duration || !customerInfo) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
   }
 
@@ -1705,6 +1845,9 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
 
   const normalizedPartySize = validatePartySizeForRoom(roomId, partySize);
   validateCustomerInfo(customerInfo);
+
+  // The client picks a night; everything below works in calendar dates.
+  const date = calendarDateForNight(nightDate, startTime);
 
   // Compute end time
   const dateObj = new Date(`${date}T${startTime}`);
@@ -1737,7 +1880,9 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
   }
 
   // Check for an existing confirmed booking by the same customer for this exact slot.
-  // This prevents double-charging when a customer retries after a network failure.
+  // Catches a customer who already completed this booking earlier; it cannot catch
+  // one who is mid-checkout right now, because no booking document exists yet.
+  // The checkout hold below covers that case.
   const emailNormalized = normalizeEmail(customerInfo?.email);
   if (emailNormalized) {
     const dupSnap = await db.collection('bookings')
@@ -1756,10 +1901,76 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
     }
   }
 
-  // Quick availability check
-  await ensureRoomAvailability(roomId, date, startTime, endTime, null, null, {
-    partySize: normalizedPartySize,
+  // Claim a checkout hold. Whoever writes the hold first owns the PaymentIntent
+  // for this customer + slot; a concurrent second checkout reuses that intent
+  // rather than creating another one to charge.
+  const holdRef = checkoutHoldRef(roomId, businessDate, startTime, customerInfo?.email);
+  let reuseIntentId = null;
+
+  await db.runTransaction(async (transaction) => {
+    // --- reads (must all precede writes) ---
+    const lockRef = await readSlotLock(transaction, roomId, businessDate);
+    const holdSnap = await transaction.get(holdRef);
+    const hold = holdSnap.exists ? holdSnap.data() : null;
+
+    if (isHoldLive(hold)) {
+      if (hold.paymentIntentId) {
+        reuseIntentId = hold.paymentIntentId;
+        return;
+      }
+      // Claimed moments ago by a parallel request that has not attached its
+      // intent yet. Stop rather than race it into a second charge.
+      throw new functions.https.HttpsError(
+        'already-exists',
+        'This booking is already being processed. Please wait a moment before trying again.',
+      );
+    }
+
+    await ensureRoomAvailability(roomId, date, startTime, endTime, null, transaction, {
+      partySize: normalizedPartySize,
+    });
+
+    // --- writes ---
+    // Short TTL until the intent is attached, so a crash between claiming the
+    // hold and creating the intent cannot block the slot for the full window.
+    transaction.set(holdRef, {
+      roomId,
+      date,
+      businessDate,
+      startTime,
+      endTime,
+      email: emailNormalized,
+      partySize: normalizedPartySize,
+      paymentIntentId: null,
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 2 * 60 * 1000),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    writeSlotLock(transaction, lockRef, roomId, businessDate);
   });
+
+  // Reuse path: hand back the intent the first checkout already created.
+  if (reuseIntentId) {
+    try {
+      const existing = await getStripe().paymentIntents.retrieve(reuseIntentId);
+      if (existing && !['canceled'].includes(existing.status)) {
+        return {
+          clientSecret: existing.client_secret,
+          paymentIntentId: existing.id,
+          depositAmount: depositToCharge,
+          reused: true,
+        };
+      }
+      // Intent was cancelled — drop the stale hold so the retry starts clean.
+      await holdRef.delete().catch(() => {});
+    } catch (err) {
+      console.error('Failed to reuse held PaymentIntent', reuseIntentId, err);
+      await holdRef.delete().catch(() => {});
+    }
+    throw new functions.https.HttpsError(
+      'aborted',
+      'Your previous checkout expired. Please try again.',
+    );
+  }
 
   // Create PaymentIntent only
   try {
@@ -1777,12 +1988,20 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
       },
     });
 
+    // Attach the intent to the hold and extend it to the full checkout window.
+    await holdRef.update({
+      paymentIntentId: paymentIntent.id,
+      expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + CHECKOUT_HOLD_TTL_MS),
+    });
+
     return {
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
       depositAmount: depositToCharge,
     };
   } catch (err) {
+    // Release the hold so a failed start does not block the customer's retry.
+    await holdRef.delete().catch(() => {});
     console.error('prepareBookingPayment failed', err);
     throw new functions.https.HttpsError('internal', 'Unable to start payment');
   }
@@ -1797,14 +2016,14 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
   const {
     paymentIntentId,
     roomId,
-    date,
+    date: nightDate,
     startTime,
     duration,
     partySize,
     customerInfo,
   } = data || {};
 
-  if (!paymentIntentId || !roomId || !date || !startTime || !duration || !customerInfo) {
+  if (!paymentIntentId || !roomId || !nightDate || !startTime || !duration || !customerInfo) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required booking fields');
   }
 
@@ -1815,6 +2034,10 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
 
   const normalizedPartySize = validatePartySizeForRoom(roomId, partySize);
   validateCustomerInfo(customerInfo);
+
+  // The client picks a night; everything below works in calendar dates. This must
+  // match the conversion in prepareBookingPayment or the hold ids won't line up.
+  const date = calendarDateForNight(nightDate, startTime);
 
   const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
   const okStatuses = ['succeeded', 'requires_capture', 'processing'];
@@ -1939,6 +2162,12 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
   let existingBookingId = null;
   try {
     await db.runTransaction(async (transaction) => {
+      // --- reads (must all precede writes) ---
+      // Take the room/day lock so concurrent finalizes for this room and date
+      // conflict on a real document rather than relying on the isolation of the
+      // query-based availability check below. See slotLockRef.
+      const lockRef = await readSlotLock(transaction, roomId, businessDate);
+
       const finalizationRef = db.collection('paymentIntentFinalizations').doc(intent.id);
       const finalizationSnap = await transaction.get(finalizationRef);
       if (finalizationSnap.exists) {
@@ -1955,6 +2184,8 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
       await ensureRoomAvailability(roomId, date, startTime, endTime, null, transaction, {
         partySize: normalizedPartySize,
       });
+
+      // --- writes ---
       const docRef = db.collection('bookings').doc();
       transaction.set(docRef, bookingDoc);
       transaction.set(finalizationRef, {
@@ -1962,13 +2193,27 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
         paymentIntentId: intent.id,
         createdAt: FieldValue.serverTimestamp(),
       });
+      writeSlotLock(transaction, lockRef, roomId, businessDate);
       newBookingRef = docRef;
     });
   } catch (err) {
-    // If slot taken after payment, surface error
     console.error('finalizeBooking failed after payment', err);
+    // The card was already charged but no booking exists. Losing the race for
+    // the last room must not cost the customer money, so give it back rather
+    // than leaving a silent orphan charge.
+    if (err?.code === 'failed-precondition') {
+      await reversePaymentIntent(intent.id, 'availability conflict at finalize');
+      await releaseCheckoutHold(roomId, businessDate, startTime, customerInfo?.email);
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'That room was booked by someone else moments ago. Your card has been refunded — please pick another time.',
+      );
+    }
     throw err;
   }
+
+  // Booking is written; the hold has done its job.
+  await releaseCheckoutHold(roomId, businessDate, startTime, customerInfo?.email);
 
   if (existingBookingId) {
     const existingSnap = await db.collection('bookings').doc(existingBookingId).get();
@@ -2028,7 +2273,7 @@ exports.lookupBooking = secureFunctions.https.onCall(async (data, context) => {
 
 exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context) => {
   await enforcePublicRateLimit(context, 'getRoomAvailability', data);
-  const { date, startTime } = data || {};
+  const { date: nightDate, startTime } = data || {};
   const duration = Number(data?.duration);
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
@@ -2040,12 +2285,15 @@ exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context)
       ? Array.from(new Set(data.roomIds.map(String)))
       : Object.keys(ROOM_CONFIG);
 
-  if (!date || !startTime || !Number.isFinite(duration) || duration <= 0) {
+  if (!nightDate || !startTime || !Number.isFinite(duration) || duration <= 0) {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'date, startTime, and duration are required to determine availability.',
     );
   }
+
+  // The client asks about a night; availability is computed in calendar dates.
+  const date = calendarDateForNight(nightDate, startTime);
 
   const startDate = new Date(`${date}T${startTime}`);
   if (Number.isNaN(startDate.getTime())) {
@@ -2056,7 +2304,8 @@ exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context)
   addDurationMinutes(endDate, duration);
   const endTime = endDate.toTimeString().slice(0, 5);
 
-  const schedule = getBusinessScheduleForDate(date);
+  // Walk-in holds follow the night's own hours.
+  const schedule = getBusinessScheduleForDate(nightDate);
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
   }
@@ -2099,18 +2348,21 @@ exports.getRoomAvailability = secureFunctions.https.onCall(async (data, context)
 
 exports.getMaxAvailableDuration = secureFunctions.https.onCall(async (data, context) => {
   await enforcePublicRateLimit(context, 'getMaxAvailableDuration', data);
-  const { roomId, date, startTime } = data || {};
+  const { roomId, date: nightDate, startTime } = data || {};
   const excludeBookingId =
     typeof data?.excludeBookingId === 'string' ? data.excludeBookingId.trim() : '';
   const allowPast = data?.allowPast === true && hasStaffAccess(context);
-  if (!roomId || !date || !startTime) {
+  if (!roomId || !nightDate || !startTime) {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'roomId, date, and startTime are required',
     );
   }
+  // The client asks about a night; the window below is computed in calendar dates.
+  const date = calendarDateForNight(nightDate, startTime);
   const { inventory } = getRoomConfig(roomId);
-  const schedule = getBusinessScheduleForDate(date);
+  // The latest a booking may run is the NIGHT's closing time.
+  const schedule = getBusinessScheduleForDate(nightDate);
   if (!schedule) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date supplied.');
   }
@@ -2193,7 +2445,7 @@ exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context)
   requireAdmin(context);
   const {
     bookingId,
-    newDate,
+    newDate: newNightDate,
     newStartTime,
     newDuration,
     roomId,
@@ -2206,7 +2458,7 @@ exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context)
     bookingFee,
     requiredPurchaseAmount,
   } = data || {};
-  if (!bookingId || !newDate || !newStartTime || !Number.isFinite(Number(newDuration))) {
+  if (!bookingId || !newNightDate || !newStartTime || !Number.isFinite(Number(newDuration))) {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'bookingId, newDate, newStartTime, and newDuration are required',
@@ -2222,6 +2474,8 @@ exports.adminRebookBySecret = secureFunctions.https.onCall(async (data, context)
   if (duration > 3) {
     throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
   }
+  // The sheet is night-based; the document stores the literal calendar date.
+  const newDate = calendarDateForNight(newNightDate, newStartTime);
   const ref = db.collection('bookings').doc(bookingId);
   const snap = await ref.get();
   if (!snap.exists) {
@@ -2418,7 +2672,14 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
     const updatePayload = { updatedAt: FieldValue.serverTimestamp() };
 
     if (roomId) updatePayload.roomId = nextRoomId;
-    if (date) updatePayload.date = String(date);
+    // The sheet is night-based. Re-derive the calendar date whenever the night OR
+    // the start time moves, so a slot dragged across midnight files on the right
+    // night — moving 8 PM to 12 AM keeps the night and advances the date.
+    if (date || startTime) {
+      const editedNight = date ? String(date) : effectiveBusinessDate(current);
+      const editedStart = startTime ? String(startTime) : current.startTime;
+      updatePayload.date = calendarDateForNight(editedNight, editedStart);
+    }
     if (startTime) updatePayload.startTime = String(startTime);
     if (Number.isFinite(durNum)) updatePayload.duration = durNum;
     if (nextPartySize != null) updatePayload.partySize = nextPartySize;
@@ -2477,20 +2738,23 @@ exports.adminUpsertBySecret = secureFunctions.https.onCall(async (data, context)
     );
   }
 
+  // The sheet is night-based; the document stores the literal calendar date.
+  const calendarDate = calendarDateForNight(String(date), String(startTime));
+
   if (!allowPastFlag) {
-    ensureNotInPast(date, startTime);
+    ensureNotInPast(calendarDate, startTime);
   }
   const normalizedPartySize = Number.isFinite(Number(partySize))
     ? validatePartySizeForRoom(roomId, partySize)
     : null;
-  const endTime = maybeComputeEnd(date, startTime, durNum);
+  const endTime = maybeComputeEnd(calendarDate, startTime, durNum);
   if (endTime) {
-    ensureWithinBusinessHours(date, startTime, endTime);
+    ensureWithinBusinessHours(calendarDate, startTime, endTime);
   }
-  const businessDate = determineBusinessDate(date, startTime);
+  const businessDate = determineBusinessDate(calendarDate, startTime);
   const newDoc = {
     roomId: String(roomId),
-    date: String(date),
+    date: calendarDate,
     businessDate,
     startTime: String(startTime),
     endTime: endTime,
@@ -2542,14 +2806,21 @@ exports.adminGetBookingsByDate = secureFunctions.https.onCall(async (data, conte
   assertValidDateString(date);
   // Query by both 'date' (calendar date) and 'businessDate' to capture early-morning
   // carryover bookings whose calendar date is the next day but belong to this business day.
-  const [byDate, byBusinessDate] = await Promise.all([
+  const [byDate, byBusinessDate, byNextDate] = await Promise.all([
     db.collection('bookings').where('date', '==', date).get(),
     db.collection('bookings').where('businessDate', '==', date).get(),
+    // Legacy carryover docs (no businessDate field) carry the next calendar date.
+    db.collection('bookings').where('date', '==', getNextDate(date)).get(),
   ]);
   const docs = new Map();
   byDate.forEach((doc) => docs.set(doc.id, doc));
   byBusinessDate.forEach((doc) => docs.set(doc.id, doc));
+  byNextDate.forEach((doc) => docs.set(doc.id, doc));
+  // A booking belongs to exactly one business day. Without this filter a
+  // carryover booking (e.g. Fri-night 1am, calendar date Saturday) appeared
+  // in both Friday's and Saturday's lists.
   const bookings = Array.from(docs.values())
+    .filter((doc) => effectiveBusinessDate(doc.data()) === date)
     .map((doc) => sanitizeBookingSnapshot(doc))
     .filter(Boolean)
     .sort((a, b) => {
@@ -2684,7 +2955,7 @@ exports.cancelBookingGuest = secureFunctions.https.onCall(async (data, context) 
         'Only active bookings can be cancelled.',
       );
     }
-    const startDate = combineDateTimeForSlot(booking.date, booking.startTime);
+    const startDate = combineDateTime(booking.date, booking.startTime);
     if (startDate.getTime() - Date.now() < CANCEL_WINDOW_HOURS * HOURS_TO_MS) {
       throw new functions.https.HttpsError(
         'failed-precondition',
@@ -2709,7 +2980,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
   const bookingId = typeof data?.bookingId === 'string' ? data.bookingId.trim() : '';
   const email = data?.email;
   const token = typeof data?.token === 'string' ? data.token.trim() : '';
-  const newDate = typeof data?.newDate === 'string' ? data.newDate.trim() : '';
+  const newNightDate = typeof data?.newDate === 'string' ? data.newDate.trim() : '';
   const newStartTime = typeof data?.newStartTime === 'string' ? data.newStartTime.trim() : '';
   const duration = Number(data?.newDuration);
   const requestedRoomId = typeof data?.roomId === 'string' ? data.roomId.trim() : '';
@@ -2719,7 +2990,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
   if (
     !bookingId ||
     !email ||
-    !newDate ||
+    !newNightDate ||
     !newStartTime ||
     !Number.isFinite(duration) ||
     duration <= 0
@@ -2733,6 +3004,9 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
   if (duration > 3) {
     throw new functions.https.HttpsError('invalid-argument', 'Maximum booking duration is 3 hours');
   }
+
+  // The picker is night-based; the document stores the literal calendar date.
+  const newDate = calendarDateForNight(newNightDate, newStartTime);
 
   const bookingRef = db.collection('bookings').doc(bookingId);
   const bookingSnap = await bookingRef.get();
@@ -2750,7 +3024,7 @@ exports.rebookBookingGuest = secureFunctions.https.onCall(async (data, context) 
     );
   }
 
-  const originalStart = combineDateTimeForSlot(booking.date, booking.startTime);
+  const originalStart = combineDateTime(booking.date, booking.startTime);
   if (originalStart.getTime() - Date.now() < CANCEL_WINDOW_HOURS * HOURS_TO_MS) {
     throw new functions.https.HttpsError(
       'failed-precondition',
@@ -2846,7 +3120,7 @@ exports.joinWaitlist = secureFunctions.https.onCall(async (data, context) => {
   await enforcePublicRateLimit(context, 'joinWaitlist', data);
 
   const roomId = typeof data?.roomId === 'string' ? data.roomId.trim() : '';
-  const date = typeof data?.date === 'string' ? data.date.trim() : '';
+  const nightDate = typeof data?.date === 'string' ? data.date.trim() : '';
   const startTime = typeof data?.startTime === 'string' ? data.startTime.trim() : '';
   const duration = Number(data?.duration);
   const name = typeof data?.name === 'string' ? data.name.trim() : '';
@@ -2854,13 +3128,13 @@ exports.joinWaitlist = secureFunctions.https.onCall(async (data, context) => {
   const phone = typeof data?.phone === 'string' ? data.phone.trim() : '';
   const partySize = Number(data?.partySize) || 1;
 
-  if (!roomId || !date || !startTime || !name || !email) {
+  if (!roomId || !nightDate || !startTime || !name || !email) {
     throw new functions.https.HttpsError('invalid-argument', 'roomId, date, startTime, name, and email are required.');
   }
   if (!ROOM_CONFIG[roomId]) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid roomId.');
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nightDate)) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid date format.');
   }
   if (!/^\d{2}:\d{2}$/.test(startTime)) {
@@ -2872,6 +3146,10 @@ exports.joinWaitlist = secureFunctions.https.onCall(async (data, context) => {
   if (name.length > MAX_NAME_LENGTH) {
     throw new functions.https.HttpsError('invalid-argument', 'Name is too long.');
   }
+
+  // Store the calendar date so this row still matches the booking that frees the
+  // slot — notifyAllWaitlistEntries() looks entries up by the booking's own date.
+  const date = calendarDateForNight(nightDate, startTime);
 
   // Prevent duplicate entries for same person/slot
   const existing = await db
@@ -2988,10 +3266,19 @@ exports.cancelBooking = secureFunctions.https.onCall(async (data, context) => {
  */
 exports.rebookBooking = secureFunctions.https.onCall(async (data, context) => {
   requireAdmin(context);
-  const { bookingId, newDate, newStartTime, newDuration, newTotalCost, newDepositAmount } = data;
-  if (!bookingId || !newDate || !newStartTime || !newDuration) {
+  const {
+    bookingId,
+    newDate: newNightDate,
+    newStartTime,
+    newDuration,
+    newTotalCost,
+    newDepositAmount,
+  } = data;
+  if (!bookingId || !newNightDate || !newStartTime || !newDuration) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing required rebooking fields');
   }
+  // The picker is night-based; the document stores the literal calendar date.
+  const newDate = calendarDateForNight(newNightDate, newStartTime);
   // Fetch the old booking to retrieve customer and room info
   const oldRef = db.collection('bookings').doc(bookingId);
   const oldDoc = await oldRef.get();
