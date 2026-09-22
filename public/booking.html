@@ -9,7 +9,7 @@
       name="description"
       content="Choose a date, select a room and party details, and secure your karaoke night at Barzunko with a deposit."
     />
-    <link rel="stylesheet" href="style.css?v=20260922-2" />
+    <link rel="stylesheet" href="style.css?v=20260922-3" />
     <link
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Bricolage+Grotesque:wght@500;600;700;800&amp;display=swap"
       rel="stylesheet"
@@ -168,6 +168,13 @@
                   anything sooner, call
                   <a href="tel:+14169680909">(416) 968-0909</a>.
                 </p>
+                <div class="min-spend-notice min-spend-notice--step" role="note">
+                  <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+                  <div>
+                    <strong>Friday &amp; Saturday after 9 PM: $20 minimum spend per person</strong>
+                    <span>Every guest must order at least $20 in food or drinks, on top of the room charge. Also applies on holiday weekends.</span>
+                  </div>
+                </div>
                 <div class="calendar-container">
                   <div class="calendar-header">
                     <button class="calendar-nav-btn" id="prev-month">
@@ -200,7 +207,7 @@
                         <p>Can't find a time that works online? Add yourself to our same-day list and we'll call you if we can fit you in.</p>
                         <p class="same-day-section__frisatnotice hidden" id="same-day-frisatnotice">
                           <i class="fas fa-exclamation-circle"></i>
-                          <strong>Fri &amp; Sat:</strong> There is a $20 minimum spend per person.
+                          <strong>Fri &amp; Sat after 9 PM:</strong> There is a $20 minimum spend per person.
                         </p>
                       </div>
                       <button class="btn btn--outline" id="same-day-join-btn">
@@ -274,9 +281,11 @@
                         the premises.
                       </li>
                       <li>
-                        On weekends (Fridays, Saturdays, and holiday weekends) from 9 PM to 3 AM,
-                        each guest must spend at least $20 on food or beverages in addition to the
-                        room charge; one consolidated bill per group.
+                        <strong>
+                          On weekends (Fridays, Saturdays, and holiday weekends) from 9 PM to 3 AM,
+                          each guest must spend at least $20 on food or beverages in addition to the
+                          room charge; one consolidated bill per group.
+                        </strong>
                       </li>
                       <li>
                         Fridays and Saturdays: first-hour XL room bookings require one house bottle
@@ -323,6 +332,13 @@
               <div class="step-content">
                 <h2>Complete Your Booking</h2>
                 <p class="step-description">Secure your reservation with a deposit</p>
+                <div class="min-spend-notice min-spend-notice--step" role="note">
+                  <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+                  <div>
+                    <strong>Friday &amp; Saturday after 9 PM: $20 minimum spend per person</strong>
+                    <span>Every guest must order at least $20 in food or drinks, on top of the room charge. Also applies on holiday weekends.</span>
+                  </div>
+                </div>
                 <div class="payment-content">
                   <div class="payment-summary">
                     <h3>Payment Summary</h3>
@@ -406,7 +422,7 @@
           <p>Leave your details and we'll give you a call if we can fit you in today.</p>
           <div class="same-day-modal__frisatnotice hidden" id="same-day-modal-frisatnotice">
             <i class="fas fa-exclamation-circle"></i>
-            <strong>Friday &amp; Saturday reminder:</strong> There is a <strong>$20 minimum spend per person</strong> for all bookings.
+            <strong>Friday &amp; Saturday reminder:</strong> After 9 PM there is a <strong>$20 minimum spend per person</strong> on food or drinks, on top of the room charge.
           </div>
           <form id="same-day-form">
             <div class="form-row">
