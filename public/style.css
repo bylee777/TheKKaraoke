@@ -1359,6 +1359,12 @@ main {
   background-position: center 33%;
 }
 
+.special-poster--pizza {
+  background-image:
+    linear-gradient(132deg, rgba(59, 130, 246, 0.12), rgba(6, 182, 212, 0.04)),
+    url('image/barzunko-pizza.svg');
+}
+
 .special-card__content {
   padding: var(--space-16);
   display: grid;
