@@ -428,7 +428,8 @@ function getZonedDateParts(date, timeZone = BUSINESS_TIMEZONE) {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false,
+    // 'h23', not hour12:false — the latter reports midnight as "24" on Node 20.
+    hourCycle: 'h23',
   });
   const parts = {};
   formatter.formatToParts(date).forEach(({ type, value }) => {
@@ -569,18 +570,34 @@ function combineDateTime(date, time) {
   // 1. Parse as UTC to get an approximate reference point.
   const timeStr = time.length === 5 ? `${time}:00` : time;
   const candidateUtc = new Date(`${date}T${timeStr}Z`);
-  // 2. Find what wall-clock time that UTC moment corresponds to in our timezone.
-  const localParts = getZonedDateParts(candidateUtc);
-  // 3. Shift by the difference so the result matches the intended wall-clock time.
-  const localMinutes = Number(localParts.hour) * 60 + Number(localParts.minute);
   const [th, tm] = time.split(':').map(Number);
   const targetMinutes = th * 60 + tm;
-  let diffMs = (targetMinutes - localMinutes) * 60 * 1000;
-  // If the correction overshoots backward by more than 12 hours, the UTC candidate
-  // landed on the previous calendar day in local time (e.g. "00:00" UTC midnight
-  // maps to 8 PM the night before in Toronto). Add 24 hours to land on the right day.
-  if (diffMs < -12 * 60 * 60 * 1000) diffMs += 24 * 60 * 60 * 1000;
-  return new Date(candidateUtc.getTime() + diffMs);
+  const HALF_DAY_MS = 12 * 60 * 60 * 1000;
+  // 2. Find what wall-clock time a UTC moment corresponds to in our timezone, and
+  // 3. how far to shift it so the result matches the intended wall-clock time.
+  const correctionMs = (moment) => {
+    const localParts = getZonedDateParts(moment);
+    const localMinutes = Number(localParts.hour) * 60 + Number(localParts.minute);
+    let diffMs = (targetMinutes - localMinutes) * 60 * 1000;
+    // If the correction overshoots backward by more than 12 hours, the UTC candidate
+    // landed on the previous calendar day in local time (e.g. "00:00" UTC midnight
+    // maps to 8 PM the night before in Toronto). Add 24 hours to land on the right day.
+    if (diffMs < -HALF_DAY_MS) diffMs += 2 * HALF_DAY_MS;
+    if (diffMs > HALF_DAY_MS) diffMs -= 2 * HALF_DAY_MS;
+    return diffMs;
+  };
+  const firstPass = new Date(candidateUtc.getTime() + correctionMs(candidateUtc));
+  // 4. The shift above used the UTC offset at the candidate moment. When a DST
+  // change falls between the candidate and the result, that offset is an hour off
+  // (02:00 on the November fall-back Sunday came out as 01:00 EST), so correct
+  // once more using the offset at the result.
+  const secondDiff = correctionMs(firstPass);
+  if (secondDiff === 0) return firstPass;
+  const secondPass = new Date(firstPass.getTime() + secondDiff);
+  // Capped at two passes: a wall-clock time the March spring-forward skips
+  // (02:xx) never matches, so keep the first result, which reads it as the
+  // post-jump time (02:00 -> 03:00 EDT).
+  return correctionMs(secondPass) === 0 ? secondPass : firstPass;
 }
 
 function addDurationMinutes(dateObj, durationHours) {
@@ -592,15 +609,24 @@ function addDurationMinutes(dateObj, durationHours) {
   return dateObj;
 }
 
+// End time is clock arithmetic: start + duration on the clock face, wrapped past
+// midnight. That is exactly how prepare/finalize/createBookingInternal store
+// endTime and how the client displays it. The old version added elapsed time and
+// re-read the Toronto clock, which drifts by an hour across a DST change: on the
+// November fall-back night 23:00 + 3h came out "01:00" and 02:00 + 1h came out
+// "02:00" (a zero-length range, which the overlap checks read as 24 hours).
 function computeEndTime(date, startTime, duration) {
-  const endDate = combineDateTime(date, startTime);
-  addDurationMinutes(endDate, duration);
-  const parts = getZonedDateParts(endDate);
-  const endTime = `${parts.hour}:${parts.minute}`;
-  return {
-    endDate,
-    endTime,
-  };
+  // Still parse the full date + time so malformed input throws, as it always has.
+  combineDateTime(date, startTime);
+  const startMinutes = timeStringToMinutes(startTime);
+  if (!Number.isFinite(startMinutes)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid time value provided.');
+  }
+  const minutesToAdd = Math.round(Number(duration) * 60);
+  if (!Number.isFinite(minutesToAdd)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid duration provided.');
+  }
+  return { endTime: minutesToTimeString(startMinutes + minutesToAdd) };
 }
 
 function resolveBookingEndTime(booking) {
@@ -800,10 +826,15 @@ function writeSlotLock(transaction, ref, roomId, businessDate) {
   );
 }
 
+// PaymentIntent statuses where the customer's card has been (or is being) charged.
+const PAID_INTENT_STATUSES = ['succeeded', 'requires_capture', 'processing'];
+
 // Reverse a charge we are not going to honour, so a customer is never left paid
 // with no booking. Mirrors the reversal logic in cancelBookingInternal.
+// Returns true when the money is back with the customer (or was never taken) and
+// false when the reversal failed, so callers never claim a refund that did not happen.
 async function reversePaymentIntent(intentId, reason) {
-  if (!intentId) return;
+  if (!intentId) return false;
   try {
     const intent = await getStripe().paymentIntents.retrieve(intentId);
     if (intent.status === 'requires_capture') {
@@ -814,10 +845,123 @@ async function reversePaymentIntent(intentId, reason) {
       await getStripe().paymentIntents.cancel(intentId);
     }
     console.log(`Reversed PaymentIntent ${intentId} (${reason})`);
+    return true;
   } catch (err) {
-    if (err?.code === 'charge_already_refunded') return;
+    if (err?.code === 'charge_already_refunded') return true;
     console.error(`Failed to reverse PaymentIntent ${intentId} after ${reason}`, err);
+    return false;
   }
+}
+
+// Does this PaymentIntent pay for exactly the booking being requested? Returns
+// null when it does, otherwise the reason it does not. `expected.amount` (cents)
+// is optional; the other fields are the metadata prepareBookingPayment writes.
+function describePaymentIntentMismatch(intent, expected) {
+  if ((intent?.currency || '').toLowerCase() !== expected.currency) {
+    return 'Payment currency mismatch.';
+  }
+  if (expected.amount != null && intent.amount !== expected.amount) {
+    return 'Payment amount mismatch.';
+  }
+  const intentMetadata = intent.metadata || {};
+  if (
+    String(intentMetadata.roomId || '') !== expected.roomId ||
+    String(intentMetadata.date || '') !== expected.date ||
+    String(intentMetadata.startTime || '') !== expected.startTime ||
+    String(intentMetadata.duration || '') !== expected.duration ||
+    normalizeEmail(intentMetadata.customer_email) !== expected.customerEmail
+  ) {
+    return 'Payment details do not match the requested booking.';
+  }
+  return null;
+}
+
+// A paid PaymentIntent that is not going to become a booking: refund it, free the
+// customer's checkout hold, alert staff, and fail the call with a message that
+// says truthfully whether the card was refunded. Throws, except in one case: if a
+// concurrent finalizeBooking already turned this payment into a booking, nothing
+// is refunded and { bookingId } is returned for the caller to handle.
+//
+// The intent is first marked voided in paymentIntentFinalizations, the record
+// finalizeBooking checks inside its transaction, so a later or concurrent finalize
+// (a retry, or a second tab) can never confirm a booking against refunded money.
+async function refundUnbookablePayment({
+  intent,
+  reason,
+  slot,
+  refundedMessage,
+  notRefundedMessage,
+}) {
+  const finalizationRef = db.collection('paymentIntentFinalizations').doc(intent.id);
+  let alreadyVoided = false;
+  let refundedBefore = null;
+  try {
+    const bookedId = await db.runTransaction(async (transaction) => {
+      alreadyVoided = false;
+      const snap = await transaction.get(finalizationRef);
+      if (snap.exists) {
+        if (snap.data()?.bookingId) return snap.data().bookingId;
+        alreadyVoided = true;
+        refundedBefore = snap.data()?.refunded ?? null;
+        return null;
+      }
+      transaction.set(finalizationRef, {
+        voided: true,
+        reason: String(reason || '').slice(0, 300),
+        paymentIntentId: intent.id,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      return null;
+    });
+    if (bookedId) return { bookingId: bookedId };
+  } catch (err) {
+    // Refund anyway: the customer's money comes first.
+    console.error('Failed to mark PaymentIntent voided', intent.id, err);
+  }
+
+  const refunded = await reversePaymentIntent(intent.id, reason);
+  await finalizationRef
+    .set(
+      {
+        voided: true,
+        paymentIntentId: intent.id,
+        refunded,
+        refundCheckedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+    .catch((err) => console.error('Failed to record refund outcome', intent.id, err));
+  await releaseCheckoutHold(slot.roomId, slot.businessDate, slot.startTime, slot.email);
+
+  // A repeat call for an intent that was already voided and refunded has nothing
+  // new to tell staff; a failed refund, or a retry that fixed one, is reported.
+  if (!alreadyVoided || !refunded || refundedBefore === false) {
+    const paidFor = intent.metadata || {};
+    try {
+      await sendTelegramMessage(
+        [
+          refunded
+            ? '⚠️ Paid checkout refunded — no booking made'
+            : '🚨 REFUND FAILED — customer paid, no booking. Refund manually in Stripe.',
+          `PaymentIntent: ${intent.id}`,
+          `Amount: ${Number.isFinite(intent.amount) ? `$${(intent.amount / 100).toFixed(2)}` : 'n/a'} ${String(intent.currency || '').toUpperCase()}`,
+          `Email: ${slot.email || 'n/a'}`,
+          `Name: ${slot.customerInfo?.firstName || ''} ${slot.customerInfo?.lastName || ''}`,
+          `Phone: ${slot.customerInfo?.phone || 'n/a'}`,
+          `Requested: ${slot.roomId} ${slot.date} ${slot.startTime} for ${slot.duration}h (night ${slot.businessDate})`,
+          `Paid for: ${paidFor.roomId || '?'} ${paidFor.date || '?'} ${paidFor.startTime || '?'} for ${paidFor.duration || '?'}h`,
+          `Reason: ${reason}`,
+        ].join('\n'),
+      );
+    } catch (err) {
+      console.error('[telegram] refund alert failed', intent.id, err);
+    }
+  }
+
+  throw new functions.https.HttpsError(
+    'failed-precondition',
+    refunded ? refundedMessage : notRefundedMessage,
+  );
 }
 
 async function ensureRoomAvailability(
@@ -1907,7 +2051,8 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
   const holdRef = checkoutHoldRef(roomId, businessDate, startTime, customerInfo?.email);
   let reuseIntentId = null;
 
-  await db.runTransaction(async (transaction) => {
+  const claimCheckoutHold = async (transaction) => {
+    reuseIntentId = null;
     // --- reads (must all precede writes) ---
     const lockRef = await readSlotLock(transaction, roomId, businessDate);
     const holdSnap = await transaction.get(holdRef);
@@ -1946,30 +2091,96 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
       createdAt: FieldValue.serverTimestamp(),
     });
     writeSlotLock(transaction, lockRef, roomId, businessDate);
-  });
+  };
+  await db.runTransaction(claimCheckoutHold);
 
-  // Reuse path: hand back the intent the first checkout already created.
+  // Reuse path: the customer already has a live checkout for this slot.
   if (reuseIntentId) {
+    let existing = null;
     try {
-      const existing = await getStripe().paymentIntents.retrieve(reuseIntentId);
-      if (existing && !['canceled'].includes(existing.status)) {
-        return {
-          clientSecret: existing.client_secret,
-          paymentIntentId: existing.id,
-          depositAmount: depositToCharge,
-          reused: true,
-        };
-      }
-      // Intent was cancelled — drop the stale hold so the retry starts clean.
-      await holdRef.delete().catch(() => {});
+      existing = await getStripe().paymentIntents.retrieve(reuseIntentId);
     } catch (err) {
       console.error('Failed to reuse held PaymentIntent', reuseIntentId, err);
-      await holdRef.delete().catch(() => {});
     }
-    throw new functions.https.HttpsError(
-      'aborted',
-      'Your previous checkout expired. Please try again.',
-    );
+    if (!existing || existing.status === 'canceled') {
+      // Intent was cancelled — drop the stale hold so the retry starts clean.
+      await holdRef.delete().catch(() => {});
+      throw new functions.https.HttpsError(
+        'aborted',
+        'Your previous checkout expired. Please try again.',
+      );
+    }
+
+    // The hold id has no duration in it, so a customer who goes back and changes
+    // only the duration lands here holding the intent made for the old details.
+    // Handing that back means finalizeBooking rejects it after the card is charged.
+    const heldMismatch = describePaymentIntentMismatch(existing, {
+      currency: 'cad',
+      amount: Math.round(depositToCharge * 100),
+      roomId: String(roomId),
+      date: String(date),
+      startTime: String(startTime),
+      duration: String(dur),
+      customerEmail: emailNormalized,
+    });
+    if (!heldMismatch) {
+      // Same booking: hand back the intent the first checkout already created.
+      return {
+        clientSecret: existing.client_secret,
+        paymentIntentId: existing.id,
+        depositAmount: depositToCharge,
+        reused: true,
+      };
+    }
+
+    if (PAID_INTENT_STATUSES.includes(existing.status)) {
+      // Already paid for the old details. Refund it rather than hand it back.
+      const outcome = await refundUnbookablePayment({
+        intent: existing,
+        reason: `Checkout restarted with different details after paying (${heldMismatch})`,
+        slot: {
+          roomId,
+          date,
+          businessDate,
+          startTime,
+          duration: dur,
+          email: emailNormalized,
+          customerInfo,
+        },
+        refundedMessage:
+          'Your earlier payment for this time slot was for different booking details, so it has been refunded. Please try again to book with your new details.',
+        notRefundedMessage:
+          'Your earlier payment for this time slot was for different booking details. We could not refund it automatically, but our staff have been notified and will refund you. Please try again, or call us at 416-968-0909.',
+      });
+      if (outcome?.bookingId) {
+        // That earlier payment was turned into a booking moments ago.
+        throw new functions.https.HttpsError(
+          'already-exists',
+          'You already have a booking for this time slot. Check your email for confirmation details, or contact us if you need help.',
+        );
+      }
+    }
+
+    // Not paid yet: cancel it and start a fresh checkout for the new details.
+    try {
+      await getStripe().paymentIntents.cancel(existing.id);
+    } catch (err) {
+      // Most likely it is being paid right now in another tab; keep the hold.
+      console.error('Failed to cancel outdated held PaymentIntent', existing.id, err);
+      throw new functions.https.HttpsError(
+        'aborted',
+        'Your previous checkout is still being processed. Please wait a moment and try again.',
+      );
+    }
+    await holdRef.delete().catch(() => {});
+    // Re-claim for the new details, re-checking availability for the new end time.
+    await db.runTransaction(claimCheckoutHold);
+    if (reuseIntentId) {
+      throw new functions.https.HttpsError(
+        'already-exists',
+        'This booking is already being processed. Please wait a moment before trying again.',
+      );
+    }
   }
 
   // Create PaymentIntent only
@@ -2040,78 +2251,124 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
   const date = calendarDateForNight(nightDate, startTime);
 
   const intent = await getStripe().paymentIntents.retrieve(paymentIntentId);
-  const okStatuses = ['succeeded', 'requires_capture', 'processing'];
-  if (!intent || !okStatuses.includes(intent.status)) {
+  if (!intent || !PAID_INTENT_STATUSES.includes(intent.status)) {
     throw new functions.https.HttpsError(
       'failed-precondition',
       `Payment not completed. Status: ${intent?.status || 'unknown'}`,
     );
   }
 
-  const dateObj = new Date(`${date}T${startTime}`);
-  addDurationMinutes(dateObj, dur);
-  const endTime = dateObj.toTimeString().slice(0, 5);
-
-  const schedule = getBusinessScheduleForDate(date);
-  if (!schedule) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date provided.');
-  }
-
-  ensureWithinBusinessHours(date, startTime, endTime);
-  ensureNotInPast(date, startTime);
-  ensureMinimumAdvanceNotice(date, startTime);
-
+  // From here on the card has been charged.
   const businessDate = determineBusinessDate(date, startTime);
-  const pricingDetails = calculateBookingChargeDetails(roomId, dur, normalizedPartySize, {
-    date,
-    startTime,
-  });
-  const totalCostNumber = pricingDetails.totalCost;
-  const depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
-  const depositToCharge = depositTotals.total;
-  if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Unable to determine the required deposit for this booking.',
-    );
-  }
-  const expectedAmount = Math.round(depositToCharge * 100);
-  const expectedCurrency = 'cad';
-  const expectedMetadata = {
+  const emailNormalized = normalizeEmail(customerInfo?.email);
+  const expectedPayment = {
+    currency: 'cad',
     roomId: String(roomId),
     date: String(date),
     startTime: String(startTime),
     duration: String(dur),
-    customerEmail: normalizeEmail(customerInfo?.email),
+    customerEmail: emailNormalized,
+  };
+  const returnExistingBooking = async (bookingRef) => {
+    // A retry must still describe the booking this payment was made for.
+    const mismatch = describePaymentIntentMismatch(intent, expectedPayment);
+    if (mismatch) {
+      throw new functions.https.HttpsError('failed-precondition', mismatch);
+    }
+    const existingSnap = await bookingRef.get();
+    return { bookingId: bookingRef.id, manageToken: existingSnap.data()?.manageToken || null };
+  };
+  const slot = {
+    roomId,
+    date,
+    businessDate,
+    startTime,
+    duration: dur,
+    email: emailNormalized,
+    customerInfo,
+  };
+  // Refund a payment that will not become a booking (see refundUnbookablePayment).
+  const rejectPaidBooking = async (reason, refundedMessage, notRefundedMessage) => {
+    const why = /[.!?]$/.test(reason) ? reason : `${reason}.`;
+    const outcome = await refundUnbookablePayment({
+      intent,
+      reason,
+      slot,
+      refundedMessage:
+        refundedMessage ||
+        `We couldn't confirm this booking: ${why} Your card has been refunded — please try again.`,
+      notRefundedMessage:
+        notRefundedMessage ||
+        `We couldn't confirm this booking: ${why} We could not refund your card automatically, but our staff have been notified and will refund you. Please call us at 416-968-0909 if you have any questions.`,
+    });
+    // A concurrent finalize for this same payment booked it first.
+    return returnExistingBooking(db.collection('bookings').doc(outcome.bookingId));
   };
 
-  if ((intent.currency || '').toLowerCase() !== expectedCurrency) {
-    throw new functions.https.HttpsError('failed-precondition', 'Payment currency mismatch.');
+  // Idempotency first: if this PI was already finalized (e.g. response lost
+  // mid-flight), return the existing booking — even if the slot is now less than
+  // 4 hours away or has started — rather than re-validating, throwing or double-writing.
+  const finalizationRef = db.collection('paymentIntentFinalizations').doc(intent.id);
+  const finalizationSnap = await finalizationRef.get();
+  const finalization = finalizationSnap.exists ? finalizationSnap.data() || {} : null;
+  const existingRef = finalization?.bookingId
+    ? db.collection('bookings').doc(finalization.bookingId)
+    : await findBookingRefByPaymentIntentId(intent.id);
+  if (existingRef) {
+    return returnExistingBooking(existingRef);
   }
-  if (intent.amount !== expectedAmount) {
-    throw new functions.https.HttpsError('failed-precondition', 'Payment amount mismatch.');
-  }
-  const intentMetadata = intent.metadata || {};
-  const intentCustomerEmail = normalizeEmail(intentMetadata.customer_email);
-  if (
-    String(intentMetadata.roomId || '') !== expectedMetadata.roomId ||
-    String(intentMetadata.date || '') !== expectedMetadata.date ||
-    String(intentMetadata.startTime || '') !== expectedMetadata.startTime ||
-    String(intentMetadata.duration || '') !== expectedMetadata.duration ||
-    intentCustomerEmail !== expectedMetadata.customerEmail
-  ) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Payment details do not match the requested booking.',
-    );
+  if (finalization?.voided) {
+    // Already refunded by an earlier attempt; retries the refund if that failed.
+    return rejectPaidBooking('This payment was already cancelled.');
   }
 
-  // Idempotency: if this PI was already finalized (e.g. response lost mid-flight),
-  // return the existing booking rather than throwing or double-writing.
-  const existingRef = await findBookingRefByPaymentIntentId(intent.id);
-  if (existingRef) {
-    const existingSnap = await existingRef.get();
-    return { bookingId: existingRef.id, manageToken: existingSnap.data()?.manageToken || null };
+  // Every check below runs after the charge, so a rejection refunds the customer
+  // instead of leaving them paid with no booking.
+  let endTime;
+  let pricingDetails;
+  let totalCostNumber;
+  let depositTotals;
+  let depositToCharge;
+  try {
+    const dateObj = new Date(`${date}T${startTime}`);
+    addDurationMinutes(dateObj, dur);
+    endTime = dateObj.toTimeString().slice(0, 5);
+
+    const schedule = getBusinessScheduleForDate(date);
+    if (!schedule) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid booking date provided.');
+    }
+
+    ensureWithinBusinessHours(date, startTime, endTime);
+    ensureNotInPast(date, startTime);
+    // No ensureMinimumAdvanceNotice here: prepareBookingPayment enforced the
+    // 4-hour rule before the charge and the checkout hold lasts 20 minutes, so
+    // re-checking it now only rejects customers who took a few minutes to pay.
+
+    pricingDetails = calculateBookingChargeDetails(roomId, dur, normalizedPartySize, {
+      date,
+      startTime,
+    });
+    totalCostNumber = pricingDetails.totalCost;
+    depositTotals = calculateDepositTotals(roomId, businessDate, totalCostNumber, TAX_RATE);
+    depositToCharge = depositTotals.total;
+    if (!Number.isFinite(depositToCharge) || depositToCharge <= 0) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Unable to determine the required deposit for this booking.',
+      );
+    }
+
+    const mismatch = describePaymentIntentMismatch(intent, {
+      ...expectedPayment,
+      amount: Math.round(depositToCharge * 100),
+    });
+    if (mismatch) {
+      throw new functions.https.HttpsError('failed-precondition', mismatch);
+    }
+  } catch (err) {
+    console.error('finalizeBooking rejected a paid booking', intent.id, err);
+    return rejectPaidBooking(err?.message || 'The booking details could not be validated.');
   }
 
   const bookingDoc = {
@@ -2160,19 +2417,26 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
   // Create the booking doc with availability check inside a transaction
   let newBookingRef;
   let existingBookingId = null;
+  let voidedMeanwhile = false;
   try {
     await db.runTransaction(async (transaction) => {
+      existingBookingId = null;
+      voidedMeanwhile = false;
       // --- reads (must all precede writes) ---
       // Take the room/day lock so concurrent finalizes for this room and date
       // conflict on a real document rather than relying on the isolation of the
       // query-based availability check below. See slotLockRef.
       const lockRef = await readSlotLock(transaction, roomId, businessDate);
 
-      const finalizationRef = db.collection('paymentIntentFinalizations').doc(intent.id);
       const finalizationSnap = await transaction.get(finalizationRef);
       if (finalizationSnap.exists) {
         existingBookingId = finalizationSnap.data()?.bookingId || null;
         if (!existingBookingId) {
+          if (finalizationSnap.data()?.voided) {
+            // Refunded by a concurrent call since the check above.
+            voidedMeanwhile = true;
+            return;
+          }
           throw new functions.https.HttpsError(
             'internal',
             'Payment finalization record is missing a booking ID.',
@@ -2202,14 +2466,32 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
     // the last room must not cost the customer money, so give it back rather
     // than leaving a silent orphan charge.
     if (err?.code === 'failed-precondition') {
-      await reversePaymentIntent(intent.id, 'availability conflict at finalize');
-      await releaseCheckoutHold(roomId, businessDate, startTime, customerInfo?.email);
-      throw new functions.https.HttpsError(
-        'failed-precondition',
+      return rejectPaidBooking(
+        'availability conflict at finalize',
         'That room was booked by someone else moments ago. Your card has been refunded — please pick another time.',
+        'That room was booked by someone else moments ago. We could not refund your card automatically, but our staff have been notified and will refund you. Please pick another time, or call us at 416-968-0909.',
       );
     }
+    // Anything else (e.g. Firestore unavailable) is left for the customer to
+    // retry, which is idempotent — but make sure staff know a paid checkout is
+    // sitting without a booking.
+    try {
+      await sendTelegramMessage(
+        [
+          '⚠️ Paid checkout not finalized (not refunded — customer may retry)',
+          `PaymentIntent: ${intent.id}`,
+          `Email: ${emailNormalized || 'n/a'}`,
+          `Requested: ${roomId} ${date} ${startTime} for ${dur}h (night ${businessDate})`,
+          `Error: ${err?.message || err}`,
+        ].join('\n'),
+      );
+    } catch (alertErr) {
+      console.error('[telegram] finalize failure alert failed', alertErr);
+    }
     throw err;
+  }
+  if (voidedMeanwhile) {
+    return rejectPaidBooking('This payment was already cancelled.');
   }
 
   // Booking is written; the hold has done its job.
