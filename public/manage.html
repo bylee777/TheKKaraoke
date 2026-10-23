@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <title>Manage Your Booking | Barzunko</title>
+    <title>Change or Cancel Your Booking | Barzunko</title>
     <link rel="icon" type="image/x-icon" href="image/logo.ico" />
     <meta
       name="description"
-      content="Look up, modify, or cancel your karaoke reservation at Barzunko."
+      content="To change or cancel your karaoke reservation at Barzunko, call us at (416) 968-0909."
     />
     <link rel="stylesheet" href="style.css?v=20260922-3" />
     <link
@@ -39,7 +39,6 @@
         <ul class="nav-menu">
           <li><a href="barzunko.html">Home</a></li>
           <li><a href="booking.html">Book Now</a></li>
-          <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
           <li><a href="staff.html">Staff</a></li>
         </ul>
@@ -58,7 +57,6 @@
           </li>
           <li><a href="barzunko.html">Home</a></li>
           <li><a href="booking.html">Book Now</a></li>
-          <li><a href="manage.html">Manage Booking</a></li>
           <li><a href="admin.html">Admin</a></li>
           <li><a href="staff.html">Staff</a></li>
         </ul>
@@ -69,46 +67,25 @@
     </nav>
 
     <main id="app">
-      <!-- Manage Booking Page -->
+      <!-- Change or Cancel Booking (by phone only; old email links land here) -->
       <div id="manage-page" class="page active">
         <div class="container">
           <div class="manage-header">
-            <h1 class="page-title">Manage Your <span class="neon-text">Booking</span></h1>
-            <p>Look up, modify, or cancel your karaoke reservation</p>
+            <h1 class="page-title">Change or Cancel Your <span class="neon-text">Booking</span></h1>
+            <p>
+              To cancel or change a booking, please call us at
+              <a href="tel:+14169680909">(416) 968-0909</a>.
+            </p>
           </div>
-          <div class="lookup-form">
-            <h2>Find Your Booking</h2>
-            <form id="booking-lookup-form">
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Booking Reference <span class="required-indicator">*</span></label>
-                  <input
-                    type="text"
-                    id="booking-reference"
-                    class="form-control"
-                    placeholder="e.g. BJ001"
-                    required
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Email Used For Booking <span class="required-indicator">*</span></label>
-                  <input
-                    type="email"
-                    id="booking-email"
-                    class="form-control"
-                    placeholder="you@example.com"
-                    required
-                  />
-                </div>
-              </div>
-              <button type="submit" class="btn btn--primary">
-                <i class="fas fa-search"></i>
-                Find Booking
-              </button>
-            </form>
-          </div>
-          <div class="booking-details hidden" id="booking-details">
-            <!-- Booking details will be populated by JavaScript -->
+          <div class="confirmation-actions">
+            <a class="btn btn--primary" href="tel:+14169680909">
+              <i class="fas fa-phone"></i>
+              Call (416) 968-0909
+            </a>
+            <a class="btn btn--outline" href="barzunko.html">
+              <i class="fas fa-home"></i>
+              Back to Home
+            </a>
           </div>
         </div>
       </div>
@@ -168,6 +145,8 @@
     <script src="js/firebase-init.js?v=2"></script>
     <script src="js/app.js?v=20260725-1"></script>
     <script>
+      // Kept as 'manage': initManagePage is null-safe without the old lookup form
+      // and still strips ?token= from the address bar for old email links.
       window.app.currentPage = 'manage';
       window.app.init();
     </script>
