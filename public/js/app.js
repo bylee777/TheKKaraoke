@@ -1587,13 +1587,14 @@ class BarzunkoApp {
     }
   }
 
+  // Pin to the 1st so navigating from the 29th-31st never overflows into the following month.
   previousMonth() {
-    this.currentDate.setMonth(this.currentDate.getMonth() - 1);
+    this.currentDate = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() - 1, 1);
     this.updateCalendar();
   }
 
   nextMonth() {
-    this.currentDate.setMonth(this.currentDate.getMonth() + 1);
+    this.currentDate = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 1);
     this.updateCalendar();
   }
 
@@ -2508,10 +2509,27 @@ class BarzunkoApp {
     return table[roomId] ?? 0;
   }
 
+  // Business date that prices a slot (deposit table, XL first-hour bottle).
+  // The booking date picker works in NIGHTS, so the picked date already IS the
+  // business date: "Fri Oct 23" + 1:00 AM is Friday night (1 AM on Saturday's
+  // clock) and gets Friday's rate. The server converts night -> calendar date ->
+  // business date and lands back on the picked night for every slot it accepts.
+  // Running determineBusinessDate on a night date priced post-midnight slots one
+  // night early. Exception: a rebook still on its saved slot carries the stored
+  // booking's `date`, a literal calendar date, so that one is mapped to its night.
+  getPricingBusinessDate(dateStr, startTime) {
+    if (!dateStr) return null;
+    const saved = this.isRebookingFlow ? this.rebookContext?.booking : null;
+    if (saved && dateStr === saved.date && startTime === saved.startTime) {
+      return this.determineBusinessDate(dateStr, startTime);
+    }
+    return dateStr;
+  }
+
   getRequiredPurchaseAmount(room, dateStr, startTime) {
     if (!room || !room.requiredPurchase) return 0;
     if (room.id !== 'extra-large') return room.requiredPurchase.amount || 0;
-    const businessDate = dateStr ? this.determineBusinessDate(dateStr, startTime) : null;
+    const businessDate = this.getPricingBusinessDate(dateStr, startTime);
     const safeDate = businessDate ? new Date(`${businessDate}T12:00:00`) : null;
     const day = safeDate && !Number.isNaN(safeDate.getTime()) ? safeDate.getDay() : null; // 0=Sun
     const isWeekend = day === 5 || day === 6;
@@ -2524,7 +2542,7 @@ class BarzunkoApp {
     }
     const bookingDate = date || this.selectedDate || this.bookingData?.date || null;
     const bookingTime = startTime || this.selectedTime || this.bookingData?.startTime || null;
-    const businessDate = bookingDate ? this.determineBusinessDate(bookingDate, bookingTime) : null;
+    const businessDate = this.getPricingBusinessDate(bookingDate, bookingTime);
     const roomId = room?.id || this.selectedRoom?.id || this.bookingData?.room?.id;
     const baseBeforeTax = this.getDepositBaseAmount(roomId, businessDate || bookingDate);
     if (!Number.isFinite(baseBeforeTax) || baseBeforeTax <= 0) {
@@ -2893,6 +2911,28 @@ class BarzunkoApp {
         paymentIntentId = prepRes.data?.paymentIntentId;
         if (!clientSecretToUse || !paymentIntentId) {
           throw new Error('Unable to start payment. Please try again.');
+        }
+
+        // The server's deposit is what the card is charged. If it disagrees with the
+        // figure computed here, show the charged amount on the confirmation page.
+        // Display only: `payload` (what finalize receives) is left untouched.
+        const chargedDeposit = Number(prepRes.data?.depositAmount);
+        const shownDeposit = Number(this.bookingData.depositAmount);
+        if (
+          Number.isFinite(chargedDeposit) &&
+          !(Number.isFinite(shownDeposit) && Math.abs(chargedDeposit - shownDeposit) < 0.005)
+        ) {
+          console.warn('Deposit shown differs from deposit charged; showing the charged amount.', {
+            shown: this.bookingData.depositAmount,
+            charged: chargedDeposit,
+          });
+          this.bookingData.depositAmount = chargedDeposit;
+          this.bookingData.depositBeforeTax = chargedDeposit; // deposits carry no tax
+          const totalWithTax = Number(this.bookingData.totalCostWithTax);
+          if (Number.isFinite(totalWithTax)) {
+            this.bookingData.remainingBalance =
+              Math.round(Math.max(totalWithTax - chargedDeposit, 0) * 100) / 100;
+          }
         }
 
         // Persist the intent as soon as it exists, not just after it is charged.
