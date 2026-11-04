@@ -115,7 +115,7 @@ class BarzunkoApp {
     this.businessData = {
       name: 'Barzunko',
       address: '675 Yonge St Basement, Toronto, ON M4Y 2B2',
-      phone: '+1-416-968-0909',
+      phone: '+1-647-278-4499',
       hours:
         'Mon-Thu: 6:00 PM - 2:30 AM | Fri: 6:00 PM - 3:00 AM | Sat: 1:00 PM - 3:00 AM | Sun: 1:00 PM - 2:30 AM',
       email: 'barzunko@gmail.com',
@@ -3523,7 +3523,7 @@ class BarzunkoApp {
       ? new Date(booking.cancelableUntil).toLocaleString()
       : 'the cancellation deadline has passed';
     const cancelMessage = needsManageLink
-      ? 'To cancel or reschedule online, open the “Manage your booking” link in your confirmation email. For help, call 416-968-0909.'
+      ? 'To cancel or reschedule online, open the “Manage your booking” link in your confirmation email. For help, call 647-278-4499.'
       : canCancel
         ? `Free cancellation available until ${cancelDeadlineDisplay}.`
         : 'Cancellations are no longer available online. Please contact the venue for assistance.';

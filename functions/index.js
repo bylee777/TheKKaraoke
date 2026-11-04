@@ -1465,7 +1465,7 @@ async function sendBookingEmail(booking) {
     <p>Please let us know if you are running late as we do not compensate for lateness.</p>
     <p>We do not allow outside drinks or foods. All guests must bring valid government picture ID (passport, driver license, ON photo card, or health card) for ordering alcohol.</p>
     ${manageSection}
-    <p>For all other inquires call us at 416-968-0909.</p>
+    <p>For all other inquires call us at 647-278-4499.</p>
     <p><strong>Please do not reply to this email.</strong></p>
     <p>See you soon!</p>
   `;
@@ -1497,7 +1497,7 @@ async function sendCancellationEmail(booking) {
       <li><strong>Date & Time:</strong> ${booking.date} at ${booking.startTime}</li>
       <li><strong>Room:</strong> ${booking.roomId}</li>
     </ul>
-    <p>If this was a mistake, please call us at 416-968-0909 or email at Barzunko@gmail.com</p>
+    <p>If this was a mistake, please call us at 647-278-4499 or email at Barzunko@gmail.com</p>
     <p><strong>Please do not reply to this email.</strong></p>
   `;
   try {
@@ -1558,7 +1558,7 @@ async function sendWaitlistNotificationEmail({ name, email, roomId, date, startT
     <p><strong>This notification has been sent to everyone on the waitlist for this slot — it's first come, first served. The first person to complete their booking secures the spot.</strong></p>
     <p><a href="https://thek-karaoke.web.app/booking.html" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Book Now</a></p>
     <p>Or copy this link: https://thek-karaoke.web.app/booking.html</p>
-    <p>For assistance call us at 416-968-0909.</p>
+    <p>For assistance call us at 647-278-4499.</p>
     <p><strong>Please do not reply to this email.</strong></p>
   `;
   try {
@@ -2150,7 +2150,7 @@ exports.prepareBookingPayment = secureFunctions.https.onCall(async (data, contex
         refundedMessage:
           'Your earlier payment for this time slot was for different booking details, so it has been refunded. Please try again to book with your new details.',
         notRefundedMessage:
-          'Your earlier payment for this time slot was for different booking details. We could not refund it automatically, but our staff have been notified and will refund you. Please try again, or call us at 416-968-0909.',
+          'Your earlier payment for this time slot was for different booking details. We could not refund it automatically, but our staff have been notified and will refund you. Please try again, or call us at 647-278-4499.',
       });
       if (outcome?.bookingId) {
         // That earlier payment was turned into a booking moments ago.
@@ -2299,7 +2299,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
         `We couldn't confirm this booking: ${why} Your card has been refunded — please try again.`,
       notRefundedMessage:
         notRefundedMessage ||
-        `We couldn't confirm this booking: ${why} We could not refund your card automatically, but our staff have been notified and will refund you. Please call us at 416-968-0909 if you have any questions.`,
+        `We couldn't confirm this booking: ${why} We could not refund your card automatically, but our staff have been notified and will refund you. Please call us at 647-278-4499 if you have any questions.`,
     });
     // A concurrent finalize for this same payment booked it first.
     return returnExistingBooking(db.collection('bookings').doc(outcome.bookingId));
@@ -2469,7 +2469,7 @@ exports.finalizeBooking = secureFunctions.https.onCall(async (data, context) => 
       return rejectPaidBooking(
         'availability conflict at finalize',
         'That room was booked by someone else moments ago. Your card has been refunded — please pick another time.',
-        'That room was booked by someone else moments ago. We could not refund your card automatically, but our staff have been notified and will refund you. Please pick another time, or call us at 416-968-0909.',
+        'That room was booked by someone else moments ago. We could not refund your card automatically, but our staff have been notified and will refund you. Please pick another time, or call us at 647-278-4499.',
       );
     }
     // Anything else (e.g. Firestore unavailable) is left for the customer to
