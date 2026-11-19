@@ -10,9 +10,10 @@
       content="Visit The K Karaoke at 699 Bloor St West in Toronto. Private karaoke rooms, late-night energy, and Christie booking online."
     />
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Bricolage+Grotesque:wght@500;600;700;800&amp;display=swap"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Bricolage+Grotesque:wght@500;600;700;800&amp;family=Barlow+Condensed:wght@500;600;700;800&amp;display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="menu.css?v=20261118-1" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -533,6 +534,7 @@
           </div>
           <div class="nav__links" aria-label="Primary navigation">
             <a href="index.html">Home</a>
+            <a href="#menu">Menu</a>
             <a href="#visit">Visit</a>
             <a class="button button--primary" href="https://wearethekkaraoke.as.me/schedule/6914a657">
               Book Christie
@@ -645,6 +647,610 @@
               <p>Roomier setup for bigger parties and high-energy group sessions.</p>
             </div>
           </article>
+        </div>
+      </section>
+
+      <!-- Menu Section (HTML text menu, same markup as barzunko.html #menu; styles: menu.css,
+           Christie colours under #menu.bz-menu.bz-menu--christie). Source: owner's printed Christie menu.
+           Photo frame snippet:
+             <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/<slug>.jpg" alt="<Name>" width="900" height="900" loading="lazy" decoding="async" /></span>
+           No photo yet? Use the dashed placeholder:
+             <span class="bz-menu-frame bz-menu-frame--empty" aria-hidden="true"></span> -->
+      <section class="menu bz-menu bz-menu--christie" id="menu" aria-labelledby="menu-title">
+        <div class="section">
+          <div class="section__head">
+            <h2 class="section__title" id="menu-title">Menu</h2>
+            <p class="section__note">
+              Drinks, food and hourly room rates at Christie, straight from the menu in every room.
+            </p>
+          </div>
+
+          <!-- ===== LIQUOR ===== -->
+          <article class="bz-menu-poster" id="bz-menu-liquor" aria-labelledby="bz-menu-liquor-title">
+            <div class="bz-menu-heading">
+              <p class="bz-menu-eyebrow">Drink Menu</p>
+              <h3 class="bz-menu-title" id="bz-menu-liquor-title">Liquor</h3>
+            </div>
+            <ul class="bz-menu-dishes bz-menu-dishes--text bz-menu-dishes--general">
+              <li class="bz-menu-dish bz-menu-dish--list">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Vodka</p>
+                </div>
+                <ul class="bz-menu-lines bz-menu-dish-items">
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">House Vodka</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $6.99</span>
+                      <span class="bz-menu-chip bz-menu-chip--h"><small>375mL</small> $65.00</span>
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $129.99</span>
+                    </span>
+                  </li>
+                </ul>
+              </li>
+              <li class="bz-menu-dish bz-menu-dish--list">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Tequila</p>
+                </div>
+                <ul class="bz-menu-lines bz-menu-dish-items">
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">House Tequila</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $6.99</span>
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $129.99</span>
+                    </span>
+                  </li>
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">Clase Azul</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>Bottle</small> $650.00</span>
+                    </span>
+                  </li>
+                </ul>
+              </li>
+              <li class="bz-menu-dish bz-menu-dish--list">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Gin</p>
+                </div>
+                <ul class="bz-menu-lines bz-menu-dish-items">
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">House Gin</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $6.99</span>
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $129.99</span>
+                    </span>
+                  </li>
+                </ul>
+              </li>
+              <li class="bz-menu-dish bz-menu-dish--list">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Rum</p>
+                </div>
+                <ul class="bz-menu-lines bz-menu-dish-items">
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">House Rum</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $6.99</span>
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $129.99</span>
+                    </span>
+                  </li>
+                </ul>
+              </li>
+              <li class="bz-menu-dish bz-menu-dish--list">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Whiskey</p>
+                </div>
+                <ul class="bz-menu-lines bz-menu-dish-items">
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">Jameson</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $6.99</span>
+                      <span class="bz-menu-chip bz-menu-chip--h"><small>375mL</small> $65.00</span>
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $129.99</span>
+                    </span>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+            <ul class="bz-menu-dishes bz-menu-dishes--brands">
+              <li class="bz-menu-dish" data-brand="Vodka">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-ciroc-peach.jpg" alt="Ciroc Peach bottle" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Vodka</p>
+                  <p class="bz-menu-dish-name">Ciroc Peach</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $9.99</span>
+                    <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $169.99</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish" data-brand="Vodka">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-grey-goose.jpg" alt="Grey Goose vodka bottle" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Vodka</p>
+                  <p class="bz-menu-dish-name">Grey Goose</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $9.99</span>
+                    <span class="bz-menu-chip bz-menu-chip--h"><small>375mL</small> $85.00</span>
+                    <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $169.99</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish" data-brand="Tequila">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/tromba.jpg" alt="Tromba tequila bottle" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Tequila</p>
+                  <p class="bz-menu-dish-name">Tromba</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $9.99</span>
+                    <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $169.99</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish" data-brand="Tequila">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-casamigos.jpg" alt="Casamigos tequila bottle" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Tequila</p>
+                  <p class="bz-menu-dish-name">Casamigos</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $13.99</span>
+                    <span class="bz-menu-chip bz-menu-chip--h"><small>375mL</small> $130.00</span>
+                    <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $240.00</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish" data-brand="Whiskey">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-jack-daniels.jpg" alt="Jack Daniel's whiskey bottle" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Whiskey</p>
+                  <p class="bz-menu-dish-name">Jack Daniel</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $6.99</span>
+                    <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $129.99</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish" data-brand="Whiskey">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-johnnie-walker-blue.jpg" alt="Johnnie Walker Blue Label bottle" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Whiskey</p>
+                  <p class="bz-menu-dish-name">Johnnie Walker Blue</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip bz-menu-chip--b"><small>Bottle</small> $650.00</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish" data-brand="Liqueur">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-jagermeister.jpg" alt="Jägermeister bottle" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Jagermeister</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $9.99</span>
+                    <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $169.99</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish bz-menu-dish--list">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-hennessy-vs-xo.jpg" alt="Hennessy VS and XO bottles" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Hennessy</p>
+                </div>
+                <ul class="bz-menu-lines bz-menu-dish-items">
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">Hennessy VS</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--s"><small>1oz</small> $12.99</span>
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>750mL</small> $189.99</span>
+                    </span>
+                  </li>
+                  <li class="bz-menu-line bz-menu-line--sized">
+                    <span class="bz-menu-line-name">Hennessy XO</span>
+                    <span class="bz-menu-sizes">
+                      <span class="bz-menu-chip bz-menu-chip--b"><small>Bottle</small> $650.00</span>
+                    </span>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </article>
+
+          <!-- ===== BEER ===== -->
+          <article class="bz-menu-poster" id="bz-menu-beer" aria-labelledby="bz-menu-beer-title">
+            <div class="bz-menu-heading">
+              <p class="bz-menu-eyebrow">Drink Menu</p>
+              <h3 class="bz-menu-title" id="bz-menu-beer-title">Beer</h3>
+            </div>
+            <ul class="bz-menu-dishes">
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/non-alcoholic-beer.jpg" alt="Non-alcoholic beer" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Non-Alcohol Beer</p>
+                  <p class="bz-menu-dish-price">$5.99</p>
+                  <p class="bz-menu-dish-note">335mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/domestic-small-cans.jpg" alt="Molson Canadian, Budweiser and Coors Light cans" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Domestic</p>
+                  <p class="bz-menu-dish-sub">Canadian | Bud | Coors</p>
+                  <p class="bz-menu-dish-price">$5.99</p>
+                  <p class="bz-menu-dish-note">335mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/imported-small-can.jpg" alt="Heineken and Corona" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Import</p>
+                  <p class="bz-menu-dish-sub">Heineken | Corona</p>
+                  <p class="bz-menu-dish-price">$7.99</p>
+                  <p class="bz-menu-dish-note">335mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/asahi-logo.jpg" alt="Asahi logo" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Draft</p>
+                  <p class="bz-menu-dish-sub">Asahi</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip"><small>Pint</small> $9.99</span>
+                    <span class="bz-menu-chip"><small>Pitcher</small> $28.99</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-stella.jpg" alt="Stella Artois can" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Tall Can</p>
+                  <p class="bz-menu-dish-name">Stella</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                  <p class="bz-menu-dish-note">473mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-henderson-best.jpg" alt="Henderson's Best can" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Tall Can</p>
+                  <p class="bz-menu-dish-name">Henderson Best</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                  <p class="bz-menu-dish-note">473mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-ace-hill.jpg" alt="Ace Hill Pilsner can" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Tall Can</p>
+                  <p class="bz-menu-dish-name">Ace Hill</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                  <p class="bz-menu-dish-note">473mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/somersby-cans.jpg" alt="Somersby cider cans" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Cider</p>
+                  <p class="bz-menu-dish-name">Somersby</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                  <p class="bz-menu-dish-note">473mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-white-claw-4.jpg" alt="White Claw hard seltzer cans" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Hard Seltzer</p>
+                  <p class="bz-menu-dish-name">Whiteclaw</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                  <p class="bz-menu-dish-note">473mL</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-juicy-ass.jpg" alt="Flying Monkeys Juicy Ass IPA can" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">IPA</p>
+                  <p class="bz-menu-dish-name">Flying Monkey IPA</p>
+                  <p class="bz-menu-dish-price">$10.99</p>
+                  <p class="bz-menu-dish-note">473mL</p>
+                </div>
+              </li>
+            </ul>
+          </article>
+
+          <!-- ===== COCKTAIL (text only) ===== -->
+          <article class="bz-menu-poster" id="bz-menu-mix" aria-labelledby="bz-menu-mix-title">
+            <div class="bz-menu-heading">
+              <p class="bz-menu-eyebrow">Drink Menu · 9oz</p>
+              <h3 class="bz-menu-title" id="bz-menu-mix-title">Cocktail</h3>
+            </div>
+            <ul class="bz-menu-dishes bz-menu-dishes--text">
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Jack &amp; Coke</p>
+                  <p class="bz-menu-dish-price">$11.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Gin &amp; Tonic</p>
+                  <p class="bz-menu-dish-price">$11.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Gin &amp; Soda</p>
+                  <p class="bz-menu-dish-price">$11.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Tequila &amp; Soda</p>
+                  <p class="bz-menu-dish-price">$11.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Vodka &amp; Soda</p>
+                  <p class="bz-menu-dish-price">$11.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Vodka &amp; Cranberry</p>
+                  <p class="bz-menu-dish-price">$11.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Vodka &amp; Orange Juice</p>
+                  <p class="bz-menu-dish-price">$11.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Jager Bomb</p>
+                  <p class="bz-menu-dish-price">$12.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Henney &amp; Coke</p>
+                  <p class="bz-menu-dish-price">$14.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Premium Mix</p>
+                  <p class="bz-menu-dish-price">$14.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Extra Premium Mix</p>
+                  <p class="bz-menu-dish-price">$18.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Pinacolada Smoothie</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Double Shot</p>
+                  <p class="bz-menu-dish-sub">House / Premium / Extra Premium</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip"><small>House</small> $4.99</span>
+                    <span class="bz-menu-chip"><small>Premium</small> $7.99</span>
+                    <span class="bz-menu-chip"><small>Extra Premium</small> $9.99</span>
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </article>
+
+          <!-- ===== SOJU / WINE / NON-ALCOHOL COCKTAIL ===== -->
+          <article class="bz-menu-poster" id="bz-menu-soju" aria-labelledby="bz-menu-soju-title">
+            <div class="bz-menu-heading">
+              <p class="bz-menu-eyebrow">Drink Menu</p>
+              <h3 class="bz-menu-title" id="bz-menu-soju-title">Soju &amp; Wine</h3>
+            </div>
+            <ul class="bz-menu-dishes">
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-soju.jpg" alt="Soju bottles" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Soju</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip"><small>1oz</small> $3.99</span>
+                    <span class="bz-menu-chip"><small>335mL</small> $25.99</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-fruit-soju.jpg" alt="Fruit soju bottles" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Fruit Soju</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip"><small>1oz</small> $3.99</span>
+                    <span class="bz-menu-chip"><small>335mL</small> $25.99</span>
+                  </p>
+                  <p class="bz-menu-dish-note">Blueberry | Strawberry | Grape | Apple | Peach | Apple Mango | Yogurt | Lychee | Grapefruit</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-el-abuelo-pair.jpg" alt="Organic red and white wine bottles" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Wine</p>
+                  <p class="bz-menu-dish-name">Organic Wine</p>
+                  <p class="bz-menu-sizes bz-menu-sizes--auto bz-menu-dish-chips">
+                    <span class="bz-menu-chip"><small>Glass</small> $9.99</span>
+                    <span class="bz-menu-chip"><small>Bottle</small> $70.00</span>
+                  </p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/passion-fruit-soda.jpg" alt="Passion fruit and soda" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-tag">Non-Alcohol Cocktail <span class="bz-menu-subtitle-note">450mL</span></p>
+                  <p class="bz-menu-dish-name">Passion Fruits &amp; Soda</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                </div>
+              </li>
+            </ul>
+          </article>
+
+          <!-- ===== FOOD ===== -->
+          <article class="bz-menu-poster" id="bz-menu-food" aria-labelledby="bz-menu-food-title">
+            <div class="bz-menu-heading">
+              <p class="bz-menu-eyebrow">Menu</p>
+              <h3 class="bz-menu-title" id="bz-menu-food-title">Food</h3>
+            </div>
+            <ul class="bz-menu-dishes">
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/french-fries.jpg" alt="French Fries" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">French Fries</p>
+                  <p class="bz-menu-dish-price">$9.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame bz-menu-frame--empty" aria-hidden="true"></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Chicken Nugget <span class="bz-menu-count">(8)</span> &amp; Fries</p>
+                  <p class="bz-menu-dish-price">$16.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame bz-menu-frame--empty" aria-hidden="true"></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Chicken Wings <span class="bz-menu-count">(7)</span> &amp; Fries</p>
+                  <p class="bz-menu-dish-price">$16.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame bz-menu-frame--empty" aria-hidden="true"></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Chicken Dumpling <span class="bz-menu-count">(10)</span> &amp; Fries</p>
+                  <p class="bz-menu-dish-price">$16.99</p>
+                </div>
+              </li>
+            </ul>
+          </article>
+
+          <!-- ===== BEVERAGE & SNACK ===== -->
+          <article class="bz-menu-poster" id="bz-menu-snacks" aria-labelledby="bz-menu-snacks-title">
+            <div class="bz-menu-heading">
+              <p class="bz-menu-eyebrow">Menu</p>
+              <h3 class="bz-menu-title" id="bz-menu-snacks-title">Beverage &amp; Snack</h3>
+            </div>
+            <h4 class="bz-menu-subtitle bz-menu-subtitle--lg">Beverage</h4>
+            <ul class="bz-menu-dishes">
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-pops.jpg" alt="Soft drink cans" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Pop</p>
+                  <p class="bz-menu-dish-price">$2.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-red-bull.jpg" alt="Red Bull Energy Drink can" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Red Bull</p>
+                  <p class="bz-menu-dish-price">$4.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/juice.jpg" alt="Juice" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Juice</p>
+                  <p class="bz-menu-dish-price">$7.99</p>
+                  <p class="bz-menu-dish-note">1L · Orange | Pineapple | Mango | Cranberry | Passionfruit</p>
+                </div>
+              </li>
+            </ul>
+            <h4 class="bz-menu-subtitle bz-menu-subtitle--lg">Snack</h4>
+            <ul class="bz-menu-dishes">
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-shrimp-cracker.jpg" alt="Shrimp cracker bag" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Shrimp Cracker</p>
+                  <p class="bz-menu-dish-price">$4.99</p>
+                  <p class="bz-menu-dish-note">Mild | Spicy</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/onion-rings.jpg" alt="Onion rings" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Onion Ring</p>
+                  <p class="bz-menu-dish-price">$4.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-honey-butter.jpg" alt="Honey Butter Chip bag" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Honey Butter Chip</p>
+                  <p class="bz-menu-dish-price">$5.99</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame"><img class="bz-menu-photo" src="image/menu/ck/brand-turtle-chips.jpg" alt="Turtle Chips bag" width="900" height="900" loading="lazy" decoding="async" /></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Turtle Chips</p>
+                  <p class="bz-menu-dish-price">$5.99</p>
+                </div>
+              </li>
+            </ul>
+          </article>
+
+          <!-- ===== ROOM CHARGE (no photos: plates show the room size) ===== -->
+          <article class="bz-menu-poster" id="bz-menu-rooms" aria-labelledby="bz-menu-rooms-title">
+            <div class="bz-menu-heading">
+              <p class="bz-menu-eyebrow">Per Hour</p>
+              <h3 class="bz-menu-title" id="bz-menu-rooms-title">Room Charge</h3>
+            </div>
+            <ul class="bz-menu-dishes bz-menu-dishes--plates">
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame bz-menu-frame--plate" aria-hidden="true"><b>S</b></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Small Room</p>
+                  <p class="bz-menu-dish-price">$30.00</p>
+                  <p class="bz-menu-dish-note">Up to 4</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame bz-menu-frame--plate" aria-hidden="true"><b>M</b></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Medium Room</p>
+                  <p class="bz-menu-dish-price">$60.00</p>
+                  <p class="bz-menu-dish-note">Up to 8</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame bz-menu-frame--plate" aria-hidden="true"><b>L</b></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Large Room</p>
+                  <p class="bz-menu-dish-price">$90.00</p>
+                  <p class="bz-menu-dish-note">Up to 15</p>
+                </div>
+              </li>
+              <li class="bz-menu-dish">
+                <span class="bz-menu-frame bz-menu-frame--plate" aria-hidden="true"><b>+</b></span>
+                <div class="bz-menu-dish-body">
+                  <p class="bz-menu-dish-name">Additional Person</p>
+                  <p class="bz-menu-dish-price">$5.00</p>
+                  <p class="bz-menu-dish-note">Each</p>
+                </div>
+              </li>
+            </ul>
+          </article>
+
+          <!-- ===== FINE PRINT ===== -->
+          <ul class="bz-menu-fineprint">
+            <li>$150 room charge on outside foods and drinks (per bottle)</li>
+            <li>$150 fine for smoking inside the room</li>
+            <li>All bottle service comes with four chases or a bottle of juice (Jagermeister comes with 3 Redbull)</li>
+            <li>Over 8 people, 10 percent gratuity could be charged on the final bill</li>
+            <li>For the online reservation, deposit will be returned if there is no issue with the room</li>
+            <li>During weekend (Friday &amp; Saturday), we have minimum spending per person</li>
+          </ul>
         </div>
       </section>
 

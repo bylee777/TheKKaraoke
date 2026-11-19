@@ -100,3 +100,14 @@ brand-macallan-rare-cask | The Macallan Rare Cask (LCBO 10725) | https://aem.lcb
 brand-dom-perignon | Barzunko's own photo of its Dom Pérignon Vintage 2013 (supplied by owner)
 brand-dom-perignon-vintage | Dom Pérignon Vintage (BC Liquor Stores product image 280461) | https://www.bcliquorstores.com/sites/default/files/imagecache/height800px/280461.jpg
 pizza | Barzunko's existing pizza special photo (public/image/barzunko-pizza.jpg), cropped
+
+# Christie (thekkaraoke.html) set — public/image/menu/ck/, background #10151d (2026-11-18)
+Recoloured copies of the Barzunko composites (same sources as above), plus:
+ck/brand-ciroc-peach | Ciroc Peach 750 mL (LCBO 334110) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+ck/brand-henderson-best | Henderson's Best Amber Ale 473 mL (LCBO 513044)
+ck/brand-stella | Stella Artois 473 mL (LCBO 17820)
+ck/brand-ace-hill | Ace Hill Pilsner 473 mL (LCBO 461822)
+ck/brand-hennessy-vs-xo | Hennessy VS (LCBO 8284) + XO (LCBO 629055)
+ck/brand-el-abuelo-pair | El Abuelo red (LCBO 524520) + white (LCBO 11586)
+ck/onion-rings | Nongshim Onion Flavored Rings — official product image, nongshimusa.com/product-detail?pid=93 (captured in owner's browser)
+ck/passion-fruit-soda, ck/french-fries, ck/juice, ck/non-alcoholic-beer | copies of the CC0 photos above
