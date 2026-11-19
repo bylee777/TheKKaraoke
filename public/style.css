@@ -5688,21 +5688,20 @@ td,
 /* ==========================================================================
    BARZUNKO MENU (barzunko.html #menu.bz-menu) — styled after thekbbq.ca
    Everything below is namespaced bz-menu-* / scoped under #menu.bz-menu.
-   Colours are local gold tokens (the printed menu's gold on black); the
-   site-wide --golden-yellow is overridden to blue further up this file.
+   Colours follow the site's blue theme (token names kept from the first, gold, version).
    Display font: Barlow Condensed (loaded by barzunko.html).
    ========================================================================== */
 #menu.bz-menu {
-  --bz-gold: #e8cf8b;
-  --bz-gold-bright: #f5e2a8;
-  --bz-gold-deep: #b8913f;
-  --bz-gold-line: rgba(232, 207, 139, 0.18);
-  --bz-gold-soft: rgba(232, 207, 139, 0.08);
-  --bz-ink: #f6efe0;
-  --bz-muted: #b9ab8c;
-  --bz-poster: #14110d;
-  --bz-cream: #f7eedb;
-  --bz-cream-ink: #2a2014;
+  --bz-gold: #93c5fd;
+  --bz-gold-bright: #bfdbfe;
+  --bz-gold-deep: #3b82f6;
+  --bz-gold-line: rgba(147, 197, 253, 0.18);
+  --bz-gold-soft: rgba(147, 197, 253, 0.08);
+  --bz-ink: #e6efff;
+  --bz-muted: #a9bddf;
+  --bz-poster: #0d152a;
+  --bz-cream: #121c36;
+  --bz-cream-ink: #dbe7ff;
   --bz-display: "Barlow Condensed", "Bricolage Grotesque", "Arial Narrow", sans-serif;
   overflow-x: clip;
 }
@@ -5749,7 +5748,7 @@ td,
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   background:
-    radial-gradient(900px 360px at 0% 0%, rgba(232, 207, 139, 0.05), transparent 60%),
+    radial-gradient(900px 360px at 0% 0%, rgba(147, 197, 253, 0.05), transparent 60%),
     var(--bz-poster);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
   overflow: hidden;
@@ -5778,7 +5777,7 @@ td,
   height: 96px;
   pointer-events: none;
   background: no-repeat 0 0 / 100% 100%
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 130' preserveAspectRatio='none'%3E%3Cpath fill='%23e8cf8b' d='M6 20 C 70 9, 180 15, 300 10 S 384 4, 398 9 L 394 21 C 330 22, 240 25, 150 28 S 40 33, 9 36 Z'/%3E%3Cpath fill='%23e8cf8b' d='M20 14 C 27 40, 22 78, 27 126 L 17 124 C 13 88, 15 46, 10 18 Z'/%3E%3C/svg%3E");
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 130' preserveAspectRatio='none'%3E%3Cpath fill='%2360a5fa' d='M6 20 C 70 9, 180 15, 300 10 S 384 4, 398 9 L 394 21 C 330 22, 240 25, 150 28 S 40 33, 9 36 Z'/%3E%3Cpath fill='%2360a5fa' d='M20 14 C 27 40, 22 78, 27 126 L 17 124 C 13 88, 15 46, 10 18 Z'/%3E%3C/svg%3E");
 }
 
 @media (min-width: 640px) {
@@ -5897,7 +5896,7 @@ td,
   min-width: 16px;
   align-self: center;
   margin-top: 0.4em;
-  border-bottom: 1px dotted rgba(232, 207, 139, 0.35);
+  border-bottom: 1px dotted rgba(147, 197, 253, 0.35);
 }
 
 #menu.bz-menu .bz-menu-price {
@@ -5935,7 +5934,7 @@ td,
   justify-content: center;
   min-width: 0;
   padding: 4px 8px 5px;
-  border: 1px solid rgba(232, 207, 139, 0.28);
+  border: 1px solid rgba(147, 197, 253, 0.28);
   border-radius: 6px;
   background: var(--bz-gold-soft);
   font-family: var(--bz-display);
@@ -6015,7 +6014,7 @@ td,
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   overflow: hidden;
-  background: #1a150e;
+  background: #0d152a;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
 }
 
@@ -6038,7 +6037,7 @@ td,
   content: "";
   position: absolute;
   inset: 12%;
-  border: 1px dashed rgba(232, 207, 139, 0.4);
+  border: 1px dashed rgba(147, 197, 253, 0.4);
   border-radius: 50%;
 }
 
@@ -6049,7 +6048,7 @@ td,
   justify-content: center;
   background:
     radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0) 54%, rgba(0, 0, 0, 0.18) 56%, rgba(0, 0, 0, 0) 60%),
-    radial-gradient(circle at 32% 26%, #fbeab6 0%, #e2c27a 34%, #b8913f 72%, #7d5e24 100%);
+    radial-gradient(circle at 32% 26%, #dbeafe 0%, #93c5fd 34%, #3b82f6 72%, #1e3a8a 100%);
 }
 
 #menu.bz-menu .bz-menu-frame--plate b {
@@ -6057,7 +6056,7 @@ td,
   font-size: clamp(2rem, 9vw, 3.4rem);
   font-weight: 800;
   line-height: 1;
-  color: #2a1d0c;
+  color: #0b1530;
 }
 
 /* ----- Photo rows (KBBQ DishRow / DishList) ----- */
@@ -6488,7 +6487,7 @@ td,
 #menu.bz-menu .bz-menu-dishes--text .bz-menu-dish:nth-child(even) {
   grid-template-columns: minmax(0, 1fr);
   padding: 18px 0;
-  border-bottom: 1px solid rgba(232, 207, 139, 0.14);
+  border-bottom: 1px solid rgba(147, 197, 253, 0.14);
 }
 
 #menu.bz-menu .bz-menu-dishes--text .bz-menu-dish:nth-child(even) > .bz-menu-dish-body {
@@ -6530,4 +6529,8 @@ td,
 /* Jumping to #menu from the top nav: clear the fixed navbar */
 #menu.bz-menu {
   scroll-margin-top: 72px;
+}
+
+#menu.bz-menu .bz-menu-fineprint {
+  border: 1px solid rgba(147, 197, 253, 0.22);
 }
