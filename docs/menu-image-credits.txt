@@ -1,0 +1,102 @@
+Menu photo credits — all images are CC0 1.0 or Public Domain (no attribution legally required; listed for provenance).
+Each file was centre-cropped (hwache: bottom-aligned; peach-appetizer: right-aligned) and resized to 900x900 JPEG.
+Format: slug | title | creator | license | source landing URL
+
+french-fries | BK-French-Fries.jpg | Evan-Amos | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:BK-French-Fries.jpg
+nacho | Plate of cheesy nachos topped with chopped vegetables, black olives, fresh herbs, and drizzled with white sauce | Bhautik Bhalala | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/42868692dc/
+sausage-fries | Malibu Diner (New York City) May 2023 - sausages and fries.JPG | Benoît Prieur | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Malibu_Diner_(New_York_City)_May_2023_-_sausages_and_fries.JPG
+chicken-nuggets-fries | Impossible chicken nuggets 1.jpg | Mx. Granger | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Impossible_chicken_nuggets_1.jpg
+chicken-wings-fries | Boneless chicken wings and fries.jpg | Packer1028 | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Boneless_chicken_wings_and_fries.jpg
+chicken-dumplings-fries | A black rectangular plate holds a serving of golden-brown fried dumplings arranged neatly | Manjil Aryal | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/808697a13f/
+fish-chips | A plate of Fish and chips.JPG | PookieFugglestein | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:A_plate_of_Fish_and_chips.JPG
+peach-appetizer | Halved fresh peaches.jpg | Nutrition, Food Safety & Health | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Halved_fresh_peaches.jpg
+hwache | Hwachae and hwajeon.jpg | wizdata | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Hwachae_and_hwajeon.jpg
+draft-beer | A glass of beer on a table with blurred background | Nilo Velez | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/250679fab0/
+fruit-soju | A low-angle shot of a vibrant red watermelon drink served in a stemmed glass | Rubel Miah | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/388689069e/
+shots | Summer-Tequila shots.jpg | Andrzej | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Summer-Tequila_shots.jpg
+cognac | Glass of Sarajishvili brandy at Little Georgia restaurant.jpg | Ser Amantio di Nicolao | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Glass_of_Sarajishvili_brandy_at_Little_Georgia_restaurant.jpg
+mixed-drink | Close-up of two tall glasses with iced drinks and metal straws on a wooden table | Tilak Bahadur Karki | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/8416a1696b/
+frozen-margarita | Colorful frozen cocktails | mdburnette | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/8286226d05/
+soju-highball | Three tall glasses of a fizzy, light-colored drink with lemon slices and ice | Alina Kakshapati | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/45268ac3ff/
+red-wine | Glass of red wine.jpg | Photos Public Domain | Public domain (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Glass_of_red_wine.jpg
+white-wine | Two glasses of white wine on a red checkered tablecloth | Yam B Chhetri | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/564679e1f1/
+passion-fruit-mocktail | A glass of passion fruit smoothie on a wooden coaster | Bigul Malayi | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/35267e3e92/
+honey-butter-chips | Tayto cheese and onion crisps.jpg (generic bowl of potato chips; no packaging shown) | Samuel Wiki | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Tayto_cheese_and_onion_crisps.jpg
+shrimp-crackers | Puffed shrimp chips.jpg | Fumikas Sagisavas | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Puffed_shrimp_chips.jpg
+pop-soda | Glass cola.jpg | pic_p_ter | Public domain (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Glass_cola.jpg
+red-bull-energy-drink | Energy Drink, Lights (generic energy drink in a glass; no can/logo) | Kaushik Baroliya | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/549624c468/
+juice | Two glasses of fresh orange juice on a kitchen counter | Dilip Modhavadiya | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/1996a70dcc/
+
+# Round 2 — drinks (2026-11-18). Centre-cropped unless noted; non-alcoholic-beer and gin-tonic are off-centre crops that leave out a branded bottle.
+vodka | Vodka+limon.jpg | Anastasiya Lvova | Public domain (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Vodka%2Blimon.jpg
+tequila | Tequila y limón.jpg | Irám René GD | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Tequila_y_lim%C3%B3n.jpg
+gin | A large balloon gin glass with a green stem | Jos Velasco | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/27769f109d/
+whiskey | Whiskey and rocks | Topher | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/98063a346c/
+jagermeister | Jägermeister 1,75 l.jpg (exact product named) | Uusijani | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:J%C3%A4germeister_1,75_l.jpg
+champagne | Close-up of champagne flutes | mdburnette | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/5876212bd3/
+non-alcoholic-beer | AFBeer.jpg (cropped to the glass; branded bottle excluded) | עמית לונן | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:AFBeer.jpg
+imported-beer | Dressed Mexican beer with salt and lime 20260814 183250 (1).jpg | Gerardolagunes | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Dressed_Mexican_beer_with_salt_and_lime_20260814_183250_(1).jpg
+cider | A tulip glass of hazy golden beer sits on a wooden table | Aaron Jorbin | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/8136895762/
+ipa | A tall glass of amber craft beer with a frothy head | Manjil Aryal | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/3456a130a7/
+jack-coke | A cold Coke in a glass with ice and a lemon slice | Moses Cursor Ssebunya | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/46469378ef/
+rye-ginger | Moscow Mule in Venice.jpg | Dktue | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Moscow_Mule_in_Venice.jpg
+gin-tonic | Gin and tonic (cropped to the glass; tonic bottle excluded) | Michael Burridge | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/2496228e35/
+gin-soda | A cocktail in a tall glass with ice | Marina Koleva | CC0 1.0 (WordPress Photo Directory) | https://wordpress.org/photos/photo/739651d375/
+tequila-soda | TequilaPaloma.JPG | Antonio Cavallo | Public domain (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:TequilaPaloma.JPG
+vodka-soda | Vodka tonic.jpg | FIshstick at English Wikipedia | Public domain (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Vodka_tonic.jpg
+vodka-juice | A screwdriver drink with ice.jpg | Gregory Karastergios | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:A_screwdriver_drink_with_ice.jpg
+rum-coke | Cubalibre, Mazatlán, 30 de noviembre de 2022.jpg | El Nuevo Doge | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Cubalibre,_Mazatl%C3%A1n,_30_de_noviembre_de_2022.jpg
+premium-mix | Espresso martini - November 2024 - Sarah Stierch.jpg | Missvain | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Espresso_martini_-_November_2024_-_Sarah_Stierch.jpg
+extra-premium-mix | Margarita Mexican Drink on the Rocks 20251010 171351 (1).jpg | Gerardolagunes | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Margarita_Mexican_Drink_on_the_Rocks_20251010_171351_(1).jpg
+pina-colada | Mosaïc (Flic-en-Flac) - pinacolada.jpg | Benoît Prieur | CC0 1.0 (Wikimedia Commons) | https://commons.wikimedia.org/wiki/File:Mosa%C3%AFc_(Flic-en-Flac)_-_pinacolada.jpg
+
+# Round 3 (brand images, owner-approved) — 2026-11-18. NOT CC0: official brand product images used with the owner's explicit approval
+# for products the bar sells. Each is composited onto a dark #14110d background with a warm glow, 900x900.
+# Format: file | product | rights holder (brand) | source page | image URL
+tromba | Tromba Blanco tequila 750ml bottle | Tequila Tromba | https://tequilatromba.com/ | https://tequilatromba.com/cdn/shop/files/750Blanco.png
+brand-ciroc | Cîroc Vodka bottle | Cîroc (Diageo) | https://www.ciroc.com/en | https://images.ctfassets.net/31x7zf94v2b3/1xtQA5OWsLndACqU4HvM6N/b72fb6d0ab9f40cdfc512bc23b5c8c95/19142292_Ciroc_Vodka.png
+brand-grey-goose | Grey Goose Vodka 750ml bottle | Grey Goose (Bacardi) | https://www.greygoose.com/ | https://www.greygoose.com/binaries/original/content/gallery/greygoose/products/grey-goose-vodka/product-card-750ml.jpg
+brand-casamigos | Casamigos Blanco (three bottles) | Casamigos (Diageo) | https://www.casamigos.com/en-us | https://images.ctfassets.net/hpoa7h16o9wc/4f0xv7akcdIoa2Dgh02XvJ/7cb428a31dd51c707abba048f5f0a273/blancoThree_v2.jpg
+brand-jack-daniels | Jack Daniel's Old No. 7 bottle | Jack Daniel's (Brown-Forman) | https://www.jackdaniels.com/ | https://cms.jackdaniels.com/sites/default/files/2026-04/Old%20No.%207%20SE%20NEW.png
+brand-armand-de-brignac | Armand de Brignac Brut Gold bottle | Armand de Brignac | https://armanddebrignac.com/ | https://armanddebrignac.com/wp-content/uploads/2026/01/AoS_BrutBottle_F_nobg-1.png
+brand-white-claw | White Claw Hard Seltzer Black Cherry can | White Claw (Mark Anthony Brands) | https://www.whiteclaw.com/ | https://www.whiteclaw.com/wp-content/uploads/2025/02/Black-Cherry_383-x-800_1.png
+brand-heineken | Heineken Original bottle | Heineken | https://www.heineken.com/global/en/our-products/heineken-original/ | https://www.heineken.com/media/iene2ygx/heineken-original-bottle.png
+brand-white-claw-4 | White Claw Black Cherry, Natural Lime, Mango and Surge Blood Orange cans, composited | White Claw (Mark Anthony Brands) | https://www.whiteclaw.com/ | https://www.whiteclaw.com/wp-content/uploads/2025/02/Black-Cherry_383-x-800_1.png, .../2025/05/Natural-Lime_383-x-800_1.png, .../2025/04/Mango_383-x-800_1.png, .../2025/05/Surge-Can-Image-Resize_Surge-Blood-Orange.png
+
+# Round 4 (group images for beer rows, owner-approved) — 2026-11-18. Composited on #14110d with warm glow, 900x900.
+# Product shots are official brand imagery (NOT CC0). Logos are Wikimedia Commons files marked Public domain (text/simple logo); trademarks of their owners.
+imported-group | Heineken Original bottle (official) | Heineken | https://www.heineken.com/global/en/our-products/heineken-original/ | https://www.heineken.com/media/iene2ygx/heineken-original-bottle.png
+imported-group | Corona Extra bottle (official) | Corona (Constellation Brands US site) | https://www.coronausa.com/ | https://www.coronausa.com/cdn/shop/files/corona-extra.png
+somersby-group | Somersby Apple bottle (official) | Carlsberg Group | https://www.carlsberggroup.com/products/somersby/ | https://www.carlsberggroup.com/media/rueb5p5r/somersby-apple.png
+somersby-group | Somersby Pear bottle (official) | Carlsberg Group | https://www.carlsberggroup.com/products/somersby/ | https://www.carlsberggroup.com/media/pwajumbw/somersby-pear.png
+domestic-group | Molson Canadian logo | Public domain (Commons) | https://commons.wikimedia.org/wiki/File:Molson_Canadian_logo_2005.svg | 1920px PNG thumbnail render
+domestic-group | Budweiser logo | Public domain (Commons) | https://commons.wikimedia.org/wiki/File:Budweiser_Anheuser-Busch_logo.svg | 1920px PNG thumbnail render
+domestic-group | Coors Light logo (menu says "Coors"; Coors Light used) | Public domain (Commons) | https://commons.wikimedia.org/wiki/File:Coors_Light_logo.svg | 1920px PNG thumbnail render
+asahi-logo | Asahi wordmark (Asahi Breweries logo; no Super Dry-specific logo available) | Public domain (Commons) | https://commons.wikimedia.org/wiki/File:Asahi_logo.svg | 1920px PNG thumbnail render
+
+# Round 5 (LCBO product images, owner-approved; brand pack shots as shown on lcbo.com)
+domestic-cans | Molson Canadian 473ml (LCBO 904409), Budweiser 473ml (905976), Coors Light 473ml (906669) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+somersby-cans | Somersby Apple 473ml (LCBO 015563), Somersby Pear 473ml (015860) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+tall-can-group | Stella Artois 473ml (LCBO 017820), Ace Hill Pilsner 473ml (461822) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+domestic-small-cans | Molson Canadian, Budweiser, Coors Light 355 mL cans, cut from The Beer Store pack images | thebeerstore.ca (Brandfolder CDN): 0651_1056033_24x355c.png, 0553_1035033_24x355c.png, 0673_1060030_6x355c.png
+imported-small-can | Heineken Original can (heineken.com/media/fquhugyt/hnk-original-can.png) + Corona Extra bottle (coronausa.com/cdn/shop/files/corona-extra.png)
+brand-hennessy | Hennessy VS (LCBO 8284), VSOP (43703), XO (629055) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-jagermeister | Jagermeister 1.14L (LCBO 22931) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-johnnie-walker-blue | Johnnie Walker Blue Label (LCBO 308155) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-macallan | The Macallan 18 Sherry Oak (LCBO 18808) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-soju | Chum Churum soju (LCBO 24468), Jinro Chamisul Fresh (LCBO 13612) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-fruit-soju | Chum Churum Soonhari peach (545236), apple mango (22437), strawberry (10036), grape (17229), yogurt (10035) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-red-bull | Red Bull Energy Drink 250 mL can (official, redbull.com/ca-en) | https://a.storyblok.com/f/287059/528x1348/b1d48e543d/ca_ed_250ml_ac_energy-drink_country_rgb_packrq-3134_cold_closed_front_com_full.png
+brand-el-abuelo-red | El Abuelo Organic Tempranillo-Monastrell (LCBO 524520) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-el-abuelo-white | El Abuelo Organic Sauvignon-Verdejo (LCBO 11586) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-juicy-ass | Flying Monkeys Juicy Ass IPA 473 mL can (LCBO 508572) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+beer-bucket | Cold beers bucket (CC0, rawpixel via Openverse) | https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9zdGF0aWMvaW1hZ2Uvd2Vic2l0ZS8yMDIyLTA0L2xyL2lzMTA3NDQtaW1hZ2Uta3oyZTdlMXguanBn.jpg
+brand-honey-butter | Haitai Honey Butter Chip 60g (T&T Supermarket product image, saved via owner's browser) | https://www.tntsupermarket.com/eng/78933001-haitai-honey-butter-chip.html
+brand-turtle-chips | Orion Turtle Chips Sweet Corn 80g (T&T Supermarket product image, captured in owner's browser) | https://www.tntsupermarket.com/
+brand-shrimp-cracker | Nongshim Shrimp Crackers 75g (T&T Supermarket product image, captured in owner's browser) | https://www.tntsupermarket.com/
+nacho-own-v2 | Barzunko's own photo of its nachos (supplied by owner)
+brand-pops | Coca-Cola, Coke Zero, Sprite, Nestea cans cut from Walmart.ca pack images; Diet Coke can (coca-cola.com/ca); Canada Dry Ginger Ale can (canadadry.ca)
+brand-macallan-rare-cask | The Macallan Rare Cask (LCBO 10725) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
+brand-dom-perignon | Barzunko's own photo of its Dom Pérignon Vintage 2013 (supplied by owner)
+brand-dom-perignon-vintage | Dom Pérignon Vintage (BC Liquor Stores product image 280461) | https://www.bcliquorstores.com/sites/default/files/imagecache/height800px/280461.jpg
+pizza | Barzunko's existing pizza special photo (public/image/barzunko-pizza.jpg), cropped

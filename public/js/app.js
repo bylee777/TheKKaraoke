@@ -405,6 +405,11 @@ class BarzunkoApp {
         this.toggleMobileMenu();
       }
 
+      // In-page links in the mobile menu (e.g. "Menu" -> #menu): close the panel so the section is visible
+      if (e.target.closest('.mobile-nav-list a[href^="#"]')) {
+        this.closeMobileMenu();
+      }
+
       if (e.target.closest('#view-rooms-btn')) {
         document.getElementById('rooms-section').scrollIntoView({ behavior: 'smooth' });
       }
@@ -769,6 +774,32 @@ class BarzunkoApp {
         updateImage(idx);
       });
     });
+
+    // Swipe left/right on the main photo to change image (touch and pen; mouse drag too)
+    const stage = roomCard.querySelector('.room-gallery__stage');
+    if (stage && photoPaths.length > 1) {
+      stage.style.touchAction = 'pan-y';
+      let startX = null;
+      let startY = null;
+      stage.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.room-gallery__nav')) return;
+        startX = e.clientX;
+        startY = e.clientY;
+      });
+      const endSwipe = (e) => {
+        if (startX === null) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        startX = null;
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+        updateImage(currentIndex + (dx < 0 ? 1 : -1));
+      };
+      stage.addEventListener('pointerup', endSwipe);
+      stage.addEventListener('pointercancel', () => {
+        startX = null;
+      });
+      mainImg.setAttribute('draggable', 'false');
+    }
 
     updateImage(0);
   }
