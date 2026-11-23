@@ -79,7 +79,7 @@ domestic-cans | Molson Canadian 473ml (LCBO 904409), Budweiser 473ml (905976), C
 somersby-cans | Somersby Apple 473ml (LCBO 015563), Somersby Pear 473ml (015860) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
 tall-can-group | Stella Artois 473ml (LCBO 017820), Ace Hill Pilsner 473ml (461822) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
 domestic-small-cans | Molson Canadian, Budweiser, Coors Light 355 mL cans, cut from The Beer Store pack images | thebeerstore.ca (Brandfolder CDN): 0651_1056033_24x355c.png, 0553_1035033_24x355c.png, 0673_1060030_6x355c.png
-imported-small-can | Heineken Original can (heineken.com/media/fquhugyt/hnk-original-can.png) + Corona Extra bottle (coronausa.com/cdn/shop/files/corona-extra.png)
+imported-small-can | Heineken Original can (heineken.com/media/fquhugyt/hnk-original-can.png) + Corona Extra 355 mL sleek can, cut from The Beer Store pack image 1116_2597031_12x355c.png (cdn.brandfolder.io), replaced the bottle 2026-11-23
 brand-hennessy | Hennessy VS (LCBO 8284), VSOP (43703), XO (629055) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
 brand-jagermeister | Jagermeister 1.14L (LCBO 22931) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
 brand-johnnie-walker-blue | Johnnie Walker Blue Label (LCBO 308155) | https://aem.lcbo.com/content/dam/lcbo/products/<id>.jpg
